@@ -51,9 +51,9 @@ export function SubscriptionProvider({ children }) {
             isExpired: data.status === 'expired' || (!isTrialActive && data.plan === 'trial')
           });
         } else {
-          // Initialize 7-day free trial for new users (Strict requirement)
+          // Initialize 30-day free trial for new users (Strict requirement)
           const trialEnds = new Date();
-          trialEnds.setDate(trialEnds.getDate() + 7);
+          trialEnds.setDate(trialEnds.getDate() + 30);
 
           const newSub = {
             plan: 'trial',
@@ -64,7 +64,7 @@ export function SubscriptionProvider({ children }) {
           };
 
           await setDoc(subRef, newSub);
-          setSubscription({ ...newSub, isTrialActive: true, isExpired: false, daysRemaining: 7 });
+          setSubscription({ ...newSub, isTrialActive: true, isExpired: false, daysRemaining: 30 });
         }
       } catch (error) {
         console.error("Subscription check error:", error);

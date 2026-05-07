@@ -35,7 +35,7 @@ export default function Billing() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           userId: currentUser?.uid,
-          planId: 'plan_PhH2O0wW2w2w2w' // Replace with your Razorpay Plan ID
+          planId: 'plan_PhH2O0wW2w2w2w' // Ensure this matches your ₹250 plan in Razorpay
         })
       });
       
@@ -47,7 +47,7 @@ export default function Billing() {
         key: 'rzp_test_oHh2O0wW2w2w2w', // REPLACE WITH YOUR KEY
         subscription_id: subData.id,
         name: 'Cream & Crust',
-        description: 'Bakery Pro Subscription (₹100/mo)',
+        description: 'Bakery Pro Subscription (₹250/mo)',
         handler: async function (response) {
           // Payment successful on client side
           setSuccess(true);
@@ -90,7 +90,7 @@ export default function Billing() {
     {
       name: 'Basic / Trial',
       price: 'Free',
-      period: '7 Days',
+      period: '30 Days',
       features: ['Order Management', 'Basic Product Catalog', 'Customer Database'],
       current: isTrial,
       btn: 'Current Plan',
@@ -98,7 +98,7 @@ export default function Billing() {
     },
     {
       name: 'Bakery Pro',
-      price: '₹100',
+      price: '₹250',
       period: '/ month',
       features: ['Everything in Basic', 'Inventory Management', 'Recipe Costing', 'Sales Analytics', 'Priority Support'],
       current: isPro,
@@ -119,7 +119,7 @@ export default function Billing() {
           <AlertCircle size={24} />
           <div>
             <h4 style={{ margin: 0 }}>Trial Expired</h4>
-            <p style={{ margin: 0, fontSize: '0.9rem' }}>Your 7-day free trial has ended. Please upgrade to Pro to continue using all features.</p>
+            <p style={{ margin: 0, fontSize: '0.9rem' }}>Your 30-day free trial has ended. Please upgrade to Pro to continue using all features.</p>
           </div>
         </div>
       )}
@@ -209,7 +209,7 @@ export default function Billing() {
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
                       <span style={{ fontWeight: 600 }}>Bakery Pro Monthly</span>
-                      <span style={{ fontWeight: 700 }}>₹100.00</span>
+                      <span style={{ fontWeight: 700 }}>₹250.00</span>
                     </div>
                     
                     {error && (

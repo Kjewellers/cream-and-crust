@@ -3,12 +3,12 @@ import { getFirestore, initializeFirestore, terminate } from "firebase/firestore
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDyYe38Ge0N6W99eZtDpVNs2s1XfGQGl90",
-  authDomain: "cream-and-crust.firebaseapp.com",
-  projectId: "cream-and-crust",
-  storageBucket: "cream-and-crust.firebasestorage.app",
-  messagingSenderId: "357779803337",
-  appId: "1:357779803337:web:72b634c84a8b77ead75118"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Singleton initialization pattern for HMR support

@@ -29,7 +29,7 @@ export default function Billing() {
 
     try {
       // 1. Create subscription on server
-      const API_BASE = window.location.hostname === 'localhost' ? 'http://localhost:3001' : 'https://api.creamandcrust.online';
+      const API_BASE = import.meta.env.VITE_API_URL || '';
       const response = await fetch(`${API_BASE}/api/payments/create-subscription`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -44,7 +44,7 @@ export default function Billing() {
 
       // 2. Open Razorpay Checkout for Subscription
       const options = {
-        key: 'rzp_test_oHh2O0wW2w2w2w', // REPLACE WITH YOUR KEY
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Use env var
         subscription_id: subData.id,
         name: 'Cream & Crust',
         description: 'Bakery Pro Subscription (₹250/mo)',

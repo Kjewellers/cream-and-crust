@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isOwner(userId);
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+    }
+
+    // Subscriptions (Strict: Users cannot update their own 'plan')
+    match /subscriptions/{userId} {
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow create: if isSignedIn() && isOwner(userId);
+      // Only allow updating non-plan fields, or block updates entirely (forcing server-side logic)
+      allow update: if isSignedIn() && isAdmin(); 
+    }
+
+    // Products (Public read, Admin write)
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
+
+    // Orders (Owner/Admin read/write)
+    match /orders/{orderId} {
+      allow read, write: if isSignedIn() && (request.resource.data.userId == request.auth.uid || isAdmin());
+    }
+    
+    // Customers (Admin only)
+    match /customers/{customerId} {
+      allow read, write: if isSignedIn() && isAdmin();
+    }
+  }
+}

@@ -16,14 +16,8 @@ export function AuthProvider({ children }) {
         if (user) {
           setCurrentUser(user);
           
-          // Failsafe: Hardcoded Admin Email
-          if (user.email === 'admin@creamandcrust.com') {
-            setUserRole('admin');
-          } else {
-            setUserRole('customer'); // Default
-            const role = await getUserRole(user.uid);
-            setUserRole(role);
-          }
+          const role = await getUserRole(user.uid);
+          setUserRole(role);
         } else {
           setCurrentUser(null);
           setUserRole(null);
@@ -45,6 +39,15 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const mockLogin = () => {
+    setCurrentUser({
+      uid: 'mock-user-123',
+      email: 'admin@creamandcrust.com',
+      displayName: 'Dev Admin'
+    });
+    setUserRole('admin');
+  };
+
   const logout = async () => {
     await logoutUser();
   };
@@ -55,7 +58,8 @@ export function AuthProvider({ children }) {
     isAdmin: userRole === 'admin',
     isCustomer: userRole === 'customer',
     logout,
-    refreshRole
+    refreshRole,
+    mockLogin // Added for testing
   };
 
   return (

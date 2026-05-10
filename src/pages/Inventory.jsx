@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { Package, AlertTriangle, ArrowDown, X, Plus, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { subscribeToInventory, addInventoryToDB, updateInventoryStockInDB } from '../services/db';
-import { useSubscription } from '../context/SubscriptionContext';
+import { Skeleton } from '../components/iOS';
 
 export default function Inventory() {
-  const { isPro } = useSubscription();
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -69,13 +68,18 @@ export default function Inventory() {
     <motion.div className="fade-in" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ position: 'relative' }}>
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div><h1>Inventory Management</h1><p>Track raw materials and packaging</p></div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)} disabled={!isPro}><Package size={18} /> Add New Item</button>
+        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><Package size={18} /> Add New Item</button>
       </div>
 
 
 
       {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)' }}>Loading inventory...</div>
+        <div style={{ padding: 20 }}>
+          <div className="stats-grid" style={{ marginBottom: 24 }}>
+            {[...Array(2)].map((_, i) => <Skeleton key={i} height={120} radius={12} />)}
+          </div>
+          <Skeleton height={400} radius={16} />
+        </div>
       ) : (
         <>
           <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
@@ -130,7 +134,6 @@ export default function Inventory() {
                           <button 
                             className="btn btn-outline btn-sm" 
                             onClick={() => { setSelectedItem(inv); setShowRestockModal(true); }}
-                            disabled={!isPro}
                           >
                             Restock
                           </button>

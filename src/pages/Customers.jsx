@@ -1,48 +1,76 @@
-import React, { useState } from 'react';
-import { Search, Instagram, Gift, Star, Clock, MoreVertical, MessageCircle } from 'lucide-react';
-
-const initialCustomers = [
-  { id: 'C-101', name: 'Priya Sharma', phone: '9876543210', instagram: 'priya.bakes', orders: 12, totalSpent: 24500, lastOrder: '2 days ago', tags: ['VIP', 'Chocolate Lover'], birthday: '12 Oct' },
-  { id: 'C-102', name: 'Sneha Patel', phone: '9876543213', instagram: 'sneha.patel', orders: 1, totalSpent: 3500, lastOrder: 'Pending', tags: ['Hot Lead', 'Wedding'], birthday: '' },
-  { id: 'C-103', name: 'Anita Desai', phone: '9876543212', instagram: 'anita_d', orders: 5, totalSpent: 8200, lastOrder: '1 month ago', tags: ['Repeat', 'Cookies'], birthday: '05 Mar' },
-  { id: 'C-104', name: 'Rahul Mehta', phone: '9876543211', instagram: '', orders: 3, totalSpent: 5400, lastOrder: 'Today', tags: ['Corporate'], birthday: '22 Aug' },
-  { id: 'C-105', name: 'Ayesha Khan', phone: '9876543215', instagram: 'ayesha.k', orders: 0, totalSpent: 0, lastOrder: 'Never', tags: ['Inquiry'], birthday: '' },
-];
+import React, { useState, useEffect } from 'react';
+import { Search, Instagram, Gift, Star, Clock, MoreVertical, MessageCircle, Loader2, Users } from 'lucide-react';
+import { subscribeToCustomers } from '../services/db';
+import { formatDate } from '../utils/date';
+import { Skeleton } from '../components/iOS';
 
 export default function Customers() {
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  const filtered = initialCustomers.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) || 
-    c.instagram.toLowerCase().includes(search.toLowerCase()) ||
-    c.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
+  useEffect(() => {
+    const unsubscribe = subscribeToCustomers((newCustomers) => {
+      setCustomers(newCustomers || []);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) return (
+    <div style={{ padding: 20 }}>
+      <div className="page-header">
+        <Skeleton height={40} width={300} radius={8} />
+        <Skeleton height={20} width={200} radius={4} style={{ marginTop: 8 }} />
+      </div>
+      <div className="stats-grid" style={{ marginTop: 24 }}>
+        {[...Array(3)].map((_, i) => <Skeleton key={i} height={120} radius={12} />)}
+      </div>
+    </div>
   );
+
+  const filtered = customers.filter(c => {
+    const name = c.name || '';
+    const instagram = c.instagram || '';
+    const tags = c.tags || [];
+    return name.toLowerCase().includes(search.toLowerCase()) || 
+           instagram.toLowerCase().includes(search.toLowerCase()) ||
+           tags.some(t => t.toLowerCase().includes(search.toLowerCase()));
+  });
+
+  const vipCount = customers.filter(c => (c.totalOrders || 0) >= 5).length;
+  const birthdayCount = customers.filter(c => {
+    if (!c.birthday) return false;
+    // Simple check if birthday matches current month
+    const currentMonth = new Date().toLocaleString('default', { month: 'short' });
+    return String(c.birthday).includes(currentMonth);
+  }).length;
 
   return (
     <div className="fade-in">
       <div className="page-header">
-        <h1>Instagram Leads & CRM</h1>
-        <p>Manage your customers, repeat orders, and hot leads</p>
+        <h1>Customer Database & CRM</h1>
+        <p>Manage your repeat customers and baking leads</p>
       </div>
 
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
         <div className="stat-card pink">
           <div className="stat-icon pink"><Star size={20} /></div>
           <div className="stat-label">VIP Customers</div>
-          <div className="stat-value">24</div>
+          <div className="stat-value">{vipCount}</div>
           <div className="stat-change" style={{ color: 'var(--text3)' }}>Ordered &gt; 5 times</div>
         </div>
         <div className="stat-card orange">
-          <div className="stat-icon orange"><Instagram size={20} /></div>
-          <div className="stat-label">IG Leads</div>
-          <div className="stat-value">142</div>
-          <div className="stat-change" style={{ color: 'var(--text3)' }}>Converted: 68%</div>
+          <div className="stat-icon orange"><Users size={20} /></div>
+          <div className="stat-label">Total Customers</div>
+          <div className="stat-value">{customers.length}</div>
+          <div className="stat-change" style={{ color: 'var(--text3)' }}>In your database</div>
         </div>
         <div className="stat-card purple">
           <div className="stat-icon purple"><Gift size={20} /></div>
           <div className="stat-label">Upcoming Birthdays</div>
-          <div className="stat-value">3</div>
-          <div className="stat-change" style={{ color: 'var(--text3)' }}>This month</div>
+          <div className="stat-value">{birthdayCount}</div>
+          <div className="stat-change" style={{ color: 'var(--text3)' }}>Matches current month</div>
         </div>
       </div>
 
@@ -71,7 +99,6 @@ export default function Customers() {
                     <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                       {c.name} {c.birthday && <Gift size={14} color="var(--accent2)" title={`Birthday: ${c.birthday}`} />}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>ID: {c.id}</div>
                   </td>
                   <td>
                     {c.instagram && (
@@ -82,14 +109,14 @@ export default function Customers() {
                     <div style={{ fontSize: '0.85rem', color: 'var(--text2)', marginTop: c.instagram ? 4 : 0 }}>{c.phone}</div>
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{c.orders} orders <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(₹{c.totalSpent.toLocaleString()})</span></div>
+                    <div style={{ fontWeight: 600 }}>{c.totalOrders || 0} orders <span style={{ color: 'var(--text3)', fontWeight: 400 }}>(₹{(c.totalSpent || 0).toLocaleString()})</span></div>
                     <div style={{ fontSize: '0.75rem', color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                      <Clock size={12} /> Last: {c.lastOrder}
+                      <Clock size={12} /> Last Order: {formatDate(c.lastOrder)}
                     </div>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {c.tags.map(tag => (
+                      {(c.tags || []).map(tag => (
                         <span key={tag} style={{ background: tag === 'VIP' ? 'var(--cream)' : 'var(--bg)', color: tag === 'VIP' ? 'var(--accent2)' : 'var(--text2)', border: tag === 'VIP' ? '1px solid var(--accent2)' : '1px solid var(--border)', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>
                           {tag}
                         </span>

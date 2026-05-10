@@ -4,7 +4,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
-import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import admin from 'firebase-admin';
 
@@ -51,6 +50,22 @@ app.use(express.json());
 // Serve static files from the 'dist' directory (Vite build)
 app.use(express.static(path.join(__dirname, 'dist')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
+// ─── IMAGE UPLOAD (Multer) ────────────────────────────────────
+const uploadDir = path.join(__dirname, 'public/uploads');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`)
+});
+const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
+
+app.post('/api/upload', upload.single('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
+  res.json({ success: true, url: `/uploads/${req.file.filename}` });
+});
+
 
 // ─── PAYMENTS ────────────────────────────────────────────────
 app.post('/api/payments/create-subscription', async (req, res) => {
@@ -122,6 +137,56 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
     return res.status(400).json({ success: false, message: 'No file uploaded' });
   }
   res.json({ success: true, url: `/uploads/${req.file.filename}` });
+});
+
+// ─── RAPIDO LOGISTICS API ────────────────────────────────────
+app.post('/api/rapido/book', async (req, res) => {
+  try {
+    const order = req.body;
+    const RAPIDO_API_KEY = process.env.RAPIDO_API_KEY;
+    const RAPIDO_URL = process.env.RAPIDO_URL || 'https://b2b-api.rapido.bike/api/v2/deliveries';
+
+    const pickupAddress = "cream.and.crust gyan bagh colony";
+    const dropAddress = order.deliveryAddress;
+    const customerPhone = typeof order.customer === 'object' ? order.customer?.phone : order.phone;
+    const customerName = typeof order.customer === 'object' ? order.customer?.name : (order.customerName || order.customer);
+
+    if (!RAPIDO_API_KEY) {
+      console.log('⚠️ RAPIDO_API_KEY not found in .env. Returning simulated success for UI testing.');
+      return res.json({ 
+        success: true, 
+        simulated: true,
+        orderId: `RAP-${Date.now()}`,
+        trackingUrl: `https://track.rapido.bike/simulated/${Date.now()}`,
+        pickup: pickupAddress,
+        drop: dropAddress
+      });
+    }
+
+    // Call Real Rapido API
+    const response = await fetch(RAPIDO_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${RAPIDO_API_KEY}`
+      },
+      body: JSON.stringify({
+        pickup: { address: pickupAddress },
+        drop: { address: dropAddress, name: customerName, phone: customerPhone },
+        amount: order.total || order.totalAmount
+      })
+    });
+
+    const data = await response.json();
+    if (response.ok) {
+      res.json({ success: true, ...data });
+    } else {
+      res.status(400).json({ success: false, error: data.message || 'Rapido API failed' });
+    }
+  } catch (error) {
+    console.error('Rapido Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error booking Rapido' });
+  }
 });
 
 // ─── PRODUCTS ────────────────────────────────────────────────

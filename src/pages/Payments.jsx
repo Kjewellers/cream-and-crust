@@ -1,15 +1,51 @@
-import React from 'react';
-import { CreditCard, Download, CheckCircle, Clock } from 'lucide-react';
-
-const payments = [
-  { id: 'CC-042', customer: 'Priya Sharma', total: 2200, advance: 1000, method: 'UPI', date: '06 May, 2026', status: 'partial' },
-  { id: 'CC-041', customer: 'Rahul Mehta', total: 1800, advance: 1800, method: 'Card', date: '06 May, 2026', status: 'paid' },
-  { id: 'CC-040', customer: 'Sneha Patel', total: 3500, advance: 0, method: '-', date: '07 May, 2026', status: 'pending' },
-  { id: 'CC-039', customer: 'Anita Desai', total: 1200, advance: 600, method: 'UPI', date: '07 May, 2026', status: 'partial' },
-  { id: 'CC-038', customer: 'Vikram Singh', total: 1700, advance: 1700, method: 'Cash', date: '05 May, 2026', status: 'paid' },
-];
+import React, { useState, useEffect } from 'react';
+import { CreditCard, Download, CheckCircle, Clock, Loader2 } from 'lucide-react';
+import { subscribeToOrders } from '../services/db';
+import { formatDate, formatCurrency, formatOrderNumber } from '../utils/date';
+import { Skeleton } from '../components/iOS';
 
 export default function Payments() {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToOrders((newOrders) => {
+      setOrders(newOrders || []);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (loading) return (
+    <div style={{ padding: 20 }}>
+      <div className="page-header">
+        <Skeleton height={40} width={200} radius={8} />
+        <Skeleton height={20} width={300} radius={4} style={{ marginTop: 8 }} />
+      </div>
+      <div className="stats-grid" style={{ marginTop: 24 }}>
+        {[...Array(3)].map((_, i) => <Skeleton key={i} height={120} radius={12} />)}
+      </div>
+    </div>
+  );
+
+  const payments = orders.map(o => {
+    const totalVal = o.total || o.totalAmount || 0;
+    const totalNum = Number(totalVal);
+    const advVal = o.advance || 0;
+    const advNum = Number(advVal);
+    const cName = typeof o.customer === 'object' ? (o.customer?.name || 'Customer') : (o.customerName || o.customer || 'Customer');
+
+    return {
+      id: formatOrderNumber(o, orders),
+      customer: cName,
+      total: totalNum,
+      advance: advNum,
+      method: o.paymentMethod || 'UPI',
+      date: formatDate(o.date || o.createdAt),
+      status: advNum >= totalNum ? 'paid' : advNum > 0 ? 'partial' : 'pending'
+    };
+  });
+
   const totalRevenue = payments.reduce((acc, p) => acc + p.total, 0);
   const collected = payments.reduce((acc, p) => acc + p.advance, 0);
   const pending = totalRevenue - collected;
@@ -24,18 +60,18 @@ export default function Payments() {
       <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
         <div className="stat-card orange">
           <div className="stat-label">Total Expected</div>
-          <div className="stat-value">₹{totalRevenue.toLocaleString()}</div>
-          <div className="stat-change" style={{ color: 'var(--text3)' }}>This Week</div>
+          <div className="stat-value">{formatCurrency(totalRevenue)}</div>
+          <div className="stat-change" style={{ color: 'var(--text3)' }}>From all orders</div>
         </div>
         <div className="stat-card green">
           <div className="stat-icon green"><CheckCircle size={20} /></div>
           <div className="stat-label">Collected</div>
-          <div className="stat-value">₹{collected.toLocaleString()}</div>
+          <div className="stat-value">{formatCurrency(collected)}</div>
         </div>
         <div className="stat-card pink">
           <div className="stat-icon pink"><Clock size={20} /></div>
           <div className="stat-label">Pending Balances</div>
-          <div className="stat-value" style={{ color: 'var(--accent2)' }}>₹{pending.toLocaleString()}</div>
+          <div className="stat-value" style={{ color: 'var(--accent2)' }}>{formatCurrency(pending)}</div>
         </div>
       </div>
 
@@ -64,10 +100,10 @@ export default function Payments() {
                   <td>{p.customer}</td>
                   <td style={{ fontSize: '0.85rem' }}>{p.date}</td>
                   <td style={{ color: 'var(--text3)', fontWeight: 500 }}>{p.method}</td>
-                  <td style={{ fontWeight: 600 }}>₹{p.total}</td>
-                  <td style={{ color: '#3D8B6A', fontWeight: 600 }}>₹{p.advance}</td>
+                  <td style={{ fontWeight: 600 }}>{formatCurrency(p.total)}</td>
+                  <td style={{ color: '#3D8B6A', fontWeight: 600 }}>{formatCurrency(p.advance)}</td>
                   <td style={{ color: p.total - p.advance > 0 ? 'var(--accent2)' : 'var(--text3)', fontWeight: 600 }}>
-                    ₹{p.total - p.advance}
+                    {formatCurrency(p.total - p.advance)}
                   </td>
                   <td><span className={`badge ${p.status}`}>{p.status}</span></td>
                 </tr>

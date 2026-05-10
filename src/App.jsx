@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, ShoppingBag, CalendarDays, Users, Package, BookOpen, CreditCard, BarChart3, Settings, Menu, Database, WifiOff, LogOut, Lock } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, CalendarDays, Users, Package, BookOpen, CreditCard, BarChart3, Settings, Menu, Database, WifiOff, LogOut, Lock, Sun, Moon } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import Products from './pages/Products';
@@ -11,61 +11,45 @@ import Payments from './pages/Payments';
 import Analytics from './pages/Analytics';
 import Inventory from './pages/Inventory';
 import Recipes from './pages/Recipes';
-import Billing from './pages/Billing';
 import Profile from './pages/Profile';
 import Login from './pages/Login';
 import SetupAdmin from './pages/SetupAdmin';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { SubscriptionProvider, useSubscription } from './context/SubscriptionContext';
+import { subscribeToOrders } from './services/db';
+import { ToastContainer } from './components/iOS';
 import './index.css';
 
-function FirebaseStatus() {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+
+function Sidebar({ open, onClose, theme, toggleTheme }) {
+  const { isAdmin, userRole, logout } = useAuth();
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
+    const unsubscribe = subscribeToOrders((orders) => {
+      const pending = orders.filter(o => ['new', 'confirmed', 'in-progress'].includes(o.status)).length;
+      setPendingCount(pending);
+    });
+    return () => unsubscribe();
   }, []);
 
-  return (
-    <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.85rem', color: 'var(--text3)' }}>
-      {isOnline ? (
-        <><Database size={16} color="var(--accent)" /> <span>Database Connected</span></>
-      ) : (
-        <><WifiOff size={16} color="var(--accent2)" /> <span style={{color: 'var(--accent2)'}}>Database Offline</span></>
-      )}
-    </div>
-  );
-}
-
-function Sidebar({ open, onClose }) {
-  const { isAdmin, userRole, logout } = useAuth();
-  const { isPro } = useSubscription();
-
   const adminNavItems = [
-    { section: 'Main', items: [
+    { section: 'MAIN', items: [
       { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
-      { to: '/orders', icon: ShoppingBag, label: 'Orders' },
+      { to: '/orders', icon: ShoppingBag, label: 'Orders', badge: pendingCount > 0 ? pendingCount : null },
       { to: '/calendar', icon: CalendarDays, label: 'Calendar' },
     ]},
-    { section: 'Business', items: [
+    { section: 'BUSINESS', items: [
       { to: '/products', icon: Package, label: 'Products' },
       { to: '/customers', icon: Users, label: 'Customers' },
       { to: '/payments', icon: CreditCard, label: 'Payments' },
     ]},
-    { section: 'Operations', items: [
+    { section: 'OPERATIONS', items: [
       { to: '/inventory', icon: Package, label: 'Inventory' },
       { to: '/recipes', icon: BookOpen, label: 'Recipes' },
       { to: '/analytics', icon: BarChart3, label: 'Analytics' },
     ]},
-    { section: 'Account', items: [
-      { to: '/billing', icon: CreditCard, label: 'Billing' },
+    { section: 'ACCOUNT', items: [
       { to: '/profile', icon: Settings, label: 'Settings' },
     ]}
   ];
@@ -74,7 +58,6 @@ function Sidebar({ open, onClose }) {
     { section: 'Store', items: [
       { to: '/', icon: Package, label: 'Shop Products' },
       { to: '/orders', icon: ShoppingBag, label: 'My Orders' },
-      { to: '/billing', icon: CreditCard, label: 'Billing' },
     ]},
     { section: 'Account', items: [
       { to: '/profile', icon: Settings, label: 'Profile' },
@@ -92,7 +75,7 @@ function Sidebar({ open, onClose }) {
           <span>🧁</span>
           <div>
             <h1>Cream & Crust</h1>
-            <small>{isAdmin ? 'Bakery Manager' : 'Customer Portal'}</small>
+            <small>{isAdmin ? 'BAKERY MANAGER' : 'Customer Portal'}</small>
           </div>
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -101,8 +84,19 @@ function Sidebar({ open, onClose }) {
               <div className="nav-section-title">{section.section}</div>
               {section.items.map(item => (
                 <NavLink key={item.to} to={item.to} end className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`} onClick={onClose} style={{ opacity: item.locked ? 0.6 : 1 }}>
-                  <item.icon />
+                   <item.icon />
                   {item.label}
+                  {item.badge != null && (
+                    <motion.span
+                      key={item.badge}
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                      className="nav-badge"
+                    >
+                      {item.badge}
+                    </motion.span>
+                  )}
                   {item.locked && <Lock size={12} style={{ marginLeft: 'auto' }} />}
                 </NavLink>
               ))}
@@ -110,11 +104,18 @@ function Sidebar({ open, onClose }) {
           ))}
         </div>
         
-        <div style={{ marginTop: 'auto' }}>
-          <button onClick={logout} className="nav-item" style={{ width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text2)', borderRadius: 0 }}>
-            <LogOut size={18} /> Logout
+        <div style={{ marginTop: 'auto', padding: '10px 0' }}>
+          <button 
+            onClick={toggleTheme} 
+            className="nav-item" 
+            style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 11 }}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
           </button>
-          <FirebaseStatus />
+          <button onClick={logout} className="nav-item" style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text2)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginTop: 4, display: 'flex', alignItems: 'center', gap: 11 }}>
+            <LogOut size={18} /> Sign Out
+          </button>
         </div>
       </aside>
     </>
@@ -125,10 +126,54 @@ function MobileHeader({ onMenuClick }) {
   return (
     <div className="mobile-header">
       <div className="mobile-header-inner">
-        <button className="hamburger" onClick={onMenuClick}><Menu /></button>
-        <span style={{ fontFamily: 'var(--font-serif)', fontWeight: 700, fontSize: '1.1rem' }}>🧁 Cream & Crust</span>
+        <button className="hamburger" onClick={onMenuClick} style={{ color: 'var(--accent)' }}>
+          <Menu size={26} strokeWidth={2.5} />
+        </button>
+        <span style={{ 
+          fontFamily: 'var(--font)', 
+          fontWeight: 700, 
+          fontSize: '17px', 
+          color: 'var(--text)', 
+          letterSpacing: '-0.02em',
+          position: 'absolute',
+          left: '50%',
+          transform: 'translateX(-50%)'
+        }}>
+          Cream & Crust
+        </span>
+        <div style={{ width: 38 }} /> {/* Spacer to balance absolute centering */}
       </div>
     </div>
+  );
+}
+
+function BottomNav() {
+  const { isAdmin, userRole } = useAuth();
+  const isBaker = userRole === 'baker';
+  
+  const items = (isAdmin || isBaker) ? [
+    { to: '/', icon: LayoutDashboard, label: 'Home' },
+    { to: '/orders', icon: ShoppingBag, label: 'Orders' },
+    { to: '/calendar', icon: CalendarDays, label: 'Schedule' },
+    { to: '/products', icon: Package, label: 'Products' },
+    { to: '/analytics', icon: BarChart3, label: 'Stats' },
+  ] : [
+    { to: '/', icon: Package, label: 'Shop' },
+    { to: '/orders', icon: ShoppingBag, label: 'Orders' },
+    { to: '/profile', icon: Settings, label: 'Profile' },
+  ];
+
+  return (
+    <nav className="bottom-nav">
+      <div className="bottom-nav-inner">
+        {items.map(item => (
+          <NavLink key={item.to} to={item.to} end className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
+            <item.icon />
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+      </div>
+    </nav>
   );
 }
 
@@ -138,7 +183,7 @@ function AnimatedRoutes() {
   const isBaker = userRole === 'baker';
 
   const renderRoute = (path, element) => (
-    <Route path={path} element={<motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.3 }}>{element}</motion.div>} />
+    <Route path={path} element={<motion.div initial={{ opacity: 0, y: 8, scale: 0.99 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.99 }} transition={{ type: 'spring', stiffness: 320, damping: 28 }}>{element}</motion.div>} />
   );
 
   return (
@@ -155,14 +200,12 @@ function AnimatedRoutes() {
             {renderRoute("/inventory", <Inventory />)}
             {renderRoute("/recipes", <Recipes />)}
             {renderRoute("/analytics", <Analytics />)}
-            { renderRoute("/billing", <Billing />)}
             { renderRoute("/profile", <Profile />)}
           </>
         ) : (
           <>
             {renderRoute("/", <Products />)}
             {renderRoute("/orders", <Orders />)}
-            { renderRoute("/billing", <Billing />)}
             { renderRoute("/profile", <Profile />)}
           </>
         )}
@@ -175,49 +218,36 @@ function AnimatedRoutes() {
 
 function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
   const { currentUser, userRole } = useAuth();
-  const { isBlocked, loading: subLoading } = useSubscription();
   const location = useLocation();
   
   console.log("Rendering MainLayout, user:", currentUser?.email, "role:", userRole);
 
-  if (!currentUser) {
-    console.log("No user, rendering Login");
-    return <Login />;
-  }
-
-  if (subLoading) return <div className="loading">Loading Subscription...</div>;
-
-  // Strict Access Control: Redirect to billing if trial expired
-  if (isBlocked && location.pathname !== '/billing' && location.pathname !== '/profile') {
-    return (
-      <div className="app">
-        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
-        <main className="main">
-          <div style={{ padding: 40, textAlign: 'center', background: 'white', borderRadius: 'var(--radius)', margin: 20 }}>
-            <div style={{ width: 80, height: 80, background: '#fee2e2', color: '#ef4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-              <Lock size={40} />
-            </div>
-            <h2>Trial Expired</h2>
-            <p style={{ color: 'var(--text3)', maxWidth: 400, margin: '10px auto 30px' }}>
-              Your 7-day free trial has ended. To continue managing your bakery, please upgrade to the Pro plan.
-            </p>
-            <NavLink to="/billing" className="btn btn-primary">Go to Billing</NavLink>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
   return (
-    <div className="app">
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
-      <main className="main">
-        <AnimatedRoutes />
-      </main>
-    </div>
+    <AnimatePresence mode="wait">
+      {!currentUser ? (
+        <motion.div key="login" exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 1.5, ease: [0.32, 0.72, 0, 1] }} style={{ height: '100vh', width: '100vw' }}>
+          <Login />
+        </motion.div>
+      ) : (
+        <motion.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="app">
+          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} theme={theme} toggleTheme={toggleTheme} />
+          <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+          <main className="main">
+            <AnimatedRoutes />
+          </main>
+          <BottomNav />
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -226,9 +256,8 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <SubscriptionProvider>
-          <MainLayout />
-        </SubscriptionProvider>
+        <MainLayout />
+        <ToastContainer />
       </AuthProvider>
     </BrowserRouter>
   );

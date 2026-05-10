@@ -5,12 +5,14 @@ import {
   GoogleAuthProvider, 
   signInWithPopup,
   RecaptchaVerifier,
-  signInWithPhoneNumber
+  signInWithPhoneNumber,
+  OAuthProvider
 } from "firebase/auth";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
 const googleProvider = new GoogleAuthProvider();
+const appleProvider = new OAuthProvider('apple.com');
 
 // Log in an existing user
 export const loginUser = async (email, password) => {
@@ -42,11 +44,11 @@ export const registerUser = async (email, password, name) => {
     await setDoc(doc(db, "users", user.uid), {
       name: name || email.split('@')[0],
       email: email,
-      role: "baker",
+      role: "customer",
       createdAt: new Date().toISOString()
     });
     
-    return { user, role: "baker" };
+    return { user, role: "customer" };
   } catch (error) {
     console.error("Registration error:", error);
     throw error;
@@ -74,6 +76,31 @@ export const signInWithGoogle = async () => {
     return user;
   } catch (error) {
     console.error("Google login error:", error);
+    throw error;
+  }
+};
+
+// Apple Sign In
+export const signInWithApple = async () => {
+  try {
+    const result = await signInWithPopup(auth, appleProvider);
+    const user = result.user;
+
+    const userRef = doc(db, "users", user.uid);
+    const userDoc = await getDoc(userRef);
+
+    if (!userDoc.exists()) {
+      await setDoc(userRef, {
+        name: user.displayName || 'Apple User',
+        email: user.email,
+        role: "customer",
+        createdAt: serverTimestamp()
+      });
+    }
+
+    return user;
+  } catch (error) {
+    console.error("Apple login error:", error);
     throw error;
   }
 };

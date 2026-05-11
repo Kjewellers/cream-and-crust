@@ -110,8 +110,15 @@ export default function Dashboard() {
     return d === tomorrowStr;
   });
 
-  const unpaidOrders = safeOrders.filter(o => o.isPaid === false || String(o.paymentStatus).toLowerCase() !== 'paid');
-  const pendingPaymentsAmount = unpaidOrders.reduce((sum, o) => sum + (Number(o.balanceDue) || Number(o.totalAmount) || Number(o.total) || 0), 0);
+  const unpaidOrders = safeOrders.filter(o => {
+    if (o.isPaid === true || String(o.paymentStatus).toLowerCase() === 'paid') return false;
+    if (o.balanceDue !== undefined && Number(o.balanceDue) <= 0) return false;
+    return true;
+  });
+  const pendingPaymentsAmount = unpaidOrders.reduce((sum, o) => {
+    const due = o.balanceDue !== undefined ? Number(o.balanceDue) : (Number(o.totalAmount) || Number(o.total) || 0);
+    return sum + due;
+  }, 0);
   const pendingPaymentsOrdersCount = unpaidOrders.length;
 
   const totalOrdersCount = safeOrders.length;
@@ -290,7 +297,9 @@ export default function Dashboard() {
         <div className="content-grid">
           <motion.div variants={item} className="card">
             <h3 style={{ marginBottom: '16px' }}>Today's Deliveries</h3>
-            {todayOrders.length === 0 ? (
+            {loading ? (
+              <>{[...Array(2)].map((_, i) => <OrderRowSkeleton key={i} />)}</>
+            ) : todayOrders.length === 0 ? (
               <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text3)', background: 'var(--cream)', borderRadius: 'var(--radius-sm)' }}>
                 No deliveries today 🎂<br/>Enjoy your day!
               </div>
@@ -299,7 +308,9 @@ export default function Dashboard() {
             )}
 
             <h3 style={{ margin: '24px 0 16px' }}>Tomorrow's Deliveries</h3>
-            {tomorrowOrders.length === 0 ? (
+            {loading ? (
+              <>{[...Array(2)].map((_, i) => <OrderRowSkeleton key={i} />)}</>
+            ) : tomorrowOrders.length === 0 ? (
               <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text3)', background: 'var(--cream)', borderRadius: 'var(--radius-sm)' }}>
                 No deliveries tomorrow 📅
               </div>

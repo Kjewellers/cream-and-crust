@@ -243,6 +243,7 @@ export default function Orders() {
     if (idx < statusFlow.length - 1) {
       const next = statusFlow[idx + 1];
       await updateOrderStatusInDB(o.id, next);
+      triggerHaptic('medium');
       showToast(`Order ${o.orderId || '#'} → ${next.charAt(0).toUpperCase() + next.slice(1)}`, 'success');
     }
   };
@@ -258,8 +259,10 @@ export default function Orders() {
     }
     try {
       await navigator.clipboard.writeText(order.deliveryAddress);
+      triggerHaptic('light');
       showToast('Address copied! Opening Rapido...', 'info', 2000);
     } catch(e) {
+      triggerHaptic('error');
       showToast('Opening Rapido...', 'info', 2000);
     }
     // Opening the Rapido website will automatically launch the Rapido App on mobile devices if installed via Universal Links
@@ -320,6 +323,7 @@ export default function Orders() {
 
       setShowModal(false);
       setForm(emptyForm);
+      triggerHaptic('success');
       showToast('Order saved! Generating card... 🎂', 'success');
       
       // Show Order Card

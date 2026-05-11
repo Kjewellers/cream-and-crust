@@ -48,34 +48,34 @@
 /* Automatic Dark Mode Support */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg:        #0F0906;
-    --bg2:       #18100C;
-    --card:      #18100C;
-    --text:      #FAF7F5;
-    --text2:     #B5A090;
-    --text3:     #7A6555;
-    --border:    rgba(255,255,255,0.08);
-    --border-md: rgba(255,255,255,0.12);
-    --cream:     rgba(212,113,74,0.08);
-    --shadow:    0 4px 20px rgba(0,0,0,0.4);
-    --shadow-lg: 0 12px 48px rgba(0,0,0,0.6);
-    --shadow-xs: 0 1px 3px rgba(0,0,0,0.2);
+    --bg:        #000000;
+    --bg2:       #0A0A0A;
+    --card:      #111111;
+    --text:      #FFFFFF;
+    --text2:     #A0A0A0;
+    --text3:     #666666;
+    --border:    rgba(255,255,255,0.12);
+    --border-md: rgba(255,255,255,0.18);
+    --cream:     rgba(212,113,74,0.1);
+    --shadow:    0 4px 20px rgba(0,0,0,0.8);
+    --shadow-lg: 0 12px 48px rgba(0,0,0,0.9);
+    --shadow-xs: 0 1px 3px rgba(0,0,0,0.4);
   }
 }
 
 [data-theme='dark'] {
-  --bg:        #0F0906;
-  --bg2:       #18100C;
-  --card:      #18100C;
-  --text:      #FAF7F5;
-  --text2:     #B5A090;
-  --text3:     #7A6555;
-  --border:    rgba(255,255,255,0.08);
-  --border-md: rgba(255,255,255,0.12);
-  --cream:     rgba(212,113,74,0.08);
-  --shadow:    0 4px 20px rgba(0,0,0,0.4);
-  --shadow-lg: 0 12px 48px rgba(0,0,0,0.6);
-  --shadow-xs: 0 1px 3px rgba(0,0,0,0.2);
+  --bg:        #000000;
+  --bg2:       #0A0A0A;
+  --card:      #111111;
+  --text:      #FFFFFF;
+  --text2:     #A0A0A0;
+  --text3:     #666666;
+  --border:    rgba(255,255,255,0.12);
+  --border-md: rgba(255,255,255,0.18);
+  --cream:     rgba(212,113,74,0.1);
+  --shadow:    0 4px 20px rgba(0,0,0,0.8);
+  --shadow-lg: 0 12px 48px rgba(0,0,0,0.9);
+  --shadow-xs: 0 1px 3px rgba(0,0,0,0.4);
 }
 
 .pulse {

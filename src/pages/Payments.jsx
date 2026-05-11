@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CreditCard, Download, CheckCircle, Clock, Loader2, DollarSign } from 'lucide-react';
 import { subscribeToOrders, updateOrderFieldsInDB } from '../services/db';
 import { formatDate, formatCurrency, formatOrderNumber } from '../utils/date';
-import { Skeleton, showToast } from '../components/iOS';
+import { Skeleton, StatSkeleton, showToast, triggerHaptic } from '../components/iOS';
 
 export default function Payments() {
   const [orders, setOrders] = useState([]);
@@ -26,20 +26,22 @@ export default function Payments() {
   const handleMarkPaid = async (order) => {
     try {
       await updateOrderFieldsInDB(order.rawId, { advance: order.total });
+      triggerHaptic('success');
       showToast('Marked as fully paid!', 'success');
     } catch (e) {
+      triggerHaptic('error');
       showToast('Failed to update payment', 'error');
     }
   };
 
   if (loading) return (
-    <div style={{ padding: 20 }}>
+    <div className="fade-in" style={{ padding: 20 }}>
       <div className="page-header">
         <Skeleton height={40} width={200} radius={8} />
         <Skeleton height={20} width={300} radius={4} style={{ marginTop: 8 }} />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 24 }}>
-        {[...Array(4)].map((_, i) => <Skeleton key={i} height={100} radius={12} />)}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: isMobile ? 10 : 16, marginTop: 24 }}>
+        {[...Array(4)].map((_, i) => <StatSkeleton key={i} />)}
       </div>
     </div>
   );

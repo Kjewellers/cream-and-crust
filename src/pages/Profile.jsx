@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { subscribeToOrders, subscribeToBusiness, updateBusinessInDB } from '../services/db';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { showToast } from '../components/iOS';
 
 export default function Profile() {
@@ -34,7 +34,8 @@ export default function Profile() {
           setUserDoc({
             name: uDoc.data().name || currentUser.displayName || 'Baker',
             phone: uDoc.data().phone || currentUser.phoneNumber || '',
-            address: uDoc.data().address || 'India'
+            address: uDoc.data().address || 'India',
+            photoURL: uDoc.data().photoURL || ''
           });
         }
       } catch(e) { console.error(e); }
@@ -97,6 +98,54 @@ export default function Profile() {
   const roleLabel = isBakerOrAdmin ? 'BAKER' : 'CUSTOMER';
   const roleBadgeClass = isBakerOrAdmin ? 'confirmed' : 'pending';
 
+  const fileInputRef = useRef(null);
+
+  const handlePhotoUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 200;
+        const MAX_HEIGHT = 200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        } else {
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+        try {
+          if (userRole === 'customer') {
+            await updateDoc(doc(db, "users", currentUser.uid), { photoURL: dataUrl });
+            setUserDoc(prev => ({ ...prev, photoURL: dataUrl }));
+            showToast('Profile photo updated!', 'success');
+          } else {
+            if (business.id) {
+              await updateBusinessInDB(business.id, { logo: dataUrl });
+            }
+            showToast('Bakery logo updated!', 'success');
+          }
+        } catch (error) {
+          showToast('Failed to update photo', 'error');
+        }
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const userStats = [
     { label: 'Total Orders', value: orderCount.toString(), icon: Star, color: '#ffcc00' },
     { label: 'Account Type', value: isBakerOrAdmin ? 'Baker' : 'Customer', icon: Shield, color: 'var(--accent)' },
@@ -115,18 +164,19 @@ export default function Profile() {
           overflow: 'hidden'
         }}>
           {userRole === 'customer' ? (
-            currentUser?.displayName?.[0]?.toUpperCase() || '👤'
+            userDoc.photoURL ? <img src={userDoc.photoURL} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (currentUser?.displayName?.[0]?.toUpperCase() || '👤')
           ) : (
-            <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
+            business.logo && business.logo.startsWith('data:image') ? <img src={business.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
           )}
           {userRole !== 'customer' && <span style={{ display: 'none' }}>🧁</span>}
         </div>
         <button style={{
           position: 'absolute', bottom: 0, right: 0, padding: 7, borderRadius: '50%',
           background: 'white', border: '1px solid var(--border)', cursor: 'pointer'
-        }} className="hover-effect">
+        }} className="hover-effect" onClick={() => fileInputRef.current?.click()}>
           <Camera size={15} />
         </button>
+        <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handlePhotoUpload} />
       </div>
 
       {editingName ? (

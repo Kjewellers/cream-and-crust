@@ -4,7 +4,7 @@ import { ShoppingBag, CalendarDays, CreditCard, Inbox, ChevronRight, Search, X, 
 import { motion, AnimatePresence } from 'framer-motion';
 import { subscribeToOrders, subscribeToCustomers } from '../services/db';
 import { formatDate, formatTime, formatCurrency, formatOrderNumber } from '../utils/date';
-import { StatSkeleton, EmptyState, showToast, PullToRefresh, triggerHaptic } from '../components/iOS';
+import { StatSkeleton, OrderRowSkeleton, EmptyState, showToast, PullToRefresh, triggerHaptic } from '../components/iOS';
 import { listContainer, listItem, statCard, cardTap } from '../utils/animations';
 
 const container = {

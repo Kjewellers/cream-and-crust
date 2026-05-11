@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'logo.png', 'apple-touch-icon.png'],
+      includeAssets: ['logo.png'],
       manifest: {
         name: 'Cream & Crust',
         short_name: 'Cream & Crust',

@@ -737,3 +737,55 @@ tr:active td {
   .stats-grid { gap: 10px; }
   .stat-value { font-size: 1.5rem; }
 }
+
+/* ─── GLOBAL MOBILE OVERFLOW FIX ───────────── */
+@media (max-width: 960px) {
+  /* Prevent ALL horizontal scroll site-wide */
+  html, body {
+    overflow-x: hidden !important;
+    max-width: 100vw;
+  }
+
+  /* Every container stays within viewport */
+  .main > * {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Cards always full width on mobile */
+  .card, .table-card, .stat-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* table-responsive: allow horizontal scroll ONLY inside, 
+     but the outer container does NOT overflow the page */
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Page header flex fix — don't let buttons overflow */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+
+  /* Input full-width fix */
+  input, select, textarea {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* Bottom nav always 5 items for baker/admin */
+  .bottom-nav-inner {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  /* Prevent content-grid from going side-by-side */
+  .content-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+

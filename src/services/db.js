@@ -40,6 +40,16 @@ export const updateOrderStatusInDB = async (orderId, newStatus) => {
   }
 };
 
+export const updateOrderFieldsInDB = async (orderId, fields) => {
+  try {
+    const orderRef = doc(db, "orders", orderId);
+    await updateDoc(orderRef, fields);
+  } catch (e) {
+    console.error("Error updating order fields: ", e);
+    throw e;
+  }
+};
+
 // Listen to orders in real-time
 export const subscribeToOrders = (callback, userId = null) => {
   let q;

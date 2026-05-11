@@ -7,6 +7,13 @@ import { Skeleton } from '../components/iOS';
 export default function Inventory() {
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -99,51 +106,99 @@ export default function Inventory() {
             <div className="table-header">
               <h3>Raw Materials & Supplies</h3>
             </div>
-            <div className="table-responsive">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Current Stock</th>
-                    <th>Min. Threshold</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inventory.length === 0 ? (
+            {isMobile ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 4px 4px' }}>
+                {inventory.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text3)' }}>No inventory items found.</div>
+                ) : inventory.map((inv) => {
+                  const isLow = inv.stock <= inv.min;
+                  return (
+                    <div key={inv.id} style={{
+                      background: 'var(--bg)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 12,
+                      padding: '14px 16px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{inv.item}</span>
+                        {isLow ? 
+                          <span className="badge baking" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px' }}><AlertTriangle size={12}/> Low Stock</span> : 
+                          <span className="badge ready" style={{ padding: '2px 8px' }}>In Stock</span>
+                        }
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>Current Stock</div>
+                          <div style={{ fontWeight: isLow ? 700 : 600, color: isLow ? 'var(--accent2)' : 'var(--text)', fontSize: '1rem' }}>
+                            {inv.stock} {inv.unit}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>Min. Threshold</div>
+                          <div style={{ fontWeight: 600, color: 'var(--text2)', fontSize: '0.9rem' }}>{inv.min} {inv.unit}</div>
+                        </div>
+                      </div>
+                      <button 
+                        className="btn btn-outline btn-sm" 
+                        style={{ marginTop: 8, width: '100%', justifyContent: 'center' }}
+                        onClick={() => { setSelectedItem(inv); setShowRestockModal(true); }}
+                      >
+                        Restock
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '30px', color: 'var(--text3)' }}>No inventory items found.</td>
+                      <th>Item</th>
+                      <th>Current Stock</th>
+                      <th>Min. Threshold</th>
+                      <th>Status</th>
+                      <th>Action</th>
                     </tr>
-                  ) : inventory.map((inv) => {
-                    const isLow = inv.stock <= inv.min;
-                    return (
-                      <tr key={inv.id}>
-                        <td style={{ fontWeight: 600 }}>{inv.item}</td>
-                        <td style={{ color: isLow ? 'var(--accent2)' : 'inherit', fontWeight: isLow ? 700 : 500 }}>
-                          {inv.stock} {inv.unit}
-                        </td>
-                        <td style={{ color: 'var(--text3)' }}>{inv.min} {inv.unit}</td>
-                        <td>
-                          {isLow ? 
-                            <span className="badge baking" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12}/> Low Stock</span> : 
-                            <span className="badge ready">In Stock</span>
-                          }
-                        </td>
-                        <td>
-                          <button 
-                            className="btn btn-outline btn-sm" 
-                            onClick={() => { setSelectedItem(inv); setShowRestockModal(true); }}
-                          >
-                            Restock
-                          </button>
-                        </td>
+                  </thead>
+                  <tbody>
+                    {inventory.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '30px', color: 'var(--text3)' }}>No inventory items found.</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    ) : inventory.map((inv) => {
+                      const isLow = inv.stock <= inv.min;
+                      return (
+                        <tr key={inv.id}>
+                          <td style={{ fontWeight: 600 }}>{inv.item}</td>
+                          <td style={{ color: isLow ? 'var(--accent2)' : 'inherit', fontWeight: isLow ? 700 : 500 }}>
+                            {inv.stock} {inv.unit}
+                          </td>
+                          <td style={{ color: 'var(--text3)' }}>{inv.min} {inv.unit}</td>
+                          <td>
+                            {isLow ? 
+                              <span className="badge baking" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12}/> Low Stock</span> : 
+                              <span className="badge ready">In Stock</span>
+                            }
+                          </td>
+                          <td>
+                            <button 
+                              className="btn btn-outline btn-sm" 
+                              onClick={() => { setSelectedItem(inv); setShowRestockModal(true); }}
+                            >
+                              Restock
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

@@ -111,9 +111,15 @@ export default function Profile() {
           background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '2.8rem', color: 'white', fontWeight: 700,
-          boxShadow: '0 8px 20px rgba(214, 158, 140, 0.3)'
+          boxShadow: '0 8px 20px rgba(214, 158, 140, 0.3)',
+          overflow: 'hidden'
         }}>
-          {userRole === 'customer' ? (currentUser?.displayName?.[0]?.toUpperCase() || '👤') : (business.logo || '🧁')}
+          {userRole === 'customer' ? (
+            currentUser?.displayName?.[0]?.toUpperCase() || '👤'
+          ) : (
+            <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
+          )}
+          {userRole !== 'customer' && <span style={{ display: 'none' }}>🧁</span>}
         </div>
         <button style={{
           position: 'absolute', bottom: 0, right: 0, padding: 7, borderRadius: '50%',

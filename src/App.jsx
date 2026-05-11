@@ -72,7 +72,8 @@ function Sidebar({ open, onClose, theme, toggleTheme }) {
       <div className={`overlay ${open ? 'show' : ''}`} onClick={onClose} />
       <aside className={`sidebar ${open ? 'open' : ''}`} style={{ display: 'flex', flexDirection: 'column' }}>
         <div className="sidebar-brand">
-          <span>🧁</span>
+          <img src="/logo.png" alt="Cream & Crust" className="brand-logo" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }} />
+          <span style={{ display: 'none', fontSize: '1.8rem' }}>🧁</span>
           <div>
             <h1>Cream & Crust</h1>
             <small>{isAdmin ? 'BAKERY MANAGER' : 'Customer Portal'}</small>
@@ -137,8 +138,12 @@ function MobileHeader({ onMenuClick }) {
           letterSpacing: '-0.02em',
           position: 'absolute',
           left: '50%',
-          transform: 'translateX(-50%)'
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}>
+          <img src="/logo.png" alt="Logo" style={{ height: '24px', objectFit: 'contain', borderRadius: '4px' }} onError={(e) => e.target.style.display='none'} />
           Cream & Crust
         </span>
         <div style={{ width: 38 }} /> {/* Spacer to balance absolute centering */}

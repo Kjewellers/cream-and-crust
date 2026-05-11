@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, orderBy, onSnapshot, where } from "firebase/firestore";
+import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, orderBy, onSnapshot, where, setDoc } from "firebase/firestore";
 import { db } from "./firebase";
 import { encryptData, decryptData } from "../utils/crypto";
 
@@ -304,10 +304,10 @@ export const subscribeToBusiness = (callback, errorCallback) => {
 
 export const updateBusinessInDB = async (businessId, businessData) => {
   try {
-    const bizRef = doc(db, "business", businessId);
-    await updateDoc(bizRef, businessData);
+    const safeId = businessId || "main";
+    const bizRef = doc(db, "business", safeId);
+    await setDoc(bizRef, businessData, { merge: true });
   } catch (e) {
-    // If doesn't exist, create it?
     console.error("Error updating business: ", e);
     throw e;
   }

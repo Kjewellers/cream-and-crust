@@ -69,9 +69,7 @@ export default function Profile() {
         setUserDoc(prev => ({ ...prev, name: newName }));
         showToast('Profile name updated!', 'success');
       } else {
-        if (business.id) {
-          await updateBusinessInDB(business.id, { name: newName });
-        }
+        await updateBusinessInDB(business.id, { name: newName });
         showToast('Bakery name updated!', 'success');
       }
       setEditingName(false);
@@ -132,13 +130,12 @@ export default function Profile() {
             setUserDoc(prev => ({ ...prev, photoURL: dataUrl }));
             showToast('Profile photo updated!', 'success');
           } else {
-            if (business.id) {
-              await updateBusinessInDB(business.id, { logo: dataUrl });
-            }
+            await updateBusinessInDB(business.id, { logo: dataUrl });
             showToast('Bakery logo updated!', 'success');
           }
         } catch (error) {
-          showToast('Failed to update photo', 'error');
+          console.error("Upload error:", error);
+          showToast(`Failed: ${error.message || 'Unknown error'}`, 'error');
         }
       };
       img.src = event.target.result;

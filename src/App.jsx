@@ -72,7 +72,7 @@ function Sidebar({ open, onClose, theme, toggleTheme }) {
       <div className={`overlay ${open ? 'show' : ''}`} onClick={onClose} />
       <aside className={`sidebar ${open ? 'open' : ''}`} style={{ display: 'flex', flexDirection: 'column' }}>
         <div className="sidebar-brand">
-          <img src="/logo.png" alt="Cream & Crust" className="brand-logo" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }} />
+          <img src="/logo.png" alt="Cream & Crust" className="brand-logo" style={{ width: '42px', height: '42px', objectFit: 'contain', borderRadius: '8px', flexShrink: 0 }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }} />
           <span style={{ display: 'none', fontSize: '1.8rem' }}>🧁</span>
           <div>
             <h1>Cream & Crust</h1>

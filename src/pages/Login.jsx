@@ -138,7 +138,10 @@ export default function Login() {
         style={{ width: '100%', maxWidth: 360, textAlign: 'center' }}
       >
         <div style={{ marginBottom: 40 }}>
-          <div style={{ fontSize: '3rem', marginBottom: 20 }}>🧁</div>
+          <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center' }}>
+            <img src="/logo.png" alt="Cream & Crust Logo" style={{ height: 80, objectFit: 'contain' }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }} />
+            <div style={{ fontSize: '3rem', display: 'none' }}>🧁</div>
+          </div>
           <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8 }}>Cream & Crust</h1>
           <p style={{ color: 'var(--text2)', fontSize: '1rem', fontWeight: 500 }}>Sign in to continue</p>
         </div>

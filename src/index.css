@@ -179,6 +179,13 @@ input::placeholder, textarea::placeholder { color: var(--text3); }
   border-bottom: 1px solid var(--border);
 }
 .sidebar-brand span { font-size: 1.8rem; line-height: 1; }
+.brand-logo {
+  width: 42px;
+  height: 42px;
+  object-fit: contain;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
 .sidebar-brand h1 {
   font-size: 1.15rem;
   font-weight: 700;

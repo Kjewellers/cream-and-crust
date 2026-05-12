@@ -6,6 +6,7 @@ import { subscribeToProducts, addProductToDB, updateProductInDB, deleteProductFr
 import { storage } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Skeleton, showToast } from '../components/iOS';
+import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { formatCurrency } from '../utils/date';
 
 const DEFAULT_CATEGORIES = ['All', 'Cakes', 'Cupcakes', 'Brownies', 'Cookies', 'Dessert Boxes'];
@@ -98,6 +99,8 @@ export default function Products() {
       } else {
         await addProductToDB({ ...productData, createdAt: new Date().toISOString() });
         showToast('Product added! 🎂', 'success');
+        triggerConfetti(window.innerWidth / 2, window.innerHeight / 3, 80);
+        triggerFloatingReward('🎉 Added!', window.innerWidth / 2, window.innerHeight / 3);
       }
       closeModal();
     } catch (error) {

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { subscribeToExpenses, addExpenseToDB, deleteExpenseFromDB, uploadReceiptToStorage } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { showToast, triggerHaptic } from '../components/iOS';
+import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { formatCurrency } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
@@ -109,6 +110,9 @@ export default function Expenses() {
       setReceiptFile(null);
       setShowModal(false);
       triggerHaptic('success');
+      // Dopamine: coin rain from center
+      triggerConfetti(window.innerWidth / 2, window.innerHeight / 2, 50);
+      triggerFloatingReward('💰 Saved!', window.innerWidth / 2, window.innerHeight / 2);
     } catch (err) {
       showToast('Failed to save expense', 'error');
     } finally {

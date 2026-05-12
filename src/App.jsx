@@ -21,6 +21,7 @@ import Portfolio from './pages/Portfolio';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { subscribeToOrders } from './services/db';
 import { ToastContainer, Loader2 } from './components/iOS';
+import { ConfettiCanvas, SuccessBurstOverlay, FloatingRewardLayer } from './components/DopamineKit';
 import './index.css';
 
 
@@ -326,6 +327,9 @@ export default function App() {
       <AuthProvider>
         <MainLayout />
         <ToastContainer />
+        <ConfettiCanvas />
+        <SuccessBurstOverlay />
+        <FloatingRewardLayer />
       </AuthProvider>
     </BrowserRouter>
   );

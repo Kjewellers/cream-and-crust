@@ -14,6 +14,7 @@ import { StatSkeleton, OrderRowSkeleton, EmptyState, showToast, PullToRefresh, t
 import { shareToWhatsApp } from '../services/whatsapp';
 import { listContainer, listItem, statCard } from '../utils/animations';
 import ProfitCalculator from '../components/ProfitCalculator';
+import { triggerConfetti, triggerSuccessBurst } from '../components/DopamineKit';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -194,7 +195,11 @@ export default function Dashboard() {
                         onClick={(e) => { 
                           e.stopPropagation(); 
                           updateOrderStatusInDB(o.id, 'delivered'); 
-                          showToast('Marked Delivered!', 'success'); 
+                          showToast('Delivered! 📦', 'success');
+                          // MEGA dopamine burst!
+                          triggerConfetti(e.clientX, e.clientY, 120);
+                          triggerSuccessBurst('🏆', 'Order Delivered!');
+                          triggerHaptic('success');
                         }} 
                         style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#2E7A5A', color: 'white', padding: '6px 12px', borderRadius: 12, border: 'none', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
                       >

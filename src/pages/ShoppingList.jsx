@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { subscribeToShoppingList, addShoppingItemToDB, toggleShoppingItemInDB, deleteShoppingItemFromDB, subscribeToInventory, addExpenseToDB } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { showToast, triggerHaptic } from '../components/iOS';
+import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 
 const UNITS = ['pcs', 'kg', 'g', 'L', 'ml', 'cups', 'tbsp', 'tsp', 'dozen', 'packets'];
 const CATEGORIES = ['Dairy', 'Dry Goods', 'Packaging', 'Vegetables', 'Fruits', 'Spices', 'Decorations', 'Other'];
@@ -64,14 +65,18 @@ export default function ShoppingList() {
     }
   };
 
-  const handleToggle = async (item) => {
+  const handleToggle = async (item, e) => {
     try {
       const newStatus = !item.bought;
       await toggleShoppingItemInDB(item.id, newStatus);
       triggerHaptic(newStatus ? 'success' : 'light');
       
-      // If marked as bought, prompt for expense conversion
       if (newStatus) {
+        // Dopamine burst on check-off!
+        const cx = e?.clientX || window.innerWidth / 2;
+        const cy = e?.clientY || window.innerHeight / 2;
+        triggerConfetti(cx, cy, 60);
+        triggerFloatingReward('✓ Bought!', cx, cy);
         setShowPrompt(item);
       }
     } catch {
@@ -139,7 +144,7 @@ export default function ShoppingList() {
     >
       <motion.button
         whileTap={{ scale: 0.8 }}
-        onClick={() => handleToggle(item)}
+        onClick={(e) => handleToggle(item, e)}
         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: item.bought ? '#34C759' : 'var(--text3)', flexShrink: 0 }}
       >
         {item.bought ? <CheckCircle2 size={26} strokeWidth={2.5} /> : <Circle size={26} strokeWidth={2} />}

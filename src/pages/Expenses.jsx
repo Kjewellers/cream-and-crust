@@ -305,7 +305,7 @@ export default function Expenses() {
               transition={{ type: 'spring', damping: 30, stiffness: 350 }}
               className="modal" 
               onClick={e => e.stopPropagation()} 
-              style={{ maxWidth: 520, padding: 0, borderRadius: 28, overflow: 'hidden' }}
+              style={{ maxWidth: 520, padding: 0, borderRadius: 28, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
             >
               {/* Premium Modal Header */}
               <div style={{ padding: '32px 32px 24px', background: 'linear-gradient(135deg, var(--bg2), var(--cream))', borderBottom: '1px solid var(--border)' }}>

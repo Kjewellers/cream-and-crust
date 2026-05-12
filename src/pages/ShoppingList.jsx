@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, X, ShoppingCart, Share2, CheckCircle2, Circle, Loader2, Info, ChevronRight, Sparkles, Receipt, RefreshCcw } from 'lucide-react';
+import { Plus, Trash2, X, ShoppingCart, Share2, CheckCircle2, Circle, Loader2, Info, ChevronRight, Sparkles, Receipt, RefreshCcw, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { subscribeToShoppingList, addShoppingItemToDB, toggleShoppingItemInDB, deleteShoppingItemFromDB, subscribeToInventory, addExpenseToDB } from '../services/db';
 import { useAuth } from '../context/AuthContext';

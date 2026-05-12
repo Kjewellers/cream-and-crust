@@ -239,7 +239,7 @@ export default function Products() {
 
       {showModal && (
         <div className="modal-overlay" onClick={closeModal}>
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 550 }}>
+          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 550, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h2>{editingId ? 'Edit Product' : 'Add New Product'}</h2>
               <button className="btn-icon" onClick={closeModal}><X size={18} /></button>
@@ -279,7 +279,7 @@ export default function Products() {
                       </>
                     )}
                   </div>
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
+                  <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.gif" onChange={handleImageChange} style={{ display: 'none' }} />
                 </div>
 
                 <div className="form-group full"><label className="form-label">Product Name</label><input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Dreamy Vanilla Cake" /></div>

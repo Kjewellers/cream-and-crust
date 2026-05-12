@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { CreditCard, Download, CheckCircle, Clock, Loader2, DollarSign } from 'lucide-react';
 import { subscribeToOrders, updateOrderFieldsInDB } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { formatDate, formatCurrency, formatOrderNumber } from '../utils/date';
+import { calculatePendingPayments, calculateTotalRevenue, calculateCollectedRevenue, calculateOrderBalance } from '../utils/finance';
 import { Skeleton, StatSkeleton, showToast, triggerHaptic } from '../components/iOS';
 
 export default function Payments() {
@@ -15,17 +17,25 @@ export default function Payments() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const { currentUser } = useAuth();
+
   useEffect(() => {
+    if (!currentUser) return;
     const unsubscribe = subscribeToOrders((newOrders) => {
       setOrders(newOrders || []);
       setLoading(false);
-    });
+    }, currentUser.uid);
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
   const handleMarkPaid = async (order) => {
     try {
-      await updateOrderFieldsInDB(order.rawId, { advance: order.total });
+      await updateOrderFieldsInDB(order.rawId, { 
+        advance: order.total,
+        balanceDue: 0,
+        isPaid: true,
+        paymentStatus: 'paid'
+      });
       triggerHaptic('success');
       showToast('Marked as fully paid!', 'success');
     } catch (e) {
@@ -46,11 +56,20 @@ export default function Payments() {
     </div>
   );
 
-  const payments = orders.map(o => {
-    const totalVal = o.total || o.totalAmount || 0;
-    const totalNum = Number(totalVal);
-    const advVal = o.advance || 0;
-    const advNum = Number(advVal);
+  const committedOrders = orders.filter(o => {
+    const status = String(o.status || '').toLowerCase();
+    return status !== 'inquiry' && status !== 'cancelled';
+  });
+
+  const totalRevenue = calculateTotalRevenue(committedOrders);
+  const collected = calculateCollectedRevenue(committedOrders);
+  const { amount: pending } = calculatePendingPayments(committedOrders);
+  const paidCount = committedOrders.filter(o => calculateOrderBalance(o) === 0).length;
+
+  const payments = committedOrders.map(o => {
+    const totalNum = Number(o.total || o.totalAmount || 0);
+    const advNum = Number(o.advance || 0);
+    const pendingAmount = calculateOrderBalance(o);
     const cName = typeof o.customer === 'object'
       ? (o.customer?.name || 'Customer')
       : (o.customerName || o.customer || 'Customer');
@@ -61,17 +80,12 @@ export default function Payments() {
       customer: cName,
       total: totalNum,
       advance: advNum,
-      pending: totalNum - advNum,
+      pending: pendingAmount,
       method: o.paymentMethod || 'UPI',
       date: formatDate(o.date || o.deliveryDate || o.createdAt),
-      status: advNum >= totalNum ? 'paid' : advNum > 0 ? 'partial' : 'pending'
+      status: pendingAmount === 0 ? 'paid' : advNum > 0 ? 'partial' : 'pending'
     };
   });
-
-  const totalRevenue = payments.reduce((acc, p) => acc + p.total, 0);
-  const collected = payments.reduce((acc, p) => acc + p.advance, 0);
-  const pending = totalRevenue - collected;
-  const paidCount = payments.filter(p => p.status === 'paid').length;
 
   const statusColor = { paid: '#3D8B6A', partial: '#E5A823', pending: '#C0392B' };
   const statusBg   = { paid: '#EAF7F0', partial: '#FEF9EC', pending: '#FEF0EF' };

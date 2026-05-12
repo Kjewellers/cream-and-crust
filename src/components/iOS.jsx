@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
-import { CheckCircle2, AlertCircle, Info, X, Loader2, Share2, Mic } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, X, Loader2, Share2, Mic, Trash2, MessageSquare } from 'lucide-react';
+export { Loader2 };
 
 /* ─────────────────────────────────────────────────────────────────
    MOBILE UTILITIES  — Haptics & Sharing
@@ -428,22 +429,42 @@ export function SwipeRow({ children, onDelete, onWhatsApp }) {
   const [offset, setOffset] = useState(0);
   const startX = useRef(null);
   const isDragging = useRef(false);
+  const [isPeeking, setIsPeeking] = useState(false);
   const THRESHOLD = 80;
+
+  useEffect(() => {
+    if (offset === -THRESHOLD / 2 || offset === THRESHOLD / 2) {
+      setIsPeeking(true);
+      const timer = setTimeout(() => {
+        setOffset(0);
+        setIsPeeking(false);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [offset]);
 
   const handleTouchStart = (e) => {
     startX.current = e.touches[0].clientX;
     isDragging.current = true;
   };
+
   const handleTouchMove = (e) => {
     if (!isDragging.current) return;
     const dx = e.touches[0].clientX - startX.current;
-    if (dx < 0) setOffset(Math.max(dx, -THRESHOLD * 1.5));
+    
+    if (dx < 0 && onDelete) {
+      setOffset(Math.max(dx, -THRESHOLD * 1.5));
+    } else if (dx > 0 && onWhatsApp) {
+      setOffset(Math.min(dx, THRESHOLD * 1.5));
+    }
   };
+
   const handleTouchEnd = () => {
     isDragging.current = false;
-    if (offset < -THRESHOLD) {
+    if (offset < -THRESHOLD / 2) {
       setOffset(-THRESHOLD);
-      triggerHaptic('light');
+    } else if (offset > THRESHOLD / 2) {
+      setOffset(THRESHOLD);
     } else {
       setOffset(0);
     }
@@ -451,28 +472,31 @@ export function SwipeRow({ children, onDelete, onWhatsApp }) {
 
   return (
     <div style={{ position: 'relative', overflow: 'hidden' }}>
-      <div style={{
-        position: 'absolute', right: 0, top: 0, bottom: 0,
-        display: 'flex', alignItems: 'center',
-        opacity: offset < -20 ? 1 : 0,
-        transition: 'opacity 0.2s',
-      }}>
-        {onWhatsApp && (
-          <button onClick={() => { setOffset(0); onWhatsApp(); }}
-            style={{ height: '100%', width: 74, background: '#34C759', color: 'white', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-            <span style={{ fontSize: 22 }}>💬</span><span>Share</span>
-          </button>
-        )}
-        {onDelete && (
+      {/* Right side reveal (Delete) */}
+      {onDelete && (
+        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: THRESHOLD, display: 'flex', justifyContent: 'flex-end', zIndex: 0 }}>
           <button onClick={() => { setOffset(0); onDelete(); }}
-            style={{ height: '100%', width: 74, background: '#FF3B30', color: 'white', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
-            <span style={{ fontSize: 22 }}>🗑️</span><span>Delete</span>
+            style={{ height: '100%', width: 74, background: '#FF3B30', color: 'white', border: 'none', borderRadius: '0 12px 12px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            <Trash2 size={20} />
+            <span style={{ fontSize: 10, fontWeight: 700 }}>Delete</span>
           </button>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Left side reveal (WhatsApp) */}
+      {onWhatsApp && (
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: THRESHOLD, display: 'flex', justifyContent: 'flex-start', zIndex: 0 }}>
+          <button onClick={() => { setOffset(0); onWhatsApp(); }}
+            style={{ height: '100%', width: 74, background: '#34C759', color: 'white', border: 'none', borderRadius: '12px 0 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            <MessageSquare size={20} />
+            <span style={{ fontSize: 10, fontWeight: 700 }}>Share</span>
+          </button>
+        </div>
+      )}
+
       <motion.div
         animate={{ x: offset }}
-        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+        transition={isPeeking ? { type: 'spring', stiffness: 100, damping: 20 } : { type: 'spring', stiffness: 400, damping: 30 }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -487,5 +511,156 @@ export function SwipeRow({ children, onDelete, onWhatsApp }) {
         {children}
       </motion.div>
     </div>
+  );
+}
+/* ─────────────────────────────────────────────────────────────────
+   SWIPE GUIDE  — Instruction animation for swipe actions
+   ───────────────────────────────────────────────────────────────── */
+
+export function OnboardingTutorial({ onFinish }) {
+  const [step, setStep] = useState(1);
+  const [showSheet, setShowSheet] = useState(false);
+
+  useEffect(() => {
+    if (step === 3) {
+      setTimeout(() => setShowSheet(true), 500);
+    }
+  }, [step]);
+
+  const next = () => {
+    triggerHaptic('light');
+    if (step < 3) setStep(step + 1);
+  };
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.4)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+        }}
+      >
+        {step === 1 && (
+          <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              style={{
+                background: 'rgba(255,255,255,0.9)',
+                backdropFilter: 'blur(12px)',
+                padding: '16px 24px',
+                borderRadius: 24,
+                boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                maxWidth: 280, textAlign: 'center',
+                marginBottom: 40
+              }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+                👉 Swipe right to quickly share order on WhatsApp
+              </div>
+            </motion.div>
+
+            <div style={{ position: 'relative', width: 200, height: 100 }}>
+              <motion.div
+                animate={{ 
+                  x: [-60, 60, 60, -60],
+                  opacity: [0, 1, 1, 0]
+                }}
+                transition={{ 
+                  duration: 2.5, 
+                  repeat: Infinity,
+                  times: [0, 0.4, 0.8, 1]
+                }}
+                style={{
+                  width: 50, height: 50, borderRadius: '50%',
+                  background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
+                  boxShadow: '0 8px 24px rgba(212,113,74,0.4)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontSize: 24, border: '2px solid white'
+                }}
+              >
+                👆
+              </motion.div>
+            </div>
+            
+            <button className="btn btn-primary" onClick={next} style={{ position: 'absolute', bottom: 40 }}>Continue</button>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              style={{
+                background: 'rgba(255,255,255,0.9)',
+                backdropFilter: 'blur(12px)',
+                padding: '16px 24px',
+                borderRadius: 24,
+                boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                maxWidth: 280, textAlign: 'center',
+                marginBottom: 40
+              }}
+            >
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+                🛵 Tap scooter icon to instantly book Rapido delivery
+              </div>
+            </motion.div>
+
+            <motion.div
+              animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              style={{
+                width: 80, height: 80, borderRadius: '50%',
+                border: '4px solid #F5A623',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 40
+              }}
+            >
+              🛵
+            </motion.div>
+            
+            <button className="btn btn-primary" onClick={next} style={{ position: 'absolute', bottom: 40 }}>Got it</button>
+          </div>
+        )}
+
+        <AnimatePresence>
+          {showSheet && (
+            <motion.div
+              initial={{ y: 300 }}
+              animate={{ y: 0 }}
+              exit={{ y: 300 }}
+              style={{
+                position: 'absolute', bottom: 0, left: 0, right: 0,
+                background: 'var(--bg)', borderTopLeftRadius: 32, borderTopRightRadius: 32,
+                padding: '40px 24px', textAlign: 'center',
+                boxShadow: '0 -12px 40px rgba(0,0,0,0.2)', zIndex: 10000
+              }}
+            >
+              <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 24px' }} />
+              <h2 style={{ fontSize: '1.5rem', marginBottom: 12 }}>You're ready to manage deliveries 🚀</h2>
+              <p style={{ color: 'var(--text2)', marginBottom: 32 }}>Share orders instantly and book delivery in seconds.</p>
+              <button 
+                className="btn btn-primary" 
+                style={{ width: '100%', padding: '16px', fontSize: '1.1rem' }}
+                onClick={() => {
+                  localStorage.setItem('cc_onboarding_completed', 'true');
+                  onFinish();
+                }}
+              >
+                Let's Go
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </AnimatePresence>
   );
 }

@@ -1,47 +1,109 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingBag, CalendarDays, CreditCard, Inbox, ChevronRight, Search, X, Mic } from 'lucide-react';
+import { 
+  ShoppingBag, CalendarDays, CreditCard, Inbox, ChevronRight, Search, X, 
+  Mic, TrendingUp, Users, Package, Loader2, Sparkles, Clock, Calculator,
+  ArrowRight, Plus, MapPin, CheckCircle2, AlertCircle, Zap, Receipt, ShoppingCart
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToOrders, subscribeToCustomers } from '../services/db';
+import { subscribeToOrders, subscribeToCustomers, subscribeToExpenses, subscribeToInventory, subscribeToShoppingList, updateOrderStatusInDB } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { formatDate, formatTime, formatCurrency, formatOrderNumber } from '../utils/date';
-import { StatSkeleton, OrderRowSkeleton, EmptyState, showToast, PullToRefresh, triggerHaptic } from '../components/iOS';
-import { listContainer, listItem, statCard, cardTap } from '../utils/animations';
-
-const container = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.08, delayChildren: 0.05 } },
-};
-
-const item = listItem;
+import { calculatePendingPayments } from '../utils/finance';
+import { StatSkeleton, OrderRowSkeleton, EmptyState, showToast, PullToRefresh, triggerHaptic, SwipeRow } from '../components/iOS';
+import { shareToWhatsApp } from '../services/whatsapp';
+import { listContainer, listItem, statCard } from '../utils/animations';
+import ProfitCalculator from '../components/ProfitCalculator';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [inventory, setInventory] = useState([]);
+  const [shoppingItems, setShoppingItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState({ orders: [], customers: [] });
   const [isListening, setIsListening] = useState(false);
+  const [showCalculator, setShowCalculator] = useState(false);
+
+  const now = new Date();
+  const todayStr = now.toISOString().split('T')[0];
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
   useEffect(() => {
-    let ordersUnsub = () => {};
-    let customersUnsub = () => {};
-    
-    ordersUnsub = subscribeToOrders((newOrders) => {
+    if (!currentUser) return;
+
+    const ordersUnsub = subscribeToOrders((newOrders) => {
       setOrders(newOrders || []);
       setLoading(false);
-    });
+    }, currentUser.uid);
     
-    customersUnsub = subscribeToCustomers((newCust) => {
+    const customersUnsub = subscribeToCustomers((newCust) => {
       setCustomers(newCust || []);
-    });
+    }, currentUser.uid);
+
+    const expensesUnsub = subscribeToExpenses((newExp) => {
+      setExpenses(newExp || []);
+    }, currentUser.uid);
+
+    const inventoryUnsub = subscribeToInventory((items) => {
+      setInventory(items || []);
+    }, currentUser.uid);
+
+    const shoppingUnsub = subscribeToShoppingList((items) => {
+      setShoppingItems(items || []);
+    }, null, currentUser.uid);
     
     return () => {
       ordersUnsub();
       customersUnsub();
+      expensesUnsub();
+      inventoryUnsub();
+      shoppingUnsub();
     };
-  }, []);
+  }, [currentUser]);
 
+  // --- Derived Data ---
+  const { amount: pendingPaymentsAmount } = calculatePendingPayments(orders.filter(o => o != null));
+  
+  const committedOrders = useMemo(() => orders.filter(o => {
+    const s = String(o.status || '').toLowerCase();
+    return s !== 'cancelled' && s !== 'inquiry';
+  }), [orders]);
+
+  const currentMonthStr = now.toISOString().slice(0, 7);
+  const monthlyExpensesAmount = useMemo(() => {
+    return expenses.filter(e => {
+      const d = e.date || (e.createdAt && String(e.createdAt));
+      return d && String(d).includes(currentMonthStr);
+    }).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  }, [expenses, currentMonthStr]);
+
+  const itemsToBuyCount = shoppingItems.filter(i => !i.bought).length;
+
+  const deliveryGroups = useMemo(() => {
+    const today = committedOrders.filter(o => (o.deliveryDate || o.date) === todayStr);
+    
+    const groups = { morning: [], afternoon: [], evening: [] };
+    today.forEach(o => {
+      const time = o.deliveryTime || '12:00';
+      const hour = parseInt(time.split(':')[0]);
+      if (hour < 12) groups.morning.push(o);
+      else if (hour < 17) groups.afternoon.push(o);
+      else groups.evening.push(o);
+    });
+    return groups;
+  }, [committedOrders, todayStr]);
+
+  const tomorrowOrders = committedOrders.filter(o => (o.deliveryDate || o.date) === tomorrowStr);
+  const lowStockItems = inventory.filter(inv => Number(inv.stock) <= Number(inv.minStock || 0));
+
+  // --- Search Logic ---
   useEffect(() => {
     if (!search.trim()) {
       setSearchResults({ orders: [], customers: [] });
@@ -62,334 +124,304 @@ export default function Dashboard() {
 
   const handleVoiceInput = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      showToast('Speech recognition not supported', 'error');
-      return;
-    }
+    if (!SpeechRecognition) return showToast('Voice search not supported', 'error');
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-IN';
-    recognition.onstart = () => {
-      setIsListening(true);
-      triggerHaptic('medium');
-    };
+    recognition.onstart = () => { setIsListening(true); triggerHaptic('medium'); };
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setSearch(transcript);
+      setSearch(event.results[0][0].transcript);
       setIsListening(false);
       triggerHaptic('success');
     };
     recognition.onerror = () => setIsListening(false);
-    recognition.onend = () => setIsListening(false);
     recognition.start();
   };
 
-  // Time and Date logic
-  const now = new Date();
   const hours = now.getHours();
   let greeting = 'Good Evening 🌸';
   if (hours < 12) greeting = 'Good Morning 🌸';
   else if (hours < 17) greeting = 'Good Afternoon 🌸';
-  
-  const formattedDate = formatDate(now); // "09 May 2026"
-
-  // Analytics logic
-  const todayStr = now.toISOString().split('T')[0];
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
-
-  const safeOrders = orders.filter(o => o != null);
-  
-  const todayOrders = safeOrders.filter(o => {
-    const d = o.deliveryDate || o.date || (o.createdAt && String(o.createdAt).split('T')[0]);
-    return d === todayStr;
-  });
-  
-  const tomorrowOrders = safeOrders.filter(o => {
-    const d = o.deliveryDate || o.date || (o.createdAt && String(o.createdAt).split('T')[0]);
-    return d === tomorrowStr;
-  });
-
-  const unpaidOrders = safeOrders.filter(o => {
-    if (o.isPaid === true || String(o.paymentStatus).toLowerCase() === 'paid') return false;
-    if (o.balanceDue !== undefined && Number(o.balanceDue) <= 0) return false;
-    return true;
-  });
-  const pendingPaymentsAmount = unpaidOrders.reduce((sum, o) => {
-    const due = o.balanceDue !== undefined ? Number(o.balanceDue) : (Number(o.totalAmount) || Number(o.total) || 0);
-    return sum + due;
-  }, 0);
-  const pendingPaymentsOrdersCount = unpaidOrders.length;
-
-  const totalOrdersCount = safeOrders.length;
-
-  // Inactive customers (no orders > 30 days)
-  const inactiveDateStr = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const inactiveCustomers = customers.filter(c => c.lastOrder && c.lastOrder < inactiveDateStr);
 
   const stats = [
-    { label: "Today's Orders", value: todayOrders.length, icon: ShoppingBag, color: 'pink' },
-    { label: "Tomorrow's Orders", value: tomorrowOrders.length, icon: CalendarDays, color: 'green' },
-    { label: 'Pending Payments', value: formatCurrency(pendingPaymentsAmount), icon: CreditCard, color: 'orange' },
-    { label: 'Total Orders', value: totalOrdersCount, icon: Inbox, color: 'purple' },
+    { label: "Today", value: committedOrders.filter(o => (o.deliveryDate || o.date) === todayStr).length, icon: ShoppingBag, color: 'pink', path: '/orders' },
+    { label: 'Pending', value: formatCurrency(pendingPaymentsAmount), icon: CreditCard, color: 'orange', path: '/payments' },
+    { label: 'Expenses', value: formatCurrency(monthlyExpensesAmount), icon: Receipt, color: 'pink', path: '/expenses' },
+    { label: 'To Buy', value: itemsToBuyCount, icon: ShoppingCart, color: 'green', path: '/shopping-list' },
+    { label: 'Inventory', value: lowStockItems.length, icon: Package, color: lowStockItems.length > 0 ? 'pink' : 'green', path: '/inventory' },
+    { label: 'Customers', value: customers.length, icon: Users, color: 'purple', path: '/customers' },
   ];
 
-  const renderMiniCard = (o) => {
-    const cName = typeof o.customer === 'object' ? (o.customer?.name || 'Customer') : (o.customerName || o.customer || 'Customer');
-    const time = formatTime(o.deliveryTime || o.time || '10:00');
-    const product = o.cakeFlavour || o.product || (o.items && o.items[0]?.name) || 'Custom Order';
-    const size = o.cakeWeight || o.size || (o.items && o.items[0]?.size) || '';
-    const address = typeof o.customer === 'object' ? o.customer?.address : o.deliveryAddress;
-    const loc = address ? address.split(',')[0] : 'Pickup';
-    const due = Number(o.balanceDue) || 0;
-    
-    return (
-      <div key={o.id} style={{ padding: '12px', background: 'var(--cream)', borderRadius: 'var(--radius-sm)', marginBottom: '10px', border: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <span style={{ fontWeight: 600 }}>🎂 {cName}</span>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text2)', fontWeight: 600 }}>{time}</span>
+  const DeliverySection = ({ title, icon: Icon, items }) => (
+    items.length > 0 && (
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: 'var(--text2)', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <Icon size={14} /> {title} — {items.length}
         </div>
-        <div style={{ fontSize: '0.85rem', color: 'var(--text2)', marginBottom: '8px' }}>
-          {product} {size ? `· ${size}` : ''}
-        </div>
-        <div style={{ display: 'flex', gap: '12px', fontSize: '0.8rem' }}>
-          <span>📍 {loc}</span>
-          {due > 0 && <span style={{ color: '#C45A52', fontWeight: 600 }}>💰 {formatCurrency(due)} due</span>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {items.map((o, idx) => {
+            const cName = typeof o.customer === 'object' ? (o.customer?.name || 'Customer') : (o.customerName || o.customer || 'Customer');
+            const product = o.cakeFlavour || o.product || 'Custom Order';
+            const time = formatTime(o.deliveryTime || o.time || '10:00');
+            const due = (Number(o.total || 0)) - (Number(o.advance || 0));
+
+            return (
+              <motion.div key={o.id} whileTap={{ scale: 0.98 }}>
+                <SwipeRow onWhatsApp={() => shareToWhatsApp(o)}>
+                  <div className="card" style={{ padding: '16px', border: '1px solid var(--border)', background: 'var(--card)', cursor: 'pointer' }} onClick={() => navigate('/orders')}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text)' }}>{cName}</div>
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text2)', marginTop: 2 }}>{product}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent)' }}>{time}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', marginTop: 2 }}>
+                          {o.deliveryAddress ? <MapPin size={10} /> : '🏠'} {o.deliveryAddress ? 'Delivery' : 'Pickup'}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTop: '1px dashed var(--border)' }}>
+                      {due > 0 ? (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent2)' }}>⚠️ Balance</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 800, color: 'var(--accent2)' }}>{formatCurrency(due)}</span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2E7A5A' }}>✅ Paid in full</div>
+                      )}
+                      
+                      <button 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          updateOrderStatusInDB(o.id, 'delivered'); 
+                          showToast('Marked Delivered!', 'success'); 
+                        }} 
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#2E7A5A', color: 'white', padding: '6px 12px', borderRadius: 12, border: 'none', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        <CheckCircle2 size={14} /> Mark Delivered
+                      </button>
+                    </div>
+                  </div>
+                </SwipeRow>
+              </motion.div>
+            );
+          })}
         </div>
       </div>
-    );
-  };
+    )
+  );
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show">
-      <PullToRefresh onRefresh={async () => {
-        await new Promise(r => setTimeout(r, 800));
-        showToast('Dashboard updated', 'info');
-      }}>
-        <motion.div variants={item} className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1>{greeting}</h1>
-            <p>{formattedDate}</p>
-          </div>
-          <div style={{ position: 'relative', width: '40%', minWidth: 200 }} className="desktop-only">
-            <Search size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-            <input 
-              placeholder="Global search..." 
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
-              style={{ width: '100%', paddingLeft: 40, borderRadius: 20, height: 40, paddingRight: 40 }}
-            />
-            <button 
-              onClick={handleVoiceInput}
-              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: isListening ? 'var(--accent)' : 'var(--text3)', cursor: 'pointer' }}
-            >
-              <Mic size={18} className={isListening ? 'pulse' : ''} />
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Mobile Search */}
-        <motion.div variants={item} className="mobile-only" style={{ marginBottom: 20 }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
-            <input 
-              placeholder="Search orders, customers..." 
-              value={search} 
-              onChange={e => setSearch(e.target.value)} 
-              style={{ width: '100%', paddingLeft: 40, borderRadius: 20, height: 44, paddingRight: 40 }}
-            />
-            <button 
-              onClick={handleVoiceInput}
-              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: isListening ? 'var(--accent)' : 'var(--text3)', cursor: 'pointer' }}
-            >
-              <Mic size={20} className={isListening ? 'pulse' : ''} />
-            </button>
-          </div>
-        </motion.div>
-
-        {/* Search Results Overlay */}
-        <AnimatePresence>
-          {search && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              exit={{ opacity: 0, y: 10 }}
-              style={{ 
-                position: 'absolute', top: 180, left: 20, right: 20, zIndex: 100,
-                background: 'var(--bg2)', borderRadius: 16, boxShadow: 'var(--shadow-xl)',
-                padding: 20, border: '1px solid var(--border)', maxHeight: '70vh', overflowY: 'auto'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-                <h3 style={{ margin: 0 }}>Search Results</h3>
-                <button className="btn-icon" onClick={() => setSearch('')}><X size={18} /></button>
+    <motion.div variants={listContainer} initial="hidden" animate="show" className="fade-in">
+      <PullToRefresh onRefresh={async () => { await new Promise(r => setTimeout(r, 800)); showToast('Dashboard refreshed', 'info'); }}>
+        
+        {/* Premium Header */}
+        <div style={{ marginBottom: 32 }}>
+          <motion.div variants={listItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', marginBottom: 4 }}>
+                <Sparkles size={16} fill="var(--accent)" />
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Premium Baker Edition</span>
               </div>
-
-              {searchResults.orders.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', marginBottom: 10 }}>ORDERS</div>
-                  {searchResults.orders.map(o => (
-                    <div key={o.id} onClick={() => navigate('/orders')} style={{ padding: 12, background: 'var(--bg)', borderRadius: 8, marginBottom: 8, cursor: 'pointer' }}>
-                      <div style={{ fontWeight: 600 }}>{formatOrderNumber(o, orders)} · {typeof o.customer === 'object' ? o.customer?.name : (o.customerName || o.customer)}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>{o.product} · {formatDate(o.date)}</div>
-                    </div>
-                  ))}
+              <h1 style={{ fontSize: '2.4rem', fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.1 }}>{greeting}</h1>
+              <p style={{ color: 'var(--text2)', fontSize: '1rem', marginTop: 4 }}>{formatDate(now)}</p>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button 
+                className="btn btn-outline" 
+                onClick={() => setShowCalculator(true)}
+                style={{ padding: '0 16px', height: 44, borderRadius: 16 }}
+              >
+                <Calculator size={18} /> <span className="desktop-only" style={{ marginLeft: 6 }}>ROI Calc</span>
+              </button>
+              <div className="desktop-only" style={{ position: 'relative', width: 280 }}>
+                <div style={{ 
+                  position: 'relative', background: 'var(--bg2)', borderRadius: 16, 
+                  border: '1px solid var(--border)', display: 'flex', alignItems: 'center', padding: '0 12px'
+                }}>
+                  <Search size={18} color="var(--text3)" />
+                  <input 
+                    placeholder="Search everything..." 
+                    value={search} 
+                    onChange={e => setSearch(e.target.value)} 
+                    style={{ background: 'none', border: 'none', height: 44, padding: '0 8px', fontSize: '14px' }} 
+                  />
+                  <button onClick={handleVoiceInput} style={{ color: 'var(--text3)' }}>
+                    {isListening ? <Loader2 className="animate-spin" size={18} /> : <Mic size={18} />}
+                  </button>
                 </div>
-              )}
-
-              {searchResults.customers.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text3)', marginBottom: 10 }}>CUSTOMERS</div>
-                  {searchResults.customers.map(c => (
-                    <div key={c.id} onClick={() => navigate('/customers')} style={{ padding: 12, background: 'var(--bg)', borderRadius: 8, marginBottom: 8, cursor: 'pointer' }}>
-                      <div style={{ fontWeight: 600 }}>{c.name}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text3)' }}>{c.phone}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {searchResults.orders.length === 0 && searchResults.customers.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 20, color: 'var(--text3)' }}>No results found for "{search}"</div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Smart Banners */}
-        <motion.div variants={item} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '24px' }}>
-          {pendingPaymentsOrdersCount > 0 && pendingPaymentsAmount > 0 && (
-            <div style={{ padding: '12px 16px', background: 'rgba(232,168,124,0.15)', borderLeft: '4px solid var(--accent)', borderRadius: '4px', color: '#C4783A', fontWeight: 600, fontSize: '0.9rem' }}>
-              💰 {formatCurrency(pendingPaymentsAmount)} pending from {pendingPaymentsOrdersCount} orders
-            </div>
-          )}
-          {tomorrowOrders.length > 0 && (
-            <div style={{ padding: '12px 16px', background: 'rgba(184,224,210,0.15)', borderLeft: '4px solid var(--mint)', borderRadius: '4px', color: '#3D8B6A', fontWeight: 600, fontSize: '0.9rem' }}>
-              📅 {tomorrowOrders.length} deliveries tomorrow
-            </div>
-          )}
-          {inactiveCustomers.length > 0 && (
-            <div style={{ padding: '12px 16px', background: 'rgba(197,180,227,0.15)', borderLeft: '4px solid var(--lavender)', borderRadius: '4px', color: '#7C5BB5', fontWeight: 600, fontSize: '0.9rem' }}>
-              👤 {inactiveCustomers.length} customers inactive 30+ days
-            </div>
-          )}
-        </motion.div>
-
-        <motion.div variants={item} className="stats-grid">
-          {loading ? (
-            <>{[...Array(4)].map((_, i) => <StatSkeleton key={i} />)}</>
-          ) : stats.map(s => (
-            <motion.div
-              variants={statCard}
-              whileHover={{ y: -4, boxShadow: 'var(--shadow-lg)' }}
-              whileTap={{ scale: 0.97 }}
-              className={`stat-card ${s.color}`}
-              key={s.label}
-              style={{ cursor: 'default' }}
-            >
-              <div className={`stat-icon ${s.color}`}><s.icon size={20} /></div>
-              <div className="stat-label">{s.label}</div>
-              <div className="stat-value">{s.value}</div>
-            </motion.div>
-          ))}
-        </motion.div>
-
-        <div className="content-grid">
-          <motion.div variants={item} className="card">
-            <h3 style={{ marginBottom: '16px' }}>Today's Deliveries</h3>
-            {loading ? (
-              <>{[...Array(2)].map((_, i) => <OrderRowSkeleton key={i} />)}</>
-            ) : todayOrders.length === 0 ? (
-              <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text3)', background: 'var(--cream)', borderRadius: 'var(--radius-sm)' }}>
-                No deliveries today 🎂<br/>Enjoy your day!
               </div>
-            ) : (
-              todayOrders.map(renderMiniCard)
+            </div>
+          </motion.div>
+
+          {/* Smart Insights */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 32 }}>
+            <AnimatePresence>
+              {lowStockItems.length > 0 && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, scale: 0.95 }}
+                  onClick={() => navigate('/inventory')}
+                  style={{ 
+                    padding: '16px 20px', borderRadius: 20, 
+                    background: 'linear-gradient(135deg, #FFF5F5, #FFF0F0)', 
+                    border: '1px solid #FFE0E0', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 16
+                  }}
+                >
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FF3B30', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <AlertCircle size={24} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#B01000' }}>Inventory Alert</div>
+                    <div style={{ fontSize: '0.85rem', color: '#C04030' }}>{lowStockItems.length} items are running low. Tap to restock.</div>
+                  </div>
+                  <ArrowRight size={20} color="#FF3B30" />
+                </motion.div>
+              )}
+              {deliveryGroups.morning.length + deliveryGroups.afternoon.length + deliveryGroups.evening.length > 0 && (
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
+                  style={{ 
+                    padding: '16px 20px', borderRadius: 20, 
+                    background: 'linear-gradient(135deg, #F0F9FF, #E0F2FE)', 
+                    border: '1px solid #BAE6FD',
+                    display: 'flex', alignItems: 'center', gap: 16
+                  }}
+                >
+                  <div style={{ width: 44, height: 44, borderRadius: 12, background: '#0284C7', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCircle2 size={24} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0369A1' }}>Daily Briefing</div>
+                    <div style={{ fontSize: '0.85rem', color: '#075985' }}>You have {deliveryGroups.morning.length + deliveryGroups.afternoon.length + deliveryGroups.evening.length} deliveries scheduled for today.</div>
+                  </div>
+                  <div style={{ width: 1, height: 24, background: '#BAE6FD' }} />
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: 800, color: '#0369A1' }}>{Math.round((committedOrders.filter(o => o.status === 'delivered' && (o.deliveryDate || o.date) === todayStr).length / (deliveryGroups.morning.length + deliveryGroups.afternoon.length + deliveryGroups.evening.length || 1)) * 100)}%</div>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: '#075985', textTransform: 'uppercase' }}>Done</div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Stats Bar */}
+          <div className="stats-grid" style={{ marginBottom: 0, gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
+            {loading ? [...Array(6)].map((_, i) => <StatSkeleton key={i} />) : stats.map(s => (
+              <motion.div variants={statCard} whileTap={{ scale: 0.95 }} className={`stat-card ${s.color}`} key={s.label} onClick={() => navigate(s.path || '/')}>
+                <div className={`stat-icon ${s.color}`}><s.icon size={18} /></div>
+                <div className="stat-label">{s.label}</div>
+                <div className="stat-value" style={{ fontSize: s.label.includes('Pending') || s.label === 'Expenses' ? '1.1rem' : '1.6rem' }}>{s.value}</div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        {/* Deliveries & Activity */}
+        <div className="content-grid" style={{ gridTemplateColumns: '1.2fr 0.8fr', gap: 24 }}>
+          <motion.div variants={listItem}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: '1.4rem', fontWeight: 800 }}>Deliveries Today</h3>
+              <button className="btn btn-outline btn-sm" onClick={() => navigate('/orders')}>All Orders</button>
+            </div>
+            
+            {loading ? <OrderRowSkeleton /> : (
+              (deliveryGroups.morning.length + deliveryGroups.afternoon.length + deliveryGroups.evening.length === 0) ? (
+                <EmptyState icon="🧁" title="No deliveries today" subtitle="Take this time to experiment with new recipes!" />
+              ) : (
+                <>
+                  <DeliverySection title="Morning Slot" icon={Clock} items={deliveryGroups.morning} />
+                  <DeliverySection title="Afternoon Slot" icon={Clock} items={deliveryGroups.afternoon} />
+                  <DeliverySection title="Evening Slot" icon={Clock} items={deliveryGroups.evening} />
+                </>
+              )
             )}
 
-            <h3 style={{ margin: '24px 0 16px' }}>Tomorrow's Deliveries</h3>
-            {loading ? (
-              <>{[...Array(2)].map((_, i) => <OrderRowSkeleton key={i} />)}</>
-            ) : tomorrowOrders.length === 0 ? (
-              <div style={{ padding: '30px 20px', textAlign: 'center', color: 'var(--text3)', background: 'var(--cream)', borderRadius: 'var(--radius-sm)' }}>
-                No deliveries tomorrow 📅
+            {tomorrowOrders.length > 0 && (
+              <div style={{ marginTop: 32 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'var(--text3)', fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                  <CalendarDays size={14} /> Coming Up Tomorrow
+                </div>
+                {tomorrowOrders.slice(0, 3).map(o => (
+                   <div key={o.id} style={{ padding: '12px 16px', background: 'var(--bg2)', borderRadius: 14, marginBottom: 8, border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
+                     <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{typeof o.customer === 'object' ? o.customer?.name : o.customerName}</div>
+                     <div style={{ fontSize: '0.85rem', color: 'var(--text3)' }}>{o.product}</div>
+                   </div>
+                ))}
               </div>
-            ) : (
-              tomorrowOrders.map(renderMiniCard)
             )}
           </motion.div>
 
-          <motion.div variants={item} className="card table-card">
-            <div className="table-header">
-              <h3>Recent Orders</h3>
-              <button className="btn btn-outline btn-sm" onClick={() => navigate('/orders')}>View All <ChevronRight size={14} /></button>
-            </div>
-            <div style={{ overflowX: 'auto' }} className="desktop-only">
-              {loading ? (
-                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text3)' }}>Fetching orders...</div>
-              ) : (
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Order</th>
-                      <th>Customer</th>
-                      <th>Date</th>
-                      <th>Status</th>
-                      <th>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {safeOrders.slice(0, 5).map(o => {
-                      const cName = typeof o.customer === 'object' ? (o.customer?.name || 'Customer') : (o.customerName || o.customer || 'Customer');
-                      const dDate = formatDate(o.createdAt || o.date || new Date());
-                      const totalNum = Number(o.totalAmount) || Number(o.total) || 0;
-                      const orderId = formatOrderNumber(o, safeOrders);
-
-                      return (
-                        <tr key={o.id}>
-                          <td style={{ fontWeight: 600 }}>{orderId}</td>
-                          <td style={{ fontWeight: 500 }}>{cName}</td>
-                          <td style={{ fontSize: '0.85rem' }}>{dDate}</td>
-                          <td><span className={`badge ${String(o.status || 'new').toLowerCase()}`}>{o.status || 'new'}</span></td>
-                          <td style={{ fontWeight: 600 }}>{formatCurrency(totalNum)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </div>
-            <div className="mobile-only">
-              {loading ? (
-                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text3)' }}>Fetching orders...</div>
+          <motion.div variants={listItem}>
+            <h3 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: 20 }}>Recent Activity</h3>
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              {loading ? <OrderRowSkeleton /> : orders.length === 0 ? (
+                <EmptyState icon="✨" title="Fresh Start" subtitle="Your orders and activity will appear here." />
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  {safeOrders.slice(0, 5).map(o => {
-                    const cName = typeof o.customer === 'object' ? (o.customer?.name || 'Customer') : (o.customerName || o.customer || 'Customer');
-                    const totalNum = Number(o.totalAmount) || Number(o.total) || 0;
-                    const orderId = formatOrderNumber(o, safeOrders);
-                    const dDate = formatDate(o.createdAt || o.date || new Date());
-                    
-                    return (
-                      <div key={o.id} style={{ padding: '16px 0', borderBottom: '1px solid var(--border)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <span style={{ fontWeight: 700, color: 'var(--accent2)' }}>{orderId}</span>
-                          <span className={`badge ${String(o.status || 'new').toLowerCase()}`}>{o.status || 'new'}</span>
-                        </div>
-                        <div style={{ fontWeight: 600 }}>{cName}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, alignItems: 'center' }}>
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>{dDate}</div>
-                          <div style={{ fontWeight: 700 }}>{formatCurrency(totalNum)}</div>
-                        </div>
+                  {orders.slice(0, 8).map(o => (
+                    <div key={o.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>{typeof o.customer === 'object' ? o.customer?.name : o.customerName}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text3)', marginTop: 2 }}>{o.product}</div>
                       </div>
-                    );
-                  })}
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 800, fontSize: '0.9rem' }}>{formatCurrency(o.total || 0)}</div>
+                        <span className={`badge ${String(o.status || 'new').toLowerCase()}`} style={{ fontSize: '9px', padding: '2px 8px' }}>{o.status}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           </motion.div>
         </div>
       </PullToRefresh>
+
+      {/* Floating Action Button Group (Mobile Optimized) */}
+      <div className="mobile-only" style={{ position: 'fixed', bottom: 100, right: 20, display: 'flex', flexDirection: 'column', gap: 12, zIndex: 100 }}>
+        <motion.button 
+          whileTap={{ scale: 0.9 }}
+          onClick={() => navigate('/orders')}
+          style={{ width: 56, height: 56, borderRadius: '50%', background: 'var(--accent)', color: 'white', boxShadow: 'var(--shadow-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Plus size={24} />
+        </motion.button>
+      </div>
+
+      {/* Search Overlay */}
+      <AnimatePresence>
+        {search && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)', padding: '20px' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                <button className="btn-icon" onClick={() => setSearch('')}><X size={20} /></button>
+                <div style={{ flex: 1, background: 'var(--bg2)', borderRadius: 12, padding: '0 12px', display: 'flex', alignItems: 'center' }}>
+                   <Search size={18} color="var(--text3)" />
+                   <input autoFocus value={search} onChange={e => setSearch(e.target.value)} style={{ background: 'none', border: 'none', height: 44, padding: '0 8px', flex: 1 }} />
+                </div>
+             </div>
+             {searchResults.orders.length > 0 && (
+               <div style={{ marginBottom: 24 }}>
+                 <h4 style={{ color: 'var(--text3)', textTransform: 'uppercase', fontSize: 11, fontWeight: 800, marginBottom: 12, letterSpacing: '0.05em' }}>Orders</h4>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                   {searchResults.orders.slice(0, 8).map(o => (
+                     <div key={o.id} onClick={() => { navigate('/orders'); setSearch(''); }} className="card" style={{ padding: 16 }}>
+                       <div style={{ fontWeight: 700 }}>{o.product}</div>
+                       <div style={{ fontSize: 12, color: 'var(--text3)' }}>{typeof o.customer === 'object' ? o.customer?.name : o.customerName} · {formatDate(o.date)}</div>
+                     </div>
+                   ))}
+                 </div>
+               </div>
+             )}
+              {searchResults.customers.length === 0 && searchResults.orders.length === 0 && (
+               <EmptyState icon="🔍" title="No results" subtitle={`We couldn't find anything matching "${search}"`} />
+             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <ProfitCalculator open={showCalculator} onClose={() => setShowCalculator(false)} />
     </motion.div>
   );
 }
+

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Calculator, Lock, Plus, X, Trash2, ChevronLeft, Camera, FileText, Image, Mic, MicOff, Search } from 'lucide-react';
+import { BookOpen, Calculator, Lock, Plus, X, Trash2, ChevronLeft, Camera, FileText, Image, Mic, MicOff, Search, ShoppingCart, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToRecipes, addRecipeToDB, updateRecipeInDB, deleteRecipeFromDB } from '../services/db';
+import { subscribeToRecipes, addRecipeToDB, updateRecipeInDB, deleteRecipeFromDB, addShoppingItemToDB } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { Skeleton, showToast, PullToRefresh, triggerHaptic } from '../components/iOS';
 import { formatCurrency } from '../utils/date';
 
@@ -52,6 +53,33 @@ function PasscodeScreen({ onUnlock }) {
 
 // ─── RECIPE DETAIL MODAL ──────────────────────────────────────
 function RecipeDetail({ recipe, onClose, onDelete }) {
+  const { currentUser } = useAuth();
+  const [addingToShop, setAddingToShop] = useState(false);
+
+  const handleAddToShoppingList = async () => {
+    if (!recipe.ingredients?.length) return;
+    setAddingToShop(true);
+    triggerHaptic('medium');
+    try {
+      for (const ing of recipe.ingredients) {
+        await addShoppingItemToDB({
+          name: ing.name,
+          qty: '',
+          unit: 'kg',
+          category: 'Other',
+          userId: currentUser.uid,
+          createdAt: new Date().toISOString()
+        });
+      }
+      showToast(`Added ${recipe.ingredients.length} items to Shopping List!`, 'success');
+      triggerHaptic('success');
+    } catch (e) {
+      showToast('Failed to add items', 'error');
+    } finally {
+      setAddingToShop(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       {recipe && (
@@ -74,9 +102,15 @@ function RecipeDetail({ recipe, onClose, onDelete }) {
             )}
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
               <h2 style={{ fontSize:'1.5rem' }}>{recipe.name}</h2>
-              <button onClick={() => { onDelete(recipe.id); onClose(); }} style={{ background:'rgba(196,87,74,0.12)', border:'none', borderRadius:10, padding:'8px 12px', color:'var(--accent2)', cursor:'pointer', display:'flex', gap:6, alignItems:'center', fontSize:13, fontWeight:600 }}>
-                <Trash2 size={14}/> Delete
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handleAddToShoppingList} disabled={addingToShop} style={{ background:'var(--accent-lt)', border:'none', borderRadius:10, padding:'8px 12px', color:'var(--accent)', cursor:'pointer', display:'flex', gap:6, alignItems:'center', fontSize:13, fontWeight:600 }}>
+                  {addingToShop ? <Loader2 size={14} className="animate-spin" /> : <ShoppingCart size={14}/>}
+                  Shop
+                </button>
+                <button onClick={() => { onDelete(recipe.id); onClose(); }} style={{ background:'rgba(196,87,74,0.12)', border:'none', borderRadius:10, padding:'8px 12px', color:'var(--accent2)', cursor:'pointer', display:'flex', gap:6, alignItems:'center', fontSize:13, fontWeight:600 }}>
+                  <Trash2 size={14}/> Delete
+                </button>
+              </div>
             </div>
             <div style={{ display:'flex', gap:12, marginBottom:20 }}>
               {recipe.yield && <span style={{ background:'var(--cream)', padding:'4px 12px', borderRadius:99, fontSize:13, fontWeight:600 }}>🎂 Yields {recipe.yield}</span>}
@@ -123,6 +157,7 @@ function AddRecipeModal({ onClose, onSave }) {
   const [imagePreview, setImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef();
+  const { currentUser } = useAuth();
 
   const handleImage = (e) => {
     const file = e.target.files[0];
@@ -141,12 +176,14 @@ function AddRecipeModal({ onClose, onSave }) {
         fd.append('image', imageFile);
         const res = await fetch('/api/upload', { method:'POST', body:fd });
         const data = await res.json();
-        if (data.url) imageUrl = `http://localhost:3001${data.url}`;
+        if (data.url) imageUrl = data.url;
       } catch(err) { console.error('Image upload failed', err); }
     }
     const recipe = {
       ...form,
       imageUrl,
+      userId: currentUser.uid,
+      createdAt: new Date().toISOString(),
       ingredients: ingredients.filter(i => i.name.trim()).map(i => ({ name:i.name, cost:Number(i.cost)||0 })),
       steps: steps.filter(s => s.trim())
     };
@@ -229,11 +266,16 @@ export default function Recipes() {
   const [sellingPrice, setSellingPrice] = useState(0);
   const [packagingCost, setPackagingCost] = useState(0);
   const [laborCost, setLaborCost] = useState(0);
+  const { currentUser } = useAuth();
 
   useEffect(() => {
-    const unsub = subscribeToRecipes(r => { setRecipes(r); setLoading(false); });
+    if (!currentUser) return;
+    const unsub = subscribeToRecipes(r => { 
+      setRecipes(r); 
+      setLoading(false); 
+    }, currentUser.uid);
     return () => unsub();
-  }, []);
+  }, [currentUser]);
 
   const handleVoiceInput = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -278,7 +320,12 @@ export default function Recipes() {
   const margin = sellingPrice > 0 ? ((netProfit/sellingPrice)*100).toFixed(1) : 0;
 
   const handleSaveRecipe = async (recipe) => {
-    try { await addRecipeToDB(recipe); showToast('Recipe saved!', 'success'); } catch(e) { showToast('Failed to save', 'error'); }
+    try { 
+      await addRecipeToDB({ ...recipe, userId: currentUser.uid }); 
+      showToast('Recipe saved!', 'success'); 
+    } catch(e) { 
+      showToast('Failed to save', 'error'); 
+    }
   };
 
   const handleDelete = async (id) => {
@@ -305,11 +352,11 @@ export default function Recipes() {
         <div className="page-header" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:12 }}>
           <div>
             <h1>Recipe Vault 🔐</h1>
-            <p>Your secret recipes & profit calculator, passcode protected</p>
+            <p>Your secret recipes & profit calculator</p>
           </div>
           <div style={{ display:'flex', gap:10 }}>
-            <button className={`btn btn-sm ${view==='book'?'btn-primary':'btn-outline'}`} onClick={() => setView('book')}><BookOpen size={16}/> Recipe Book</button>
-            <button className={`btn btn-sm ${view==='calculator'?'btn-primary':'btn-outline'}`} onClick={() => setView('calculator')}><Calculator size={16}/> Profit Calc</button>
+            <button className={`btn btn-sm ${view==='book'?'btn-primary':'btn-outline'}`} onClick={() => { setView('book'); triggerHaptic('light'); }}><BookOpen size={16}/> Recipe Book</button>
+            <button className={`btn btn-sm ${view==='calculator'?'btn-primary':'btn-outline'}`} onClick={() => { setView('calculator'); triggerHaptic('light'); }}><Calculator size={16}/> Profit Calc</button>
           </div>
         </div>
 
@@ -388,7 +435,7 @@ export default function Recipes() {
               <h3 style={{ marginBottom:20 }}>Profit Calculator</h3>
               <div className="form-group">
                 <label className="form-label">Select Recipe</label>
-                <select value={calcRecipeId || calcRecipe?.id || ''} onChange={e => setCalcRecipeId(e.target.value)}>
+                <select value={calcRecipeId || calcRecipe?.id || ''} onChange={e => { setCalcRecipeId(e.target.value); triggerHaptic('light'); }}>
                   {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </div>

@@ -1,5 +1,6 @@
 import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, orderBy, onSnapshot, where, setDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "./firebase";
 import { encryptData, decryptData } from "../utils/crypto";
 
 // ==========================================
@@ -120,8 +121,13 @@ export const deleteProductFromDB = async (productId) => {
   }
 };
 
-export const subscribeToProducts = (callback, errorCallback) => {
-  return onSnapshot(productsCollection, (snapshot) => {
+export const subscribeToProducts = (callback, errorCallback, userId = null) => {
+  let q = productsCollection;
+  if (userId) {
+    q = query(productsCollection, where("userId", "==", userId));
+  }
+  
+  return onSnapshot(q, (snapshot) => {
     const products = [];
     snapshot.forEach((doc) => {
       products.push({ id: doc.id, ...doc.data() });
@@ -169,13 +175,14 @@ export const deleteRecipeFromDB = async (recipeId) => {
   }
 };
 
-export const subscribeToRecipes = (callback, errorCallback) => {
-  return onSnapshot(recipesCollection, (snapshot) => {
-    const recipes = [];
-    snapshot.forEach((doc) => {
-      recipes.push({ id: doc.id, ...doc.data() });
-    });
-    callback(recipes);
+export const subscribeToRecipes = (callback, errorCallback, userId = null) => {
+  let q = recipesCollection;
+  if (userId) {
+    q = query(recipesCollection, where("userId", "==", userId));
+  }
+  
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   }, (error) => {
     console.error("Recipes subscription error:", error);
     if (errorCallback) errorCallback(error);
@@ -210,13 +217,24 @@ export const updateInventoryStockInDB = async (itemId, newStock) => {
   }
 };
 
-export const subscribeToInventory = (callback, errorCallback) => {
-  return onSnapshot(inventoryCollection, (snapshot) => {
-    const items = [];
-    snapshot.forEach((doc) => {
-      items.push({ id: doc.id, ...doc.data() });
-    });
-    callback(items);
+export const deleteInventoryFromDB = async (itemId) => {
+  try {
+    const itemRef = doc(db, "inventory", itemId);
+    await deleteDoc(itemRef);
+  } catch (e) {
+    console.error("Error deleting inventory item: ", e);
+    throw e;
+  }
+};
+
+export const subscribeToInventory = (callback, errorCallback, userId = null) => {
+  let q = inventoryCollection;
+  if (userId) {
+    q = query(inventoryCollection, where("userId", "==", userId));
+  }
+  
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   }, (error) => {
     console.error("Inventory subscription error:", error);
     if (errorCallback) errorCallback(error);
@@ -229,8 +247,13 @@ export const subscribeToInventory = (callback, errorCallback) => {
 
 export const customersCollection = collection(db, "customers");
 
-export const subscribeToCustomers = (callback, errorCallback) => {
-  return onSnapshot(customersCollection, async (snapshot) => {
+export const subscribeToCustomers = (callback, errorCallback, userId = null) => {
+  let q = customersCollection;
+  if (userId) {
+    q = query(customersCollection, where("userId", "==", userId));
+  }
+  
+  return onSnapshot(q, async (snapshot) => {
     const customersPromises = snapshot.docs.map(async (doc) => {
       const data = doc.data();
       return { 
@@ -288,18 +311,33 @@ export const updateCustomerInDB = async (customerId, customerData) => {
 
 export const businessCollection = collection(db, "business");
 
-export const subscribeToBusiness = (callback, errorCallback) => {
-  return onSnapshot(businessCollection, (snapshot) => {
+export const subscribeToBusiness = (callback, errorCallback, userId = null) => {
+  let q = businessCollection;
+  if (userId) {
+    q = query(businessCollection, where("userId", "==", userId));
+  }
+  return onSnapshot(q, (snapshot) => {
     const data = [];
     snapshot.forEach((doc) => {
       data.push({ id: doc.id, ...doc.data() });
     });
-    // Return first business doc (there should only be one per owner usually, or we use userId)
     callback(data[0] || { name: 'Cream & Crust', logo: '🧁' });
   }, (error) => {
     console.error("Business subscription error:", error);
     if (errorCallback) errorCallback(error);
   });
+};
+
+export const getBusinessByUsername = async (username) => {
+  try {
+    const q = query(businessCollection, where("username", "==", username.toLowerCase()));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+  } catch (e) {
+    console.error("Error fetching business by username:", e);
+    return null;
+  }
 };
 
 export const updateBusinessInDB = async (businessId, businessData) => {
@@ -312,3 +350,140 @@ export const updateBusinessInDB = async (businessId, businessData) => {
     throw e;
   }
 };
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+export const notificationsCollection = collection(db, "notifications");
+
+export const addNotificationToDB = async (notificationData) => {
+  try {
+    await addDoc(notificationsCollection, {
+      ...notificationData,
+      read: false,
+      createdAt: new Date().toISOString()
+    });
+  } catch (e) {
+    console.error("Error adding notification:", e);
+  }
+};
+
+export const subscribeToNotifications = (userId, callback) => {
+  const q = query(notificationsCollection, where("userId", "==", userId), orderBy("createdAt", "desc"));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+  });
+};
+
+// ==========================================
+// EXPENSES
+// ==========================================
+
+export const uploadReceiptToStorage = async (file) => {
+  try {
+    const storageRef = ref(storage, `receipts/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+  } catch (e) {
+    console.error("Error uploading receipt:", e);
+    throw e;
+  }
+};
+
+export const expensesCollection = collection(db, "expenses");
+
+export const addExpenseToDB = async (expenseData) => {
+  try {
+    const docRef = await addDoc(expensesCollection, {
+      ...expenseData,
+      createdAt: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (e) {
+    console.error("Error adding expense:", e);
+    throw e;
+  }
+};
+
+export const deleteExpenseFromDB = async (expenseId) => {
+  try {
+    await deleteDoc(doc(db, "expenses", expenseId));
+  } catch (e) {
+    console.error("Error deleting expense:", e);
+    throw e;
+  }
+};
+
+export const subscribeToExpenses = (callback, errorCallback, userId = null) => {
+  let q;
+  if (userId) {
+    q = query(expensesCollection, where("userId", "==", userId), orderBy("createdAt", "desc"));
+  } else {
+    q = query(expensesCollection, orderBy("createdAt", "desc"));
+  }
+  
+  return onSnapshot(q, (snapshot) => {
+    const expenses = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(expenses);
+  }, (error) => {
+    console.error("Expenses subscription error:", error);
+    if (errorCallback) errorCallback(error);
+  });
+};
+
+// ==========================================
+// SHOPPING LIST
+// ==========================================
+
+export const shoppingListCollection = collection(db, "shoppingList");
+
+export const addShoppingItemToDB = async (itemData) => {
+  try {
+    const docRef = await addDoc(shoppingListCollection, {
+      ...itemData,
+      bought: false,
+      createdAt: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (e) {
+    console.error("Error adding shopping item:", e);
+    throw e;
+  }
+};
+
+export const toggleShoppingItemInDB = async (itemId, bought) => {
+  try {
+    await updateDoc(doc(db, "shoppingList", itemId), { bought });
+  } catch (e) {
+    console.error("Error toggling shopping item:", e);
+    throw e;
+  }
+};
+
+export const deleteShoppingItemFromDB = async (itemId) => {
+  try {
+    await deleteDoc(doc(db, "shoppingList", itemId));
+  } catch (e) {
+    console.error("Error deleting shopping item:", e);
+    throw e;
+  }
+};
+
+export const subscribeToShoppingList = (callback, errorCallback, userId = null) => {
+  let q;
+  if (userId) {
+    q = query(shoppingListCollection, where("userId", "==", userId), orderBy("createdAt", "desc"));
+  } else {
+    q = query(shoppingListCollection, orderBy("createdAt", "desc"));
+  }
+  
+  return onSnapshot(q, (snapshot) => {
+    const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    callback(items);
+  }, (error) => {
+    console.error("Shopping list subscription error:", error);
+    if (errorCallback) errorCallback(error);
+  });
+};
+

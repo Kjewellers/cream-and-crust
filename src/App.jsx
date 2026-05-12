@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, ShoppingBag, CalendarDays, Users, Package, BookOpen, CreditCard, BarChart3, Settings, Menu, Database, WifiOff, LogOut, Lock, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, CalendarDays, Users, Package, BookOpen, CreditCard, BarChart3, Settings, Menu, Database, WifiOff, LogOut, Lock, Sun, Moon, Receipt, ShoppingCart } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import Products from './pages/Products';
@@ -12,11 +12,15 @@ import Analytics from './pages/Analytics';
 import Inventory from './pages/Inventory';
 import Recipes from './pages/Recipes';
 import Profile from './pages/Profile';
+import Expenses from './pages/Expenses';
+import ShoppingList from './pages/ShoppingList';
 import Login from './pages/Login';
 import SetupAdmin from './pages/SetupAdmin';
+import PublicOrderForm from './pages/PublicOrderForm';
+import Portfolio from './pages/Portfolio';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { subscribeToOrders } from './services/db';
-import { ToastContainer } from './components/iOS';
+import { ToastContainer, Loader2 } from './components/iOS';
 import './index.css';
 
 
@@ -48,6 +52,8 @@ function Sidebar({ open, onClose, theme, toggleTheme }) {
       { to: '/inventory', icon: Package, label: 'Inventory' },
       { to: '/recipes', icon: BookOpen, label: 'Recipes' },
       { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+      { to: '/expenses', icon: Receipt, label: 'Expenses' },
+      { to: '/shopping-list', icon: ShoppingCart, label: 'Shopping List' },
     ]},
     { section: 'ACCOUNT', items: [
       { to: '/profile', icon: Settings, label: 'Settings' },
@@ -161,7 +167,7 @@ function BottomNav() {
     { to: '/orders', icon: ShoppingBag, label: 'Orders' },
     { to: '/calendar', icon: CalendarDays, label: 'Schedule' },
     { to: '/products', icon: Package, label: 'Products' },
-    { to: '/analytics', icon: BarChart3, label: 'Stats' },
+    { to: '/expenses', icon: Receipt, label: 'Expenses' },
   ] : [
     { to: '/', icon: Package, label: 'Shop' },
     { to: '/orders', icon: ShoppingBag, label: 'Orders' },
@@ -205,6 +211,8 @@ function AnimatedRoutes() {
             {renderRoute("/inventory", <Inventory />)}
             {renderRoute("/recipes", <Recipes />)}
             {renderRoute("/analytics", <Analytics />)}
+            {renderRoute("/expenses", <Expenses />)}
+            {renderRoute("/shopping-list", <ShoppingList />)}
             { renderRoute("/profile", <Profile />)}
           </>
         ) : (
@@ -221,28 +229,79 @@ function AnimatedRoutes() {
   );
 }
 
+function SplashScreen() {
+  return (
+    <motion.div 
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5 }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+      }}
+    >
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+        style={{ fontSize: '5rem' }}
+      >
+        🧁
+      </motion.div>
+      <motion.h1
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.2 }}
+        style={{ marginTop: 20, fontSize: '1.8rem', letterSpacing: '-0.04em' }}
+      >
+        Cream & Crust
+      </motion.h1>
+      <motion.div
+        animate={{ scaleX: [0, 1, 1], opacity: [0.3, 0.6, 0] }}
+        transition={{ duration: 2, repeat: Infinity }}
+        style={{ width: 140, height: 2, background: 'var(--accent)', marginTop: 12, borderRadius: 1 }}
+      />
+    </motion.div>
+  );
+}
+
 function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  const { currentUser, userRole } = useAuth();
+  const { currentUser, userRole, loading: authLoading } = useAuth();
   const location = useLocation();
   
-  console.log("Rendering MainLayout, user:", currentUser?.email, "role:", userRole);
+  const isPublicRoute = location.pathname.startsWith('/order/') || location.pathname.startsWith('/portfolio/');
 
   return (
     <AnimatePresence mode="wait">
-      {!currentUser ? (
-        <motion.div key="login" exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 1.5, ease: [0.32, 0.72, 0, 1] }} style={{ height: '100vh', width: '100vw' }}>
+      {showSplash && <SplashScreen key="splash" />}
+      
+      {isPublicRoute ? (
+        <motion.div key="public" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <Routes>
+            <Route path="/order/:username" element={<PublicOrderForm />} />
+            <Route path="/portfolio/:username" element={<Portfolio />} />
+          </Routes>
+        </motion.div>
+      ) : !currentUser && !authLoading ? (
+        <motion.div key="login" exit={{ opacity: 0, scale: 0.98 }} transition={{ duration: 0.6, ease: [0.32, 0.72, 0, 1] }} style={{ height: '100vh', width: '100vw' }}>
           <Login />
         </motion.div>
-      ) : (
+      ) : currentUser ? (
         <motion.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="app">
           <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} theme={theme} toggleTheme={toggleTheme} />
           <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
@@ -251,6 +310,10 @@ function MainLayout() {
           </main>
           <BottomNav />
         </motion.div>
+      ) : (
+        <div key="loading" style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Loader2 className="animate-spin" color="var(--accent)" />
+        </div>
       )}
     </AnimatePresence>
   );

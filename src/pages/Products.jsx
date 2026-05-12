@@ -1,20 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Camera, Filter } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Camera, Filter, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToProducts, addProductToDB, updateProductInDB, deleteProductFromDB } from '../services/db';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { subscribeToProducts, addProductToDB, updateProductInDB, deleteProductFromDB, subscribeToRecipes } from '../services/db';
+import { storage } from '../services/firebase';
+import { useAuth } from '../context/AuthContext';
 import { Skeleton, showToast } from '../components/iOS';
 import { formatCurrency } from '../utils/date';
 
 const DEFAULT_CATEGORIES = ['All', 'Cakes', 'Cupcakes', 'Brownies', 'Cookies', 'Dessert Boxes'];
 
 export default function Products() {
+  const { currentUser } = useAuth();
   const [products, setProducts] = useState([]);
+  const [recipes, setRecipes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: '', category: 'Cakes', basePrice: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false });
+  const [form, setForm] = useState({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -27,8 +32,16 @@ export default function Products() {
     }, (error) => {
       console.error("Products subscription error:", error);
       setLoading(false);
+    }, currentUser?.uid);
+
+    const recipesUnsub = subscribeToRecipes((newRecipes) => {
+      setRecipes(newRecipes || []);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribe();
+      recipesUnsub();
+    };
   }, []);
 
   const categories = Array.from(new Set([...DEFAULT_CATEGORIES, ...products.map(p => p.category)]));
@@ -54,42 +67,42 @@ export default function Products() {
     try {
       let imageUrl = editingId ? products.find(p => p.id === editingId)?.imageUrl : null;
 
+      // Upload to Firebase Storage instead of the broken API endpoint
       if (imageFile) {
-        const formData = new FormData();
-        formData.append('image', imageFile);
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData
-        });
-        const data = await res.json();
-        if (data.success) {
-          imageUrl = `http://localhost:3001${data.url}`;
-        }
+        const uid = currentUser?.uid || 'anonymous';
+        const fileName = `products/${uid}/${Date.now()}_${imageFile.name}`;
+        const storageRef = ref(storage, fileName);
+        await uploadBytes(storageRef, imageFile);
+        imageUrl = await getDownloadURL(storageRef);
       }
 
       const productData = {
         name: form.name,
         category: form.category,
         basePrice: Number(form.basePrice),
+        costPrice: Number(form.costPrice || 0),
+        recipeId: form.recipeId || null,
         flavors: form.flavors,
         prepTime: form.prepTime,
         variants: form.variants || 'Regular',
         emoji: form.emoji,
         bestseller: form.bestseller,
-        imageUrl
+        imageUrl: imageUrl || null,
+        userId: currentUser?.uid || null,
+        updatedAt: new Date().toISOString()
       };
 
       if (editingId) {
         await updateProductInDB(editingId, productData);
-        showToast('Product updated!', 'success');
+        showToast('Product updated! ✅', 'success');
       } else {
-        await addProductToDB(productData);
-        showToast('Product added!', 'success');
+        await addProductToDB({ ...productData, createdAt: new Date().toISOString() });
+        showToast('Product added! 🎂', 'success');
       }
       closeModal();
     } catch (error) {
-      console.error("Save product error:", error);
-      showToast('Failed to save product', 'error');
+      console.error('Save product error:', error);
+      showToast(`Failed to save: ${error.message}`, 'error');
     } finally {
       setUploading(false);
     }
@@ -101,6 +114,7 @@ export default function Products() {
         await deleteProductFromDB(id);
         showToast('Product deleted', 'info');
       } catch (error) {
+        console.error('Delete error:', error);
         showToast('Failed to delete', 'error');
       }
     }
@@ -112,6 +126,8 @@ export default function Products() {
       name: product.name,
       category: product.category,
       basePrice: product.basePrice,
+      costPrice: product.costPrice || '',
+      recipeId: product.recipeId || '',
       flavors: product.flavors,
       prepTime: product.prepTime,
       variants: product.variants,
@@ -125,7 +141,7 @@ export default function Products() {
   const closeModal = () => {
     setShowModal(false);
     setEditingId(null);
-    setForm({ name: '', category: 'Cakes', basePrice: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false });
+    setForm({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false });
     setImageFile(null);
     setImagePreview(null);
   };
@@ -185,7 +201,7 @@ export default function Products() {
           <AnimatePresence>
             {filtered.map(p => (
               <motion.div key={p.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} layout className="product-card">
-                <div className="product-img" style={{ backgroundImage: p.imageUrl ? `url(${p.imageUrl})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem' }}>
+                <div className="product-img" style={{ backgroundImage: p.imageUrl ? `url(${p.imageUrl})` : 'none', backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundColor: 'var(--bg)', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem' }}>
                   {!p.imageUrl && p.emoji}
                   {p.bestseller && <span className="product-bestseller" style={{ top: 12, left: 12 }}>Bestseller</span>}
                 </div>
@@ -205,7 +221,14 @@ export default function Products() {
                       <div style={{ fontSize: '0.65rem', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Starting from</div>
                       <div className="product-price" style={{ fontSize: '1.2rem' }}>{formatCurrency(p.basePrice)}</div>
                     </div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', background: 'rgba(212,113,74,0.1)', padding: '4px 10px', borderRadius: 8 }}>{p.variants}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      {p.costPrice > 0 && (
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2E7A5A', marginBottom: 2 }}>
+                          {Math.round(((p.basePrice - p.costPrice) / p.basePrice) * 100)}% Margin
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', background: 'rgba(212,113,74,0.1)', padding: '4px 10px', borderRadius: 8 }}>{p.variants}</div>
+                    </div>
                   </div>
                 </div>
               </motion.div>
@@ -242,8 +265,13 @@ export default function Products() {
                       position: 'relative'
                     }}
                   >
-                    {imagePreview ? (
-                      <img src={imagePreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    {uploading ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <Loader2 className="animate-spin" size={32} color="var(--accent)" />
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text3)', marginTop: 8 }}>Uploading...</span>
+                      </div>
+                    ) : imagePreview ? (
+                      <img src={imagePreview} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'var(--bg)' }} />
                     ) : (
                       <>
                         <Camera size={32} color="var(--text3)" />
@@ -256,6 +284,22 @@ export default function Products() {
 
                 <div className="form-group full"><label className="form-label">Product Name</label><input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Dreamy Vanilla Cake" /></div>
                 
+                <div className="form-group full">
+                  <label className="form-label">Linked Recipe (Auto-calculates Cost)</label>
+                  <select 
+                    value={form.recipeId} 
+                    onChange={e => {
+                      const recipeId = e.target.value;
+                      const recipe = recipes.find(r => r.id === recipeId);
+                      const cost = recipe ? (recipe.ingredients?.reduce((s, i) => s + Number(i.cost || 0), 0) + Number(recipe.packagingCost || 0) + Number(recipe.laborCost || 0)) : form.costPrice;
+                      setForm({...form, recipeId, costPrice: cost});
+                    }}
+                  >
+                    <option value="">No Recipe Linked</option>
+                    {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Category</label>
                   <select value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
@@ -265,6 +309,8 @@ export default function Products() {
                 </div>
 
                 <div className="form-group"><label className="form-label">Base Price (₹)</label><input type="number" required value={form.basePrice} onChange={e => setForm({...form, basePrice: e.target.value})} placeholder="0" /></div>
+                
+                <div className="form-group"><label className="form-label">Cost Price (₹)</label><input type="number" value={form.costPrice} onChange={e => setForm({...form, costPrice: e.target.value})} placeholder="e.g. 250" /></div>
                 
                 <div className="form-group"><label className="form-label">Weight/Variants</label><input placeholder="0.5kg, 1kg" value={form.variants} onChange={e => setForm({...form, variants: e.target.value})} /></div>
                 

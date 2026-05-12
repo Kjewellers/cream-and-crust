@@ -5,10 +5,13 @@ import { subscribeToOrders, subscribeToCustomers, addOrderToDB, updateOrderStatu
 import { shareToWhatsApp } from '../services/whatsapp';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatTime, formatCurrency, formatOrderNumber } from '../utils/date';
+import { exportToCSV } from '../utils/exportUtils';
+import { Download } from 'lucide-react';
 import {
   OrderRowSkeleton, EmptyState, showToast,
   SegmentedControl, SwipeRow, BottomSheet,
-  PullToRefresh, shareContent, triggerHaptic
+  PullToRefresh, shareContent, triggerHaptic,
+  OnboardingTutorial
 } from '../components/iOS';
 import { listContainer, listItem, modalVariants, fabVariants } from '../utils/animations';
 
@@ -98,10 +101,13 @@ function OrderRow({ o, allOrders, onAdvance, onWhatsApp, onCustomerClick, onRapi
             style={{ color: '#25D366', width: 34, height: 34, borderRadius: 10 }}>
             <MessageCircle size={15} />
           </motion.button>
-          <motion.button whileTap={{ scale: 0.86 }} className="btn-icon" title="Book Rapido" onClick={(e) => { e.stopPropagation(); onRapido(o); }}
-            style={{ background: '#F9C935', color: '#000', width: 34, height: 34, borderRadius: 10, fontWeight: 700, fontSize: 10 }}>
-            🛵
-          </motion.button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <motion.button whileTap={{ scale: 0.86 }} className="btn-icon" title="Book Rapido" onClick={(e) => { e.stopPropagation(); onRapido(o); }}
+              style={{ background: '#F9C935', color: '#000', width: 34, height: 34, borderRadius: 10, fontWeight: 700, fontSize: 14 }}>
+              🛵
+            </motion.button>
+            <span style={{ fontSize: 9, color: 'var(--text3)', fontWeight: 600 }}>Rapido</span>
+          </div>
         </div>
       </td>
     </motion.tr>
@@ -124,43 +130,72 @@ function MobileOrderCard({ o, allOrders, onAdvance, onWhatsApp, onCustomerClick,
       <SwipeRow
         onWhatsApp={() => onWhatsApp(o)}
       >
-        <div style={{ padding: '14px 4px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }} onClick={() => onOrderClick(o)}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+        <div 
+          style={{ 
+            padding: '16px', 
+            background: 'var(--bg)',
+            borderBottom: '1px solid var(--border)',
+            cursor: 'pointer' 
+          }} 
+          onClick={() => onOrderClick(o)}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
             <div>
-              <div style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 14 }}>{orderId}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 13, letterSpacing: '-0.01em' }}>{orderId}</span>
+                <StatusBadge status={o.status} />
+              </div>
               <div 
                 onClick={(e) => { e.stopPropagation(); onCustomerClick(o); }}
-                style={{ fontWeight: 600, fontSize: 15, marginTop: 2, cursor: 'pointer', display: 'inline-block', borderBottom: '1px dashed var(--border)' }}
+                style={{ fontWeight: 700, fontSize: '1.1rem', cursor: 'pointer', display: 'inline-block', letterSpacing: '-0.02em' }}
               >
                 {cName}
               </div>
-              <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 1 }}>{pName}</div>
+              <div style={{ fontSize: '0.9rem', color: 'var(--text2)', marginTop: 2, fontWeight: 500 }}>{pName}</div>
             </div>
-            <StatusBadge status={o.status} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
             <div>
-              <div style={{ fontSize: 12, color: 'var(--text3)' }}>
-                {formatDate(o.date || o.createdAt)}
+              <div style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 600 }}>
+                {formatDate(o.date || o.createdAt)} · {formatTime(o.time || o.deliveryTime || '10:00')}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 600, marginTop: 2, color: isPaid ? '#2E7A5A' : 'var(--accent2)' }}>
-                {isPaid ? '✓ Fully Paid' : `${formatCurrency(advNum)} adv · ${formatCurrency(totalNum - advNum)} due`}
+              <div style={{ fontSize: 12, fontWeight: 700, marginTop: 6, color: isPaid ? '#2E7A5A' : 'var(--accent2)', background: isPaid ? 'rgba(46,122,90,0.1)' : 'rgba(212,113,74,0.1)', padding: '2px 8px', borderRadius: 6, display: 'inline-block' }}>
+                {isPaid ? '✓ Fully Paid' : `${formatCurrency(totalNum - advNum)} due`}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ fontWeight: 700, fontSize: 15 }}>{formatCurrency(totalNum)}</div>
+            
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <motion.button 
+                  whileTap={{ scale: 0.9 }}
+                  onClick={(e) => { e.stopPropagation(); onRapido(o); }}
+                  style={{ 
+                    width: 38, height: 38, borderRadius: 12, 
+                    background: 'rgba(245,166,35,0.12)', 
+                    border: '1px solid rgba(245,166,35,0.2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+                    cursor: 'pointer'
+                  }}
+                >
+                  🛵
+                </motion.button>
+                <span style={{ fontSize: 10, color: 'var(--text3)', fontWeight: 600, textAlign: 'center' }}>Rapido</span>
+              </div>
               {!isDelivered && (
-                <motion.button whileTap={{ scale: 0.86 }}
+                <motion.button 
+                  whileTap={{ scale: 0.9 }}
                   onClick={(e) => { e.stopPropagation(); onAdvance(o); }}
-                  style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--accent)', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Check size={16} />
+                  style={{ 
+                    width: 38, height: 38, borderRadius: 12, 
+                    background: 'var(--accent)', color: 'white', border: 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', boxShadow: '0 4px 12px rgba(212,113,74,0.2)'
+                  }}
+                >
+                  <Check size={18} />
                 </motion.button>
               )}
-              <motion.button whileTap={{ scale: 0.86 }}
-                onClick={(e) => { e.stopPropagation(); onRapido(o); }}
-                style={{ width: 36, height: 36, borderRadius: 10, background: '#F9C935', color: '#000', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                🛵
-              </motion.button>
             </div>
           </div>
         </div>
@@ -195,7 +230,26 @@ export default function Orders() {
   const [submitting, setSubmitting] = useState(false);
   const [generatedOrderCard, setGeneratedOrderCard] = useState(null);
   const [selectedCustomerProfile, setSelectedCustomerProfile] = useState(null);
+  const [showSwipeGuide, setShowSwipeGuide] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const { currentUser, isCustomer } = useAuth();
+
+  const filtered = (orders || []).filter(o => {
+    if (!o) return false;
+    const searchLower = search.toLowerCase();
+    const c = o.customer;
+    const customerName = typeof c === 'object' ? (c?.name || '') : String(c || '');
+    const matchesSearch = !search || customerName.toLowerCase().includes(searchLower) || String(o.orderId || o.id || '').toLowerCase().includes(searchLower) || (o.product || '').toLowerCase().includes(searchLower);
+    const matchesFilter = filter === 'all' || String(o.status).toLowerCase() === filter;
+    return matchesSearch && matchesFilter;
+  });
+
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('cc_onboarding_completed');
+    if (!hasSeenOnboarding && !loading && orders.length > 0) {
+      setShowOnboarding(true);
+    }
+  }, [loading, orders.length]);
 
   useEffect(() => {
     const userIdFilter = isCustomer ? currentUser?.uid : null;
@@ -228,15 +282,6 @@ export default function Orders() {
     });
   };
 
-  const filtered = (orders || []).filter(o => {
-    if (!o) return false;
-    const searchLower = search.toLowerCase();
-    const c = o.customer;
-    const customerName = typeof c === 'object' ? (c?.name || '') : String(c || '');
-    const matchesSearch = !search || customerName.toLowerCase().includes(searchLower) || String(o.orderId || o.id || '').toLowerCase().includes(searchLower) || (o.product || '').toLowerCase().includes(searchLower);
-    const matchesFilter = filter === 'all' || String(o.status).toLowerCase() === filter;
-    return matchesSearch && matchesFilter;
-  });
 
   const updateStatus = async (o) => {
     const idx = statusFlow.indexOf(String(o.status).toLowerCase());
@@ -477,14 +522,24 @@ export default function Orders() {
           <h1>Orders</h1>
           <p>Manage all your bakery orders in real-time</p>
         </div>
-        <motion.button
-          whileTap={{ scale: 0.93 }}
-          className="btn btn-primary desktop-only"
-          onClick={() => setShowModal(true)}
-          style={{ flexShrink: 0 }}
-        >
-          <Plus size={18} /> New Order
-        </motion.button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <motion.button
+            whileTap={{ scale: 0.93 }}
+            className="btn btn-outline desktop-only"
+            onClick={() => exportToCSV(orders, 'orders_export')}
+            style={{ flexShrink: 0 }}
+          >
+            <Download size={18} /> Export
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.93 }}
+            className="btn btn-primary desktop-only"
+            onClick={() => setShowModal(true)}
+            style={{ flexShrink: 0 }}
+          >
+            <Plus size={18} /> New Order
+          </motion.button>
+        </div>
       </motion.div>
 
       {/* Search + Filter */}
@@ -581,8 +636,17 @@ export default function Orders() {
         ) : (
           <motion.div variants={listContainer} initial="hidden" animate="show">
             <AnimatePresence>
-              {filtered.map(o => (
-                <MobileOrderCard key={o.id} o={o} allOrders={orders} onAdvance={updateStatus} onWhatsApp={handleWhatsApp} onRapido={handleRapidoBooking} onCustomerClick={openCustomerProfile} onOrderClick={setGeneratedOrderCard} />
+              {filtered.map((o) => (
+                <MobileOrderCard 
+                  key={o.id} 
+                  o={o} 
+                  allOrders={orders} 
+                  onAdvance={updateStatus} 
+                  onWhatsApp={handleWhatsApp} 
+                  onRapido={handleRapidoBooking} 
+                  onCustomerClick={openCustomerProfile} 
+                  onOrderClick={setGeneratedOrderCard} 
+                />
               ))}
             </AnimatePresence>
           </motion.div>

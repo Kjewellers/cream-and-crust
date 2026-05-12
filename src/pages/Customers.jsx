@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Phone, MessageCircle, Star, Users, Clock, RefreshCw } from 'lucide-react';
+import { Search, Phone, MessageCircle, Star, Users, Clock, RefreshCw, Download } from 'lucide-react';
 import { subscribeToCustomers, subscribeToOrders } from '../services/db';
+import { useAuth } from '../context/AuthContext';
 import { formatDate, formatCurrency } from '../utils/date';
+import { exportToCSV } from '../utils/exportUtils';
 import { Skeleton } from '../components/iOS';
 
 export default function Customers() {
@@ -17,7 +19,10 @@ export default function Customers() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const { currentUser } = useAuth();
+
   useEffect(() => {
+    if (!currentUser) return;
     let custLoaded = false;
     let ordersLoaded = false;
     const checkDone = () => { if (custLoaded && ordersLoaded) setLoading(false); };
@@ -26,14 +31,14 @@ export default function Customers() {
       setCustomers(data || []);
       custLoaded = true;
       checkDone();
-    });
+    }, currentUser.uid);
     const unsubOrders = subscribeToOrders((data) => {
       setOrders(data || []);
       ordersLoaded = true;
       checkDone();
-    });
+    }, currentUser.uid);
     return () => { unsubCust(); unsubOrders(); };
-  }, []);
+  }, [currentUser]);
 
   // Build per-customer stats from real orders
   const customerStats = React.useMemo(() => {
@@ -46,10 +51,14 @@ export default function Customers() {
       const phone = o.phone || '';
 
       // Try to find matching customer by name or phone
-      const matchedCust = customers.find(c =>
-        (c.name && cName && c.name.toLowerCase() === cName.toLowerCase()) ||
-        (c.phone && phone && c.phone === phone)
-      );
+      const matchedCust = customers.find(c => {
+        const nameA = String(c.name || '').trim().toLowerCase();
+        const nameB = String(cName || '').trim().toLowerCase();
+        const phoneA = String(c.phone || '').replace(/\D/g, '');
+        const phoneB = String(phone || '').replace(/\D/g, '');
+        
+        return (nameA && nameB && nameA === nameB) || (phoneA && phoneB && phoneA === phoneB);
+      });
       const key = matchedCust?.id || cName;
       if (!key) return;
 
@@ -92,8 +101,13 @@ export default function Customers() {
     const totalOrders = st.totalOrders || c.totalOrders || 0;
     const totalSpent = st.totalSpent || c.totalSpent || 0;
     const lastOrderDate = st.lastOrderDate || c.lastOrder || null;
+    
+    // Pro Features: CRM Tags
     const isVIP = totalOrders >= 3;
-    return { ...c, totalOrders, totalSpent, lastOrderDate, isVIP };
+    const isChurning = lastOrderDate && (new Date() - new Date(lastOrderDate)) > (60 * 24 * 60 * 60 * 1000); // 60 days
+    const isBigSpender = totalSpent > 5000;
+    
+    return { ...c, totalOrders, totalSpent, lastOrderDate, isVIP, isChurning, isBigSpender };
   });
 
   const filtered = enriched.filter(c => {
@@ -104,12 +118,18 @@ export default function Customers() {
   });
 
   const vipCount = enriched.filter(c => c.isVIP).length;
+  const churnCount = enriched.filter(c => c.isChurning).length;
 
   return (
     <div className="fade-in">
-      <div className="page-header">
-        <h1>Customers</h1>
-        <p>Manage your repeat customers and baking leads</p>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <h1>Customers</h1>
+          <p>Manage your repeat customers and baking leads</p>
+        </div>
+        <button className="btn btn-outline" onClick={() => exportToCSV(customers, 'customers_export')} style={{ padding: '10px 20px', borderRadius: 12 }}>
+          <Download size={18} /> Export CSV
+        </button>
       </div>
 
       {/* Stats — 2 cards (removed Birthdays) */}
@@ -129,7 +149,7 @@ export default function Customers() {
           <div className="stat-icon orange"><Users size={18} /></div>
           <div className="stat-label">Total Customers</div>
           <div className="stat-value" style={{ fontSize: isMobile ? '1.3rem' : undefined }}>{customers.length}</div>
-          <div className="stat-change" style={{ color: 'var(--text3)' }}>In database</div>
+          <div className="stat-change" style={{ color: 'var(--text3)' }}>{churnCount} inactive 60d+</div>
         </div>
       </div>
 
@@ -175,15 +195,25 @@ export default function Customers() {
                     {c.phone && <div style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>📞 {c.phone}</div>}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   {c.isVIP && (
                     <span style={{
                       background: '#FEF9EC', color: '#E5A823', border: '1px solid #F0D68E',
-                      fontSize: '0.65rem', fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                      textTransform: 'uppercase'
+                      fontSize: '0.6rem', fontWeight: 700, padding: '2px 6px', borderRadius: 20,
                     }}>⭐ VIP</span>
                   )}
-                  <RefreshCw size={14} color="var(--text3)" />
+                  {c.isBigSpender && (
+                    <span style={{
+                      background: 'rgba(212,113,74,0.1)', color: 'var(--accent)', border: '1px solid var(--accent)',
+                      fontSize: '0.6rem', fontWeight: 700, padding: '2px 6px', borderRadius: 20,
+                    }}>💎 BIG SPENDER</span>
+                  )}
+                  {c.isChurning && (
+                    <span style={{
+                      background: 'rgba(0,0,0,0.05)', color: 'var(--text3)', border: '1px solid var(--border)',
+                      fontSize: '0.6rem', fontWeight: 700, padding: '2px 6px', borderRadius: 20,
+                    }}>💤 INACTIVE</span>
+                  )}
                 </div>
               </div>
 

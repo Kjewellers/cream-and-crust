@@ -163,6 +163,33 @@ export default function Login() {
                 <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
               </div>
               <PrimaryButton label="Continue with Email" onClick={() => setMode('email')} />
+              
+              <div style={{ margin: '20px 0 10px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)', opacity: 0.5 }} />
+                <span style={{ fontSize: '0.7rem', color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase' }}>Testing Only</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)', opacity: 0.5 }} />
+              </div>
+
+              <motion.button
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  triggerHaptic('medium');
+                  setLoading(true);
+                  setTimeout(() => {
+                    setSuccessAnim(true);
+                    triggerHaptic('success');
+                    setTimeout(mockLogin, 1000);
+                  }, 500);
+                }}
+                style={{
+                  width: '100%', padding: '12px', borderRadius: '10px',
+                  background: 'rgba(255, 149, 0, 0.1)', color: '#FF9500', border: '1px solid rgba(255, 149, 0, 0.3)',
+                  fontSize: '14px', fontWeight: 600, cursor: 'pointer'
+                }}
+              >
+                Login as Admin (Dev)
+              </motion.button>
+
               <div style={{ marginTop: 24 }}>
                 <button onClick={() => setMode('register')} style={{ color: 'var(--text3)', fontWeight: 500, fontSize: '0.9rem' }}>
                   Don't have an account? <span style={{ color: 'var(--accent)', fontWeight: 600 }}>Create one</span>

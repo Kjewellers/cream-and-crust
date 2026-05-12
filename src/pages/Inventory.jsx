@@ -1,267 +1,397 @@
-import React, { useState, useEffect } from 'react';
-import { Package, AlertTriangle, ArrowDown, X, Plus, Lock } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Package, AlertTriangle, ArrowDown, X, Plus, Lock, 
+  ShoppingCart, Loader2, Search, Filter, ChevronRight, 
+  Tag, Info, RefreshCcw, MoreVertical, Trash2
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToInventory, addInventoryToDB, updateInventoryStockInDB } from '../services/db';
-import { Skeleton } from '../components/iOS';
+import { subscribeToInventory, addInventoryToDB, updateInventoryStockInDB, addShoppingItemToDB, deleteInventoryFromDB, addExpenseToDB } from '../services/db';
+import { useAuth } from '../context/AuthContext';
+import { Skeleton, showToast, triggerHaptic, EmptyState, PressButton } from '../components/iOS';
+import { IndianRupee, Store, Calendar as CalendarIcon } from 'lucide-react';
+
+const UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'boxes', 'packets'];
+const CATS = ['Ingredients', 'Packaging', 'Decor', 'Supplies', 'Other'];
 
 export default function Inventory() {
+  const { currentUser } = useAuth();
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('All'); // All, Low, Healthy
   
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [addingToShop, setAddingToShop] = useState(null);
 
   // Forms
-  const [addForm, setAddForm] = useState({ item: '', stock: '', min: '', unit: 'kg' });
-  const [restockAmount, setRestockAmount] = useState('');
+  const [addForm, setAddForm] = useState({ item: '', stock: '', minStock: '', unit: 'kg', category: 'Ingredients', cost: '', vendor: '' });
+  const [restockForm, setRestockForm] = useState({ amount: '', cost: '', vendor: '', date: new Date().toISOString().split('T')[0] });
 
   useEffect(() => {
+    if (!currentUser) return;
     const unsubscribe = subscribeToInventory((items) => {
       setInventory(items);
       setLoading(false);
-    }, (error) => {
-      console.error("Inventory fetch error:", error);
-      setLoading(false);
-    });
+    }, null, currentUser.uid);
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
+
+  const filteredItems = useMemo(() => {
+    let list = inventory.filter(i => i.item.toLowerCase().includes(search.toLowerCase()));
+    if (filter === 'Low') return list.filter(i => Number(i.stock) <= Number(i.minStock || 0));
+    if (filter === 'Healthy') return list.filter(i => Number(i.stock) > Number(i.minStock || 0));
+    return list;
+  }, [inventory, search, filter]);
+
+  const lowStockCount = inventory.filter(i => Number(i.stock) <= Number(i.minStock || 0)).length;
 
   const handleAddItem = async (e) => {
     e.preventDefault();
-    setShowAddModal(false);
-    
-    const newItem = {
-      item: addForm.item,
-      stock: Number(addForm.stock),
-      min: Number(addForm.min),
-      unit: addForm.unit
-    };
-    setAddForm({ item: '', stock: '', min: '', unit: 'kg' });
-    
+    triggerHaptic('medium');
     try {
-      await addInventoryToDB(newItem);
-    } catch (error) {
-      console.error("Failed to add inventory item", error);
+      const invId = await addInventoryToDB({
+        item: addForm.item,
+        stock: Number(addForm.stock),
+        minStock: Number(addForm.minStock),
+        unit: addForm.unit,
+        category: addForm.category,
+        userId: currentUser.uid,
+        createdAt: new Date().toISOString()
+      });
+
+      // Optional Expense
+      if (addForm.cost && Number(addForm.cost) > 0) {
+        await addExpenseToDB({
+          description: `Initial Stock: ${addForm.item}`,
+          amount: Number(addForm.cost),
+          category: addForm.category === 'Packaging' ? 'Packaging' : 'Ingredients',
+          vendor: addForm.vendor,
+          date: new Date().toISOString().split('T')[0],
+          userId: currentUser.uid
+        });
+      }
+
+      showToast('Item & Expense added!', 'success');
+      setShowAddModal(false);
+      setAddForm({ item: '', stock: '', minStock: '', unit: 'kg', category: 'Ingredients', cost: '', vendor: '' });
+    } catch {
+      showToast('Failed to add', 'error');
     }
   };
 
   const handleRestock = async (e) => {
     e.preventDefault();
     if (!selectedItem) return;
-    const newStock = Number(selectedItem.stock) + Number(restockAmount);
-    
-    setShowRestockModal(false);
+    triggerHaptic('medium');
     try {
-      await updateInventoryStockInDB(selectedItem.id, newStock);
-      setRestockAmount('');
+      await updateInventoryStockInDB(selectedItem.id, Number(selectedItem.stock) + Number(restockForm.amount));
+      
+      // Automatic Expense Recording
+      if (restockForm.cost && Number(restockForm.cost) > 0) {
+        await addExpenseToDB({
+          description: `Restock: ${selectedItem.item} (${restockForm.amount}${selectedItem.unit})`,
+          amount: Number(restockForm.cost),
+          category: selectedItem.category === 'Packaging' ? 'Packaging' : 'Ingredients',
+          vendor: restockForm.vendor,
+          date: restockForm.date,
+          userId: currentUser.uid
+        });
+        showToast('Restocked & Expense Recorded! 💸', 'success');
+      } else {
+        showToast('Restocked!', 'success');
+      }
+
+      setShowRestockModal(false);
+      setRestockForm({ amount: '', cost: '', vendor: '', date: new Date().toISOString().split('T')[0] });
       setSelectedItem(null);
-    } catch (error) {
-      console.error("Failed to restock item", error);
+    } catch {
+      showToast('Failed to update', 'error');
     }
   };
 
-  const lowStockItems = inventory.filter(inv => inv.stock <= inv.min);
+  const handleAddToShoppingList = async (inv) => {
+    setAddingToShop(inv.id);
+    triggerHaptic('light');
+    try {
+      const needed = Number(inv.minStock || 0) * 2 - Number(inv.stock);
+      await addShoppingItemToDB({
+        name: inv.item,
+        qty: needed > 0 ? needed.toString() : '5',
+        unit: inv.unit,
+        category: inv.category || 'Ingredients',
+        userId: currentUser.uid
+      });
+      showToast('Added to Shopping List!', 'success');
+    } catch {
+      showToast('Failed to add', 'error');
+    } finally {
+      setAddingToShop(null);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this item from inventory?')) return;
+    try {
+      await deleteInventoryFromDB(id);
+      showToast('Deleted', 'info');
+    } catch {
+      showToast('Failed to delete', 'error');
+    }
+  };
 
   return (
-    <motion.div className="fade-in" initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ position: 'relative' }}>
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-        <div><h1>Inventory Management</h1><p>Track raw materials and packaging</p></div>
-        <button className="btn btn-primary" onClick={() => setShowAddModal(true)}><Package size={18} /> Add New Item</button>
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fade-in">
+      {/* Header Section */}
+      <div className="page-header" style={{ marginBottom: 32 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+          <div>
+            <h1 style={{ fontSize: '2.4rem', fontWeight: 800, letterSpacing: '-0.04em' }}>Inventory</h1>
+            <p style={{ color: 'var(--text2)', fontSize: '1rem' }}>Track your raw materials & stock health</p>
+          </div>
+          <button className="btn btn-primary" onClick={() => setShowAddModal(true)} style={{ borderRadius: 14, padding: '12px 24px' }}>
+            <Plus size={20} /> Add Item
+          </button>
+        </div>
       </div>
 
+      {/* Controls & Stats */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '4px 0' }} className="no-scrollbar">
+          {['All', 'Low', 'Healthy'].map(t => (
+            <PressButton 
+              key={t} 
+              onClick={() => setFilter(t)} 
+              className={filter === t ? 'badge confirmed' : 'badge'} 
+              style={{ padding: '8px 16px', fontSize: '0.85rem', cursor: 'pointer', border: 'none', background: filter === t ? 'var(--accent)' : 'var(--bg2)', color: filter === t ? 'white' : 'var(--text3)' }}
+            >
+              {t} {t === 'Low' && lowStockCount > 0 && `(${lowStockCount})`}
+            </PressButton>
+          ))}
+        </div>
 
+        <div style={{ position: 'relative' }}>
+          <Search size={18} style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
+          <input 
+            placeholder="Search items..." 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+            style={{ width: '100%', height: 50, paddingLeft: 48, borderRadius: 16, background: 'var(--card)', border: '1px solid var(--border)', fontSize: '1rem' }} 
+          />
+        </div>
+      </div>
 
       {loading ? (
-        <div style={{ padding: 20 }}>
-          <div className="stats-grid" style={{ marginBottom: 24 }}>
-            {[...Array(2)].map((_, i) => <Skeleton key={i} height={120} radius={12} />)}
-          </div>
-          <Skeleton height={400} radius={16} />
+        <div className="content-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
+          {[...Array(6)].map((_, i) => <Skeleton key={i} height={180} radius={24} />)}
         </div>
+      ) : filteredItems.length === 0 ? (
+        <EmptyState icon="📦" title="No items found" subtitle="Try a different search or add a new item." />
       ) : (
-        <>
-          <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
-            <div className="stat-card pink">
-              <div className="stat-icon pink"><AlertTriangle size={20} /></div>
-              <div className="stat-label">Low Stock Alerts</div>
-              <div className="stat-value">{lowStockItems.length} items</div>
-            </div>
-            <div className="stat-card green">
-              <div className="stat-icon green"><Package size={20} /></div>
-              <div className="stat-label">Total Items Tracked</div>
-              <div className="stat-value">{inventory.length}</div>
-            </div>
-          </div>
-
-          <div className="card table-card">
-            <div className="table-header">
-              <h3>Raw Materials & Supplies</h3>
-            </div>
-            {isMobile ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '0 4px 4px' }}>
-                {inventory.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '30px', color: 'var(--text3)' }}>No inventory items found.</div>
-                ) : inventory.map((inv) => {
-                  const isLow = inv.stock <= inv.min;
-                  return (
-                    <div key={inv.id} style={{
-                      background: 'var(--bg)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 12,
-                      padding: '14px 16px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 8
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 700, fontSize: '1.05rem' }}>{inv.item}</span>
-                        {isLow ? 
-                          <span className="badge baking" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px' }}><AlertTriangle size={12}/> Low Stock</span> : 
-                          <span className="badge ready" style={{ padding: '2px 8px' }}>In Stock</span>
-                        }
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
-                        <div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>Current Stock</div>
-                          <div style={{ fontWeight: isLow ? 700 : 600, color: isLow ? 'var(--accent2)' : 'var(--text)', fontSize: '1rem' }}>
-                            {inv.stock} {inv.unit}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '0.75rem', color: 'var(--text3)' }}>Min. Threshold</div>
-                          <div style={{ fontWeight: 600, color: 'var(--text2)', fontSize: '0.9rem' }}>{inv.min} {inv.unit}</div>
-                        </div>
-                      </div>
-                      <button 
-                        className="btn btn-outline btn-sm" 
-                        style={{ marginTop: 8, width: '100%', justifyContent: 'center' }}
-                        onClick={() => { setSelectedItem(inv); setShowRestockModal(true); }}
-                      >
-                        Restock
-                      </button>
+        <div className="content-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
+          <AnimatePresence mode="popLayout">
+            {filteredItems.map(item => {
+              const isLow = Number(item.stock) <= Number(item.minStock || 0);
+              const health = Math.min(100, Math.max(0, (Number(item.stock) / (Number(item.minStock || 1) * 2)) * 100));
+              
+              return (
+                <motion.div 
+                  layout key={item.id} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                  className="card" style={{ padding: 24, borderRadius: 24, border: isLow ? '1.5px solid #FF3B30' : '1px solid var(--border)', position: 'relative' }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                    <div style={{ width: 48, height: 48, borderRadius: 14, background: isLow ? '#FFF5F5' : '#F0FDF4', color: isLow ? '#FF3B30' : '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Package size={24} />
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="table-responsive">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th>Current Stock</th>
-                      <th>Min. Threshold</th>
-                      <th>Status</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {inventory.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" style={{ textAlign: 'center', padding: '30px', color: 'var(--text3)' }}>No inventory items found.</td>
-                      </tr>
-                    ) : inventory.map((inv) => {
-                      const isLow = inv.stock <= inv.min;
-                      return (
-                        <tr key={inv.id}>
-                          <td style={{ fontWeight: 600 }}>{inv.item}</td>
-                          <td style={{ color: isLow ? 'var(--accent2)' : 'inherit', fontWeight: isLow ? 700 : 500 }}>
-                            {inv.stock} {inv.unit}
-                          </td>
-                          <td style={{ color: 'var(--text3)' }}>{inv.min} {inv.unit}</td>
-                          <td>
-                            {isLow ? 
-                              <span className="badge baking" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><AlertTriangle size={12}/> Low Stock</span> : 
-                              <span className="badge ready">In Stock</span>
-                            }
-                          </td>
-                          <td>
-                            <button 
-                              className="btn btn-outline btn-sm" 
-                              onClick={() => { setSelectedItem(inv); setShowRestockModal(true); }}
-                            >
-                              Restock
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <PressButton onClick={() => handleDelete(item.id)} style={{ padding: 6, color: 'var(--text3)', background: 'none', border: 'none' }}>
+                        <Trash2 size={16} />
+                      </PressButton>
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontWeight: 800, fontSize: '1.15rem', color: 'var(--text)', marginBottom: 4 }}>{item.item}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="badge" style={{ fontSize: 10, background: 'var(--bg2)', color: 'var(--text3)' }}>{item.category || 'Ingredients'}</span>
+                      {isLow && <span className="badge baking" style={{ fontSize: 10 }}>LOW STOCK</span>}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 8 }}>
+                      <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>{item.stock} <span style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>{item.unit}</span></span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text3)', fontWeight: 600 }}>Min: {item.minStock} {item.unit}</span>
+                    </div>
+                    <div style={{ width: '100%', height: 6, background: 'var(--bg2)', borderRadius: 3, overflow: 'hidden' }}>
+                      <motion.div 
+                        initial={{ width: 0 }} animate={{ width: `${health}%` }}
+                        style={{ height: '100%', background: isLow ? '#FF3B30' : '#22C55E', borderRadius: 3 }} 
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <PressButton 
+                      onClick={() => { setSelectedItem(item); setShowRestockModal(true); }}
+                      style={{ flex: 1, height: 44, borderRadius: 12, background: 'var(--accent)', color: 'white', fontWeight: 700, fontSize: '0.9rem', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+                    >
+                      <RefreshCcw size={16} /> Restock
+                    </PressButton>
+                    {isLow && (
+                      <PressButton 
+                        onClick={() => handleAddToShoppingList(item)}
+                        disabled={addingToShop === item.id}
+                        style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(212,113,74,0.1)', color: 'var(--accent)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                        {addingToShop === item.id ? <Loader2 size={18} className="animate-spin" /> : <ShoppingCart size={18} />}
+                      </PressButton>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
       )}
 
-      {/* Add Item Modal */}
+      {/* Add Modal */}
       <AnimatePresence>
         {showAddModal && (
           <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="modal" onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h2>Add Inventory Item</h2>
-                <button className="btn-icon" onClick={() => setShowAddModal(false)}><X size={18} /></button>
-              </div>
+            <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480, padding: 32, borderRadius: 24 }}>
+              <h2 style={{ fontWeight: 800, marginBottom: 8, fontSize: '1.6rem' }}>New Inventory Item</h2>
+              <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginBottom: 24 }}>Define stock levels and initial cost</p>
+              
               <form onSubmit={handleAddItem}>
-                <div className="form-group full">
-                  <label className="form-label">Item Name</label>
-                  <input required value={addForm.item} onChange={e => setAddForm({...addForm, item: e.target.value})} placeholder="e.g. All Purpose Flour" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div className="form-group full">
+                    <label className="form-label">Item Name</label>
+                    <input required autoFocus placeholder="e.g. Belgian Chocolate" value={addForm.item} onChange={e => setAddForm({...addForm, item: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Current Stock</label>
+                      <input type="number" step="0.01" required value={addForm.stock} onChange={e => setAddForm({...addForm, stock: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Min Alert</label>
+                      <input type="number" step="0.01" required value={addForm.minStock} onChange={e => setAddForm({...addForm, minStock: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Category</label>
+                      <select value={addForm.category} onChange={e => setAddForm({...addForm, category: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}>
+                        {CATS.map(c => <option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Unit</label>
+                      <select value={addForm.unit} onChange={e => setAddForm({...addForm, unit: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}>
+                        {UNITS.map(u => <option key={u}>{u}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', marginBottom: 4 }}>
+                    <IndianRupee size={14} />
+                    <span style={{ fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>Financial Tracking (Optional)</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Initial Cost (₹)</label>
+                      <input type="number" placeholder="0" value={addForm.cost} onChange={e => setAddForm({...addForm, cost: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Vendor</label>
+                      <input placeholder="e.g. Amazon" value={addForm.vendor} onChange={e => setAddForm({...addForm, vendor: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
+                    </div>
+                  </div>
                 </div>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label className="form-label">Initial Stock</label>
-                    <input type="number" step="0.01" required value={addForm.stock} onChange={e => setAddForm({...addForm, stock: e.target.value})} placeholder="0" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Min Threshold</label>
-                    <input type="number" step="0.01" required value={addForm.min} onChange={e => setAddForm({...addForm, min: e.target.value})} placeholder="0" />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Unit</label>
-                    <select required value={addForm.unit} onChange={e => setAddForm({...addForm, unit: e.target.value})} className="form-input">
-                      <option value="kg">kg</option>
-                      <option value="g">g</option>
-                      <option value="L">L</option>
-                      <option value="ml">ml</option>
-                      <option value="pcs">pcs</option>
-                      <option value="boxes">boxes</option>
-                    </select>
-                  </div>
-                </div>
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}>Add Item</button>
+                
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', height: 54, borderRadius: 16, marginTop: 24, fontSize: '1rem', fontWeight: 800 }}>Create Item & Record Cost</button>
               </form>
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
 
-        {/* Restock Modal */}
+      {/* Restock Modal */}
+      <AnimatePresence>
         {showRestockModal && selectedItem && (
           <div className="modal-overlay" onClick={() => setShowRestockModal(false)}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="modal" onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                <h2>Restock {selectedItem.item}</h2>
-                <button className="btn-icon" onClick={() => setShowRestockModal(false)}><X size={18} /></button>
-              </div>
-              <div style={{ marginBottom: 20, padding: 12, background: 'var(--bg)', borderRadius: 'var(--radius-sm)' }}>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text3)' }}>Current Stock</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{selectedItem.stock} {selectedItem.unit}</div>
-              </div>
-              <form onSubmit={handleRestock}>
-                <div className="form-group full">
-                  <label className="form-label">Add Amount ({selectedItem.unit})</label>
-                  <input type="number" step="0.01" required value={restockAmount} onChange={e => setRestockAmount(e.target.value)} placeholder={`e.g. 5`} autoFocus />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440, padding: 0, borderRadius: 28, overflow: 'hidden' }}>
+              <div style={{ padding: '32px 32px 24px', background: 'linear-gradient(135deg, var(--bg2), var(--cream))', borderBottom: '1px solid var(--border)', textAlign: 'center' }}>
+                <div style={{ width: 64, height: 64, borderRadius: '20px', background: 'var(--accent)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', boxShadow: 'var(--shadow-accent)' }}>
+                  <RefreshCcw size={32} />
                 </div>
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: 12 }}>Update Stock</button>
+                <h2 style={{ fontWeight: 900, marginBottom: 4, fontSize: '1.6rem', letterSpacing: '-0.03em' }}>Restock {selectedItem.item}</h2>
+                <p style={{ color: 'var(--text3)', fontSize: '0.9rem' }}>Current balance: {selectedItem.stock} {selectedItem.unit}</p>
+              </div>
+              
+              <form onSubmit={handleRestock} style={{ padding: 32 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <div className="form-group">
+                    <label className="form-label">Quantity to Add ({selectedItem.unit})</label>
+                    <div style={{ position: 'relative' }}>
+                      <Package size={18} style={{ position: 'absolute', left: 16, top: 16, color: 'var(--text3)' }} />
+                      <input 
+                        type="number" step="0.01" required autoFocus 
+                        placeholder="0.00"
+                        value={restockForm.amount} 
+                        onChange={e => setRestockForm({...restockForm, amount: e.target.value})}
+                        style={{ height: 50, paddingLeft: 48, borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: '1.1rem', fontWeight: 700 }} 
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Total Cost (₹)</label>
+                      <div style={{ position: 'relative' }}>
+                        <IndianRupee size={16} style={{ position: 'absolute', left: 14, top: 14, color: 'var(--text3)' }} />
+                        <input 
+                          type="number" 
+                          placeholder="0.00"
+                          value={restockForm.cost} 
+                          onChange={e => setRestockForm({...restockForm, cost: e.target.value})}
+                          style={{ height: 46, paddingLeft: 36, borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontWeight: 700 }} 
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Date</label>
+                      <input 
+                        type="date" 
+                        value={restockForm.date} 
+                        onChange={e => setRestockForm({...restockForm, date: e.target.value})}
+                        style={{ height: 46, borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 12 }} 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Vendor (Optional)</label>
+                    <div style={{ position: 'relative' }}>
+                      <Store size={16} style={{ position: 'absolute', left: 14, top: 14, color: 'var(--text3)' }} />
+                      <input 
+                        placeholder="Where did you buy this?"
+                        value={restockForm.vendor} 
+                        onChange={e => setRestockForm({...restockForm, vendor: e.target.value})}
+                        style={{ height: 46, paddingLeft: 36, borderRadius: 12, background: 'var(--bg)', border: '1px solid var(--border)', fontSize: 13 }} 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', height: 56, borderRadius: 16, marginTop: 24, fontSize: '1rem', fontWeight: 800, boxShadow: 'var(--shadow-accent)' }}>Update Stock & Record Expense</button>
               </form>
             </motion.div>
           </div>
@@ -270,3 +400,4 @@ export default function Inventory() {
     </motion.div>
   );
 }
+

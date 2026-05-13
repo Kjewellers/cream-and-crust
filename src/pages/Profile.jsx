@@ -285,6 +285,50 @@ export default function Profile() {
           {isBakerOrAdmin ? 'The ultimate tool for home bakers in India.' : 'Manage your delicious orders.'}
         </p>
       </div>
+
+      {/* Public Links for Bakers */}
+      {isBakerOrAdmin && business?.username && (
+        <div className="card">
+          <h3 style={{ marginBottom: 16 }}>📤 Your Public Links</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ background: 'var(--bg)', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Portfolio Catalog</div>
+                <div style={{ fontSize: 13, color: 'var(--text2)', fontFamily: 'monospace' }}>/portfolio/{business.username}</div>
+              </div>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/portfolio/${business.username}`);
+                  showToast('Portfolio link copied!', 'success');
+                }}
+              >Copy</button>
+            </div>
+            <div style={{ background: 'var(--bg)', borderRadius: 12, padding: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>Order Form</div>
+                <div style={{ fontSize: 13, color: 'var(--text2)', fontFamily: 'monospace' }}>/order/{business.username}</div>
+              </div>
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/order/${business.username}`);
+                  showToast('Order form link copied!', 'success');
+                }}
+              >Copy</button>
+            </div>
+            <a
+              href={`/portfolio/${business.username}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-outline"
+              style={{ textAlign: 'center', textDecoration: 'none', justifyContent: 'center' }}
+            >
+              👁️ Preview Your Store
+            </a>
+          </div>
+        </div>
+      )}
     </div>
   );
 

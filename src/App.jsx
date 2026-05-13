@@ -130,7 +130,7 @@ function Sidebar({ open, onClose, theme, toggleTheme }) {
   );
 }
 
-function MobileHeader({ onMenuClick }) {
+function MobileHeader({ onMenuClick, theme, toggleTheme }) {
   return (
     <div className="mobile-header">
       <div className="mobile-header-inner">
@@ -153,7 +153,12 @@ function MobileHeader({ onMenuClick }) {
           <img src="/logo.png" alt="Logo" style={{ height: '24px', objectFit: 'contain', borderRadius: '4px' }} onError={(e) => e.target.style.display='none'} />
           Cream & Crust
         </span>
-        <div style={{ width: 38 }} /> {/* Spacer to balance absolute centering */}
+        <button
+          onClick={toggleTheme}
+          style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--cream)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text2)', flexShrink: 0 }}
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
       </div>
     </div>
   );
@@ -371,7 +376,7 @@ function MainLayout() {
       ) : currentUser ? (
         <motion.div key="app" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }} className="app">
           <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} theme={theme} toggleTheme={toggleTheme} />
-          <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+          <MobileHeader onMenuClick={() => setSidebarOpen(true)} theme={theme} toggleTheme={toggleTheme} />
           <main className="main">
             <AnimatedRoutes />
           </main>

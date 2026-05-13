@@ -6,7 +6,7 @@ import {
   ArrowRight, Plus, MapPin, CheckCircle2, AlertCircle, Zap, Receipt, ShoppingCart
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToOrders, subscribeToCustomers, subscribeToExpenses, subscribeToInventory, subscribeToShoppingList, updateOrderStatusInDB } from '../services/db';
+import { subscribeToOrders, subscribeToCustomers, subscribeToExpenses, subscribeToInventory, subscribeToShoppingList, updateOrderStatusInDB, subscribeToBusiness } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatTime, formatCurrency, formatOrderNumber } from '../utils/date';
 import { calculatePendingPayments } from '../utils/finance';
@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [expenses, setExpenses] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [shoppingItems, setShoppingItems] = useState([]);
+  const [business, setBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState({ orders: [], customers: [] });
@@ -59,6 +60,10 @@ export default function Dashboard() {
     const shoppingUnsub = subscribeToShoppingList((items) => {
       setShoppingItems(items || []);
     }, null, currentUser.uid);
+
+    const bizUnsub = subscribeToBusiness((biz) => {
+      setBusiness(biz);
+    });
     
     return () => {
       ordersUnsub();
@@ -66,6 +71,7 @@ export default function Dashboard() {
       expensesUnsub();
       inventoryUnsub();
       shoppingUnsub();
+      bizUnsub();
     };
   }, [currentUser]);
 
@@ -308,6 +314,57 @@ export default function Dashboard() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+          {/* Share Your Links Card */}
+          {business?.username && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{
+                padding: '20px 24px', borderRadius: 20,
+                background: 'linear-gradient(135deg, var(--cream), #FFF9F5)',
+                border: '1px solid rgba(212,113,74,0.15)',
+                display: 'flex', alignItems: 'center', gap: 16
+              }}
+            >
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>📤 Share Your Links</div>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-sm btn-outline"
+                    style={{ fontSize: 12, gap: 6 }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/portfolio/${business.username}`);
+                      triggerHaptic('light');
+                      showToast('Portfolio link copied! 🔗', 'success');
+                    }}
+                  >
+                    🖼️ Portfolio
+                  </button>
+                  <button
+                    className="btn btn-sm btn-outline"
+                    style={{ fontSize: 12, gap: 6 }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/order/${business.username}`);
+                      triggerHaptic('light');
+                      showToast('Order form link copied! 🔗', 'success');
+                    }}
+                  >
+                    📋 Order Form
+                  </button>
+                  <a
+                    href={`/portfolio/${business.username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="btn btn-sm btn-primary"
+                    style={{ fontSize: 12, gap: 6, textDecoration: 'none' }}
+                  >
+                    👁️ Preview
+                  </a>
+                </div>
+              </div>
+            </motion.div>
+          )}
           </div>
 
           {/* Stats Bar */}

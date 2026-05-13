@@ -351,7 +351,21 @@ export default function Orders() {
       const next = statusFlow[idx + 1];
       await updateOrderStatusInDB(o.id, next);
       triggerHaptic('medium');
-      showToast(`Order ${o.orderId || '#'} → ${next.charAt(0).toUpperCase() + next.slice(1)}`, 'success');
+      showToast(`Order → ${next.charAt(0).toUpperCase() + next.slice(1)}`, 'success');
+
+      // Auto-prompt WhatsApp when confirmed
+      if (next === 'confirmed') {
+        const phone = typeof o.customer === 'object' ? o.customer?.phone : o.phone;
+        if (phone) {
+          const cName = typeof o.customer === 'object' ? (o.customer?.name || 'Customer') : (o.customerName || o.customer || 'Customer');
+          const msg = encodeURIComponent(`Hi ${cName}! 🎂 Your order has been confirmed with Cream & Crust. We'll start baking and keep you updated!`);
+          // Show action toast with WhatsApp link
+          setTimeout(() => {
+            const confirmed = window.confirm(`Order confirmed! Send WhatsApp to ${cName}?`);
+            if (confirmed) window.open(`https://wa.me/91${phone.replace(/\D/g,'')}?text=${msg}`, '_blank');
+          }, 500);
+        }
+      }
     }
   };
 

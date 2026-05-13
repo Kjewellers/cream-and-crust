@@ -23,6 +23,7 @@ export default function Products() {
   const [form, setForm] = useState({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef();
 
@@ -53,6 +54,35 @@ export default function Products() {
     return matchesSearch && matchesCategory;
   });
 
+  const compressImage = (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          } else {
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.7);
+        };
+      };
+    });
+  };
+
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -68,17 +98,17 @@ export default function Products() {
     try {
       let imageUrl = editingId ? products.find(p => p.id === editingId)?.imageUrl : null;
 
-      // Upload to Firebase Storage instead of the broken API endpoint
       if (imageFile) {
         try {
+          const compressedBlob = await compressImage(imageFile);
           const uid = currentUser?.uid || 'anonymous';
-          const fileName = `products/${uid}/${Date.now()}_${imageFile.name}`;
+          const fileName = `products/${uid}/${Date.now()}_prod.jpg`;
           const storageRef = ref(storage, fileName);
-          await uploadBytes(storageRef, imageFile);
+          await uploadBytes(storageRef, compressedBlob);
           imageUrl = await getDownloadURL(storageRef);
         } catch (error) {
           console.error("Storage error:", error);
-          showToast('Storage error, saving without photo.', 'error');
+          showToast('Failed to upload photo. Saving text only.', 'error');
         }
       }
 
@@ -149,6 +179,7 @@ export default function Products() {
   const closeModal = () => {
     setShowModal(false);
     setEditingId(null);
+    setShowAdvanced(false);
     setForm({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false });
     setImageFile(null);
     setImagePreview(null);
@@ -157,14 +188,14 @@ export default function Products() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fade-in">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-        <div><h1>Product Catalog</h1><p>Manage your bakery menu and categories in real-time</p></div>
+        <div><h1>Product Catalog</h1><p>Visual showcase of your bakery menu</p></div>
         <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={18} /> Add Product</button>
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' }}>
         <div style={{ flex: 1, position: 'relative' }}>
           <Search size={18} style={{ position: 'absolute', left: 14, top: 13, color: 'var(--text3)' }} />
-          <input placeholder="Search products..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%', paddingLeft: 40 }} />
+          <input placeholder="Search catalog..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%', paddingLeft: 40 }} />
         </div>
       </div>
 
@@ -209,7 +240,7 @@ export default function Products() {
           <AnimatePresence>
             {filtered.map(p => (
               <motion.div key={p.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} layout className="product-card">
-                <div className="product-img" style={{ backgroundImage: p.imageUrl ? `url(${p.imageUrl})` : 'none', backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundColor: 'var(--bg)', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem' }}>
+                <div className="product-img" style={{ backgroundImage: p.imageUrl ? `url(${p.imageUrl})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: 'var(--bg)', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem' }}>
                   {!p.imageUrl && p.emoji}
                   {p.bestseller && <span className="product-bestseller" style={{ top: 12, left: 12 }}>Bestseller</span>}
                 </div>
@@ -221,8 +252,7 @@ export default function Products() {
                       <button className="btn-icon" style={{ width: 32, height: 32, color: 'var(--accent2)' }} onClick={() => handleDelete(p.id)}><Trash2 size={14} /></button>
                     </div>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text3)', marginBottom: 8 }}>{p.category} · Prep: {p.prepTime}</div>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--text2)', marginBottom: 16, height: 32, overflow: 'hidden' }}>{p.flavors}</p>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text3)', marginBottom: 12 }}>{p.category}</div>
                   
                   <div className="product-footer" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
                     <div>
@@ -235,7 +265,7 @@ export default function Products() {
                           {Math.round(((p.basePrice - p.costPrice) / p.basePrice) * 100)}% Margin
                         </div>
                       )}
-                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', background: 'rgba(212,113,74,0.1)', padding: '4px 10px', borderRadius: 8 }}>{p.variants}</div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', background: 'rgba(212,113,74,0.1)', padding: '4px 10px', borderRadius: 8 }}>{p.variants || 'Standard'}</div>
                     </div>
                   </div>
                 </div>
@@ -255,12 +285,12 @@ export default function Products() {
             <form onSubmit={handleSaveProduct}>
               <div className="form-grid">
                 <div className="form-group full">
-                  <label className="form-label">Product Photo</label>
+                  <label className="form-label">Catalog Photo</label>
                   <div 
                     onClick={() => fileInputRef.current.click()}
                     style={{ 
                       width: '100%', 
-                      height: 160, 
+                      height: 180, 
                       borderRadius: 12, 
                       background: 'var(--bg)', 
                       border: '2px dashed var(--border)', 
@@ -279,35 +309,19 @@ export default function Products() {
                         <span style={{ fontSize: '0.8rem', color: 'var(--text3)', marginTop: 8 }}>Uploading...</span>
                       </div>
                     ) : imagePreview ? (
-                      <img src={imagePreview} style={{ width: '100%', height: '100%', objectFit: 'contain', background: 'var(--bg)' }} />
+                      <img src={imagePreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <>
                         <Camera size={32} color="var(--text3)" />
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text3)', marginTop: 8 }}>Tap to upload</span>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text3)', marginTop: 8 }}>Tap to upload product photo</span>
                       </>
                     )}
                   </div>
-                  <input ref={fileInputRef} type="file" accept="image/*,.heic,.heif,.jpg,.jpeg,.png,.webp,.gif" onChange={handleImageChange} style={{ display: 'none' }} />
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
                 </div>
 
                 <div className="form-group full"><label className="form-label">Product Name</label><input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Dreamy Vanilla Cake" /></div>
                 
-                <div className="form-group full">
-                  <label className="form-label">Linked Recipe (Auto-calculates Cost)</label>
-                  <select 
-                    value={form.recipeId} 
-                    onChange={e => {
-                      const recipeId = e.target.value;
-                      const recipe = recipes.find(r => r.id === recipeId);
-                      const cost = recipe ? (recipe.ingredients?.reduce((s, i) => s + Number(i.cost || 0), 0) + Number(recipe.packagingCost || 0) + Number(recipe.laborCost || 0)) : form.costPrice;
-                      setForm({...form, recipeId, costPrice: cost});
-                    }}
-                  >
-                    <option value="">No Recipe Linked</option>
-                    {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                  </select>
-                </div>
-
                 <div className="form-group">
                   <label className="form-label">Category</label>
                   <select value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
@@ -316,24 +330,57 @@ export default function Products() {
                   </select>
                 </div>
 
-                <div className="form-group"><label className="form-label">Base Price (₹)</label><input type="number" required value={form.basePrice} onChange={e => setForm({...form, basePrice: e.target.value})} placeholder="0" /></div>
+                <div className="form-group"><label className="form-label">Price (₹)</label><input type="number" required value={form.basePrice} onChange={e => setForm({...form, basePrice: e.target.value})} placeholder="0" /></div>
                 
-                <div className="form-group"><label className="form-label">Cost Price (₹)</label><input type="number" value={form.costPrice} onChange={e => setForm({...form, costPrice: e.target.value})} placeholder="e.g. 250" /></div>
-                
-                <div className="form-group"><label className="form-label">Weight/Variants</label><input placeholder="0.5kg, 1kg" value={form.variants} onChange={e => setForm({...form, variants: e.target.value})} /></div>
-                
-                <div className="form-group"><label className="form-label">Prep Time</label><input placeholder="e.g. 24h" value={form.prepTime} onChange={e => setForm({...form, prepTime: e.target.value})} /></div>
-                
-                <div className="form-group full"><label className="form-label">Available Flavors</label><input placeholder="Chocolate, Red Velvet, Vanilla..." value={form.flavors} onChange={e => setForm({...form, flavors: e.target.value})} /></div>
-                
-                <div className="form-group"><label className="form-label">Emoji Icon (Fallback)</label><input placeholder="🎂" value={form.emoji} onChange={e => setForm({...form, emoji: e.target.value})} /></div>
-
-                <div className="form-group" style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 28 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-                    <input type="checkbox" style={{ width: 20, height: 20 }} checked={form.bestseller} onChange={e => setForm({...form, bestseller: e.target.checked})} />
-                    Bestseller Product
-                  </label>
+                {/* Advanced Options Toggle */}
+                <div className="form-group full" style={{ marginTop: 10 }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-sm btn-outline" 
+                    style={{ width: '100%', borderStyle: 'dashed', justifyContent: 'space-between' }}
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                  >
+                    {showAdvanced ? 'Hide Advanced Details' : 'Show Advanced Details (Recipe, Costs, etc.)'}
+                    <Plus size={14} style={{ transform: showAdvanced ? 'rotate(45deg)' : 'none', transition: '0.2s' }} />
+                  </button>
                 </div>
+
+                {showAdvanced && (
+                  <>
+                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="form-group full">
+                      <label className="form-label">Linked Recipe (Auto-calculates Cost)</label>
+                      <select 
+                        value={form.recipeId} 
+                        onChange={e => {
+                          const recipeId = e.target.value;
+                          const recipe = recipes.find(r => r.id === recipeId);
+                          const cost = recipe ? (recipe.ingredients?.reduce((s, i) => s + Number(i.cost || 0), 0) + Number(recipe.packagingCost || 0) + Number(recipe.laborCost || 0)) : form.costPrice;
+                          setForm({...form, recipeId, costPrice: cost});
+                        }}
+                      >
+                        <option value="">No Recipe Linked</option>
+                        {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                    </motion.div>
+
+                    <div className="form-group"><label className="form-label">Cost Price (₹)</label><input type="number" value={form.costPrice} onChange={e => setForm({...form, costPrice: e.target.value})} placeholder="e.g. 250" /></div>
+                    
+                    <div className="form-group"><label className="form-label">Weight/Variants</label><input placeholder="0.5kg, 1kg" value={form.variants} onChange={e => setForm({...form, variants: e.target.value})} /></div>
+                    
+                    <div className="form-group"><label className="form-label">Prep Time</label><input placeholder="e.g. 24h" value={form.prepTime} onChange={e => setForm({...form, prepTime: e.target.value})} /></div>
+                    
+                    <div className="form-group"><label className="form-label">Emoji (Fallback)</label><input placeholder="🎂" value={form.emoji} onChange={e => setForm({...form, emoji: e.target.value})} /></div>
+
+                    <div className="form-group full"><label className="form-label">Available Flavors</label><input placeholder="Chocolate, Red Velvet, Vanilla..." value={form.flavors} onChange={e => setForm({...form, flavors: e.target.value})} /></div>
+                    
+                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 28 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                        <input type="checkbox" style={{ width: 20, height: 20 }} checked={form.bestseller} onChange={e => setForm({...form, bestseller: e.target.checked})} />
+                        Bestseller Product
+                      </label>
+                    </div>
+                  </>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>

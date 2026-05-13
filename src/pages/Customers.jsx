@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Phone, MessageCircle, Star, Users, Clock, RefreshCw, Download } from 'lucide-react';
-import { subscribeToCustomers, subscribeToOrders } from '../services/db';
+import { Search, Phone, MessageCircle, Star, Users, Clock, RefreshCw, Download, Trash2 } from 'lucide-react';
+import { subscribeToCustomers, subscribeToOrders, deleteCustomerFromDB } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatCurrency } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
-import { Skeleton } from '../components/iOS';
+import { Skeleton, showToast, triggerHaptic } from '../components/iOS';
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
@@ -41,6 +41,18 @@ export default function Customers() {
   }, [currentUser]);
 
   // Build per-customer stats from real orders
+  const handleDeleteCustomer = async (c) => {
+    if (window.confirm(`Are you sure you want to delete ${c.name || 'this customer'}?`)) {
+      try {
+        await deleteCustomerFromDB(c.id);
+        triggerHaptic('success');
+        showToast('Customer deleted', 'success');
+      } catch (err) {
+        showToast('Failed to delete customer', 'error');
+      }
+    }
+  };
+
   const customerStats = React.useMemo(() => {
     const stats = {};
     orders.forEach(o => {
@@ -261,6 +273,18 @@ export default function Customers() {
                     <MessageCircle size={14} /> WhatsApp
                   </a>
                 )}
+                <button
+                  onClick={() => handleDeleteCustomer(c)}
+                  style={{
+                    padding: '8px 12px', textAlign: 'center',
+                    borderRadius: 8, background: 'rgba(211,47,47,0.1)', border: '1px solid rgba(211,47,47,0.2)',
+                    color: '#D32F2F', fontSize: '0.8rem', fontWeight: 600,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                  title="Delete"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             </div>
           ))}
@@ -310,6 +334,9 @@ export default function Customers() {
                       <div style={{ display: 'flex', gap: 8 }}>
                         {c.phone && <a href={`tel:${c.phone}`} className="btn-icon" title="Call"><Phone size={16} /></a>}
                         {c.phone && <a href={`https://wa.me/91${c.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="btn-icon" title="WhatsApp"><MessageCircle size={16} /></a>}
+                        <button onClick={() => handleDeleteCustomer(c)} className="btn-icon" title="Delete" style={{ color: '#D32F2F', cursor: 'pointer', border: 'none', background: 'transparent' }}>
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </td>
                   </tr>

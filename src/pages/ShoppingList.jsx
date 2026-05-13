@@ -1,15 +1,280 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, Trash2, X, ShoppingCart, Share2, CheckCircle2, Circle, Loader2, Info, ChevronRight, Sparkles, Receipt, RefreshCcw, Tag } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToShoppingList, addShoppingItemToDB, toggleShoppingItemInDB, deleteShoppingItemFromDB, subscribeToInventory, addExpenseToDB } from '../services/db';
+import { subscribeToShoppingList, addShoppingItemToDB, toggleShoppingItemInDB, deleteShoppingItemFromDB, subscribeToInventory, addExpenseToDB, updateInventoryStockInDB } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { showToast, triggerHaptic } from '../components/iOS';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 
 const UNITS = ['pcs', 'kg', 'g', 'L', 'ml', 'cups', 'tbsp', 'tsp', 'dozen', 'packets'];
+
+const QUICK_APPS = [
+  {
+    name: 'Blinkit',
+    emoji: '💛',
+    color: '#F8E000',
+    textColor: '#1a1a00',
+    deepLink: 'blinkit://search',
+    webUrl: 'https://blinkit.com/',
+    tagline: '10 min delivery'
+  },
+  {
+    name: 'Zepto',
+    emoji: '⚡',
+    color: '#9B30FF',
+    textColor: '#ffffff',
+    deepLink: 'zepto://search',
+    webUrl: 'https://www.zeptonow.com/',
+    tagline: 'Instant grocery'
+  },
+  {
+    name: 'Instamart',
+    emoji: '🧡',
+    color: '#FC8019',
+    textColor: '#ffffff',
+    deepLink: 'swiggy://search',
+    webUrl: 'https://www.swiggy.com/instamart',
+    tagline: 'Swiggy express'
+  },
+  {
+    name: 'BigBasket',
+    emoji: '🥦',
+    color: '#84C225',
+    textColor: '#ffffff',
+    deepLink: 'bigbasket://search',
+    webUrl: 'https://www.bigbasket.com/',
+    tagline: 'Fresh & bulk'
+  }
+];
+
+const QuickOrderApps = ({ searchQuery }) => {
+  const handleOpen = (app) => {
+    // Try deep link first (opens native app), fall back to web
+    const webUrl = searchQuery
+      ? `${app.webUrl}?q=${encodeURIComponent(searchQuery)}`
+      : app.webUrl;
+    window.open(webUrl, '_blank');
+  };
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '0 4px' }}>
+        <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Order Online</span>
+        <span style={{ fontSize: 11, background: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>1 tap</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        {QUICK_APPS.map((app) => (
+          <motion.button
+            key={app.name}
+            whileTap={{ scale: 0.93 }}
+            whileHover={{ scale: 1.04, y: -2 }}
+            onClick={() => handleOpen(app)}
+            style={{
+              background: app.color,
+              border: 'none',
+              borderRadius: 16,
+              padding: '14px 6px 12px',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: `0 4px 14px ${app.color}55`,
+              transition: 'all 0.2s'
+            }}
+          >
+            <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>{app.emoji}</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: app.textColor, lineHeight: 1.2 }}>{app.name}</span>
+            <span style={{ fontSize: '0.62rem', color: app.textColor, opacity: 0.75, lineHeight: 1 }}>{app.tagline}</span>
+          </motion.button>
+        ))}
+      </div>
+    </div>
+  );
+};
 const CATEGORIES = ['Dairy', 'Dry Goods', 'Packaging', 'Vegetables', 'Fruits', 'Spices', 'Decorations', 'Other'];
 
+const getEmojiForProduct = (name) => {
+  if (!name) return '🛒';
+  const n = String(name).toLowerCase();
+  if (n.includes('butter')) return '🧈';
+  if (n.includes('milk')) return '🥛';
+  if (n.includes('egg')) return '🥚';
+  if (n.includes('flour')) return '🌾';
+  if (n.includes('sugar')) return '🧂';
+  if (n.includes('chocolate') || n.includes('cocoa') || n.includes('choc')) return '🍫';
+  if (n.includes('vanilla')) return '🌼';
+  if (n.includes('fruit') || n.includes('berry') || n.includes('strawberry') || n.includes('apple')) return '🍎';
+  if (n.includes('nut') || n.includes('almond') || n.includes('walnut') || n.includes('pistachio')) return '🥜';
+  if (n.includes('cream')) return '🍦';
+  if (n.includes('cheese')) return '🧀';
+  if (n.includes('oil')) return '🛢️';
+  if (n.includes('salt')) return '🧂';
+  if (n.includes('box') || n.includes('pack')) return '📦';
+  if (n.includes('bag')) return '🛍️';
+  if (n.includes('cake') || n.includes('sponge')) return '🎂';
+  if (n.includes('bread')) return '🍞';
+  if (n.includes('cookie') || n.includes('biscuit')) return '🍪';
+  if (n.includes('coffee')) return '☕';
+  if (n.includes('water')) return '💧';
+  if (n.includes('lemon') || n.includes('citrus')) return '🍋';
+  return '🛒';
+};
+
+const ProcessItemModal = ({ item, inventory, onClose, onProcess }) => {
+  const matchingInventory = inventory.find(i => i.name.toLowerCase() === item.name.toLowerCase());
+  const [recordExpense, setRecordExpense] = useState(true);
+  const [updateInventory, setUpdateInventory] = useState(!!matchingInventory);
+  const [amount, setAmount] = useState('');
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 300 }} onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+        className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, padding: 32 }}
+      >
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(52, 199, 89, 0.1)', color: '#34C759', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <CheckCircle2 size={32} />
+          </div>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: 8 }}>Process Purchase</h2>
+          <p style={{ color: 'var(--text3)', fontSize: '0.95rem', marginBottom: 24 }}>
+            You bought <strong>{item.name}</strong>. What would you like to do?
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 24 }}>
+          {/* Inventory Option */}
+          <div 
+            onClick={() => matchingInventory && setUpdateInventory(!updateInventory)}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 16, borderRadius: 12, border: '1px solid var(--border)', background: updateInventory ? 'var(--cream)' : 'var(--bg)', cursor: matchingInventory ? 'pointer' : 'not-allowed', opacity: matchingInventory ? 1 : 0.6 }}
+          >
+            <div style={{ width: 24, height: 24, borderRadius: 6, border: '2px solid', borderColor: updateInventory ? 'var(--accent)' : 'var(--text3)', background: updateInventory ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {updateInventory && <CheckCircle2 size={16} color="white" />}
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: '1rem' }}>Update Inventory</div>
+              {matchingInventory ? (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text3)' }}>Add {item.qty || 1} {item.unit || ''} to existing stock ({matchingInventory.stock})</div>
+              ) : (
+                <div style={{ fontSize: '0.85rem', color: 'var(--text3)' }}>Item not found in Inventory</div>
+              )}
+            </div>
+          </div>
+
+          {/* Expense Option */}
+          <div 
+            style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, borderRadius: 12, border: '1px solid var(--border)', background: recordExpense ? 'rgba(52, 199, 89, 0.05)' : 'var(--bg)' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }} onClick={() => setRecordExpense(!recordExpense)}>
+              <div style={{ width: 24, height: 24, borderRadius: 6, border: '2px solid', borderColor: recordExpense ? '#34C759' : 'var(--text3)', background: recordExpense ? '#34C759' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {recordExpense && <CheckCircle2 size={16} color="white" />}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: '1rem' }}>Record Expense</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text3)' }}>Add to your financial accounts</div>
+              </div>
+            </div>
+            
+            {recordExpense && (
+              <div style={{ position: 'relative', marginTop: 8 }}>
+                <span style={{ position: 'absolute', left: 14, top: 14, fontWeight: 700, color: 'var(--text)' }}>₹</span>
+                <input 
+                  type="number" 
+                  autoFocus 
+                  value={amount}
+                  onChange={e => setAmount(e.target.value)}
+                  placeholder="Amount paid" 
+                  style={{ width: '100%', paddingLeft: 30, height: 48, borderRadius: 12, fontWeight: 800, fontSize: '1.2rem', background: 'white', border: '1px solid var(--border)' }} 
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button 
+            className="btn btn-primary" 
+            style={{ flex: 1, height: 48, borderRadius: 12 }}
+            onClick={() => {
+              if (recordExpense && !amount) return showToast('Enter expense amount', 'error');
+              onProcess(recordExpense ? amount : null, updateInventory ? matchingInventory : null);
+            }}
+          >
+            Apply Options
+          </button>
+          <button 
+            className="btn btn-outline" 
+            style={{ flex: 1, height: 48, borderRadius: 12 }}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 const emptyForm = { name: '', qty: '', unit: 'kg', category: 'Dry Goods' };
+
+const ItemRow = ({ item, onToggle, onPrompt, onDelete }) => (
+  <motion.div
+    layout
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    exit={{ opacity: 0, scale: 0.9 }}
+    style={{
+      display: 'flex', alignItems: 'center', gap: 16,
+      padding: '16px 20px', borderBottom: '1px solid var(--border)',
+      background: item.bought ? 'rgba(0,0,0,0.02)' : 'var(--card)',
+      transition: 'all 0.3s'
+    }}
+  >
+    <motion.button
+      whileTap={{ scale: 0.8 }}
+      onClick={(e) => onToggle(item, e)}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: item.bought ? '#34C759' : 'var(--text3)', flexShrink: 0 }}
+    >
+      {item.bought ? <CheckCircle2 size={26} strokeWidth={2.5} /> : <Circle size={26} strokeWidth={2} />}
+    </motion.button>
+
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{
+        fontWeight: 700, fontSize: '1.05rem',
+        textDecoration: item.bought ? 'line-through' : 'none',
+        color: item.bought ? 'var(--text3)' : 'var(--text)',
+        transition: 'all 0.3s',
+        display: 'flex', alignItems: 'center', gap: '6px'
+      }}>
+        {item.name} <span style={{ fontSize: '0.9em', opacity: item.bought ? 0.6 : 1 }}>{getEmojiForProduct(item.name)}</span>
+      </div>
+      {item.qty && (
+        <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Tag size={12} /> {item.qty} {item.unit}
+        </div>
+      )}
+    </div>
+
+    <div style={{ display: 'flex', gap: 8 }}>
+      {item.bought && (
+        <button
+          onClick={() => onPrompt(item)}
+          style={{ color: 'var(--accent)', background: 'var(--cream)', padding: '6px 10px', borderRadius: 10, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}
+        >
+          <Receipt size={14} /> Record Cost
+        </button>
+      )}
+      <button
+        className="btn-icon"
+        onClick={() => onDelete(item.id)}
+        style={{ color: 'rgba(255, 59, 48, 0.6)', width: 32, height: 32, background: 'none' }}
+      >
+        <Trash2 size={16} />
+      </button>
+    </div>
+  </motion.div>
+);
 
 export default function ShoppingList() {
   const [items, setItems]           = useState([]);
@@ -84,20 +349,31 @@ export default function ShoppingList() {
     }
   };
 
-  const handleConvertToExpense = async (item, amount) => {
-    if (!amount) return showToast('Enter amount paid', 'error');
+  const handleProcessItem = async (item, expenseAmount, inventoryItemToUpdate) => {
     try {
-      await addExpenseToDB({
-        description: `${item.name} (${item.qty}${item.unit})`,
-        amount: Number(amount),
-        category: item.category === 'Packaging' ? 'Packaging' : 'Ingredients',
-        date: new Date().toISOString().split('T')[0],
-        userId: currentUser.uid
-      });
-      showToast('Added to Expenses! 💸', 'success');
+      let msg = '';
+      if (expenseAmount) {
+        await addExpenseToDB({
+          description: `${item.name} (${item.qty}${item.unit})`,
+          amount: Number(expenseAmount),
+          category: item.category === 'Packaging' ? 'Packaging' : 'Ingredients',
+          date: new Date().toISOString().split('T')[0],
+          userId: currentUser.uid
+        });
+        msg += 'Expense recorded. ';
+      }
+      
+      if (inventoryItemToUpdate) {
+        const addedQty = Number(item.qty) || 1;
+        const newStock = Number(inventoryItemToUpdate.stock || 0) + addedQty;
+        await updateInventoryStockInDB(inventoryItemToUpdate.id, newStock);
+        msg += `Inventory updated (+${addedQty}).`;
+      }
+      
+      if (msg) showToast(msg, 'success');
       setShowPrompt(null);
     } catch {
-      showToast('Failed to add expense', 'error');
+      showToast('Failed to process item', 'error');
     }
   };
 
@@ -129,63 +405,6 @@ export default function ShoppingList() {
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  const ItemRow = ({ item }) => (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 16,
-        padding: '16px 20px', borderBottom: '1px solid var(--border)',
-        background: item.bought ? 'rgba(0,0,0,0.02)' : 'var(--card)',
-        transition: 'all 0.3s'
-      }}
-    >
-      <motion.button
-        whileTap={{ scale: 0.8 }}
-        onClick={(e) => handleToggle(item, e)}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: item.bought ? '#34C759' : 'var(--text3)', flexShrink: 0 }}
-      >
-        {item.bought ? <CheckCircle2 size={26} strokeWidth={2.5} /> : <Circle size={26} strokeWidth={2} />}
-      </motion.button>
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontWeight: 700, fontSize: '1.05rem',
-          textDecoration: item.bought ? 'line-through' : 'none',
-          color: item.bought ? 'var(--text3)' : 'var(--text)',
-          transition: 'all 0.3s'
-        }}>
-          {item.name}
-        </div>
-        {item.qty && (
-          <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Tag size={12} /> {item.qty} {item.unit}
-          </div>
-        )}
-      </div>
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        {item.bought && (
-          <button
-            onClick={() => setShowPrompt(item)}
-            style={{ color: 'var(--accent)', background: 'var(--cream)', padding: '6px 10px', borderRadius: 10, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}
-          >
-            <Receipt size={14} /> Record Cost
-          </button>
-        )}
-        <button
-          className="btn-icon"
-          onClick={() => deleteShoppingItemFromDB(item.id)}
-          style={{ color: 'rgba(255, 59, 48, 0.6)', width: 32, height: 32, background: 'none' }}
-        >
-          <Trash2 size={16} />
-        </button>
-      </div>
-    </motion.div>
-  );
-
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fade-in">
       {/* Header */}
@@ -205,6 +424,9 @@ export default function ShoppingList() {
           </div>
         </div>
       </div>
+
+      {/* Quick Order Apps */}
+      <QuickOrderApps searchQuery={pending.length > 0 ? pending.map(i => i.name).join(', ') : ''} />
 
       {/* Action Cards */}
       <div className="content-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 32 }}>
@@ -276,7 +498,7 @@ export default function ShoppingList() {
                         <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{cat}</span>
                       </div>
                       <AnimatePresence mode="popLayout">
-                        {catItems.map(item => <ItemRow key={item.id} item={item} />)}
+                        {catItems.map(item => <ItemRow key={item.id} item={item} onToggle={handleToggle} onPrompt={setShowPrompt} onDelete={deleteShoppingItemFromDB} />)}
                       </AnimatePresence>
                     </div>
                   );
@@ -302,7 +524,7 @@ export default function ShoppingList() {
               </div>
               <div className="card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--border)', background: 'transparent', boxShadow: 'none' }}>
                 <AnimatePresence mode="popLayout">
-                  {bought.map(item => <ItemRow key={item.id} item={item} />)}
+                  {bought.map(item => <ItemRow key={item.id} item={item} onToggle={handleToggle} onPrompt={setShowPrompt} onDelete={deleteShoppingItemFromDB} />)}
                 </AnimatePresence>
               </div>
             </div>
@@ -332,7 +554,7 @@ export default function ShoppingList() {
                 </div>
               </div>
 
-              <form onSubmit={handleAdd} style={{ padding: 32 }}>
+              <form onSubmit={handleAdd} style={{ padding: 32, overflowY: 'auto', maxHeight: 'calc(100vh - 150px)' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   <div className="form-group">
                     <label className="form-label">Item Name</label>
@@ -411,53 +633,15 @@ export default function ShoppingList() {
         )}
       </AnimatePresence>
 
-      {/* Expense Conversion Prompt */}
+      {/* Process Action Prompt */}
       <AnimatePresence>
         {showPrompt && (
-          <div className="modal-overlay" style={{ zIndex: 300 }} onClick={() => setShowPrompt(null)}>
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, textAlign: 'center', padding: 32 }}
-            >
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(212, 113, 74, 0.1)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
-                <Receipt size={32} />
-              </div>
-              <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: 8 }}>Record Expense?</h2>
-              <p style={{ color: 'var(--text3)', fontSize: '0.95rem', marginBottom: 24 }}>
-                Would you like to record <strong>{showPrompt.name}</strong> as an expense in your accounts?
-              </p>
-              
-              <div style={{ marginBottom: 24 }}>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: 14, top: 14, fontWeight: 700, color: 'var(--text)' }}>₹</span>
-                  <input 
-                    type="number" 
-                    id="expense-amt" 
-                    autoFocus 
-                    placeholder="Amount paid" 
-                    style={{ paddingLeft: 30, height: 48, borderRadius: 12, textAlign: 'center', fontWeight: 800, fontSize: '1.2rem' }} 
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12 }}>
-                <button 
-                  className="btn btn-primary" 
-                  style={{ flex: 1, height: 48, borderRadius: 12 }}
-                  onClick={() => handleConvertToExpense(showPrompt, document.getElementById('expense-amt').value)}
-                >
-                  Yes, Save Expense
-                </button>
-                <button 
-                  className="btn btn-outline" 
-                  style={{ flex: 1, height: 48, borderRadius: 12 }}
-                  onClick={() => setShowPrompt(null)}
-                >
-                  No, Just Bought
-                </button>
-              </div>
-            </motion.div>
-          </div>
+          <ProcessItemModal 
+            item={showPrompt} 
+            inventory={inventory}
+            onClose={() => setShowPrompt(null)}
+            onProcess={(amount, updateInv) => handleProcessItem(showPrompt, amount, updateInv)}
+          />
         )}
       </AnimatePresence>
     </motion.div>

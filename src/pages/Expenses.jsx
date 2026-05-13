@@ -51,7 +51,8 @@ export default function Expenses() {
   const filtered = useMemo(() => {
     return expenses.filter(e => {
       const catOk   = filterCat === 'All' || e.category === filterCat;
-      const monthOk = !filterMonth || (e.date || e.createdAt?.slice(0, 7)) === filterMonth;
+      const monthStr = e.date?.slice(0, 7) || e.createdAt?.slice(0, 7);
+      const monthOk = !filterMonth || monthStr === filterMonth;
       return catOk && monthOk;
     });
   }, [expenses, filterCat, filterMonth]);
@@ -64,7 +65,7 @@ export default function Expenses() {
     d.setMonth(d.getMonth() - 1);
     const pmStr = d.toISOString().slice(0, 7);
     return expenses
-      .filter(e => (e.date || e.createdAt?.slice(0, 7)) === pmStr)
+      .filter(e => (e.date?.slice(0, 7) || e.createdAt?.slice(0, 7)) === pmStr)
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   }, [expenses, filterMonth]);
 
@@ -96,7 +97,12 @@ export default function Expenses() {
     try {
       let receiptUrl = '';
       if (receiptFile) {
-        receiptUrl = await uploadReceiptToStorage(receiptFile);
+        try {
+          receiptUrl = await uploadReceiptToStorage(receiptFile);
+        } catch (error) {
+          console.error("Receipt upload failed:", error);
+          showToast('Receipt upload failed, saving without it.', 'info');
+        }
       }
       await addExpenseToDB({ 
         ...form, 

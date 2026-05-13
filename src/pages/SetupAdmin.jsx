@@ -36,6 +36,9 @@ export default function SetupAdmin() {
         className="card"
         style={{ maxWidth: 400, padding: 30, textAlign: 'center' }}
       >
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+          <img src="/logo.png" alt="Logo" style={{ height: 60, width: 60, objectFit: 'contain', borderRadius: 12 }} />
+        </div>
         <h2>Initial Admin Setup</h2>
         <p style={{ margin: '20px 0', color: 'var(--text3)' }}>
           This is a one-time setup page. Click the button below to promote your current account to **Admin**.

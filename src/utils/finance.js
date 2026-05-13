@@ -6,7 +6,7 @@ export const calculateOrderBalance = (order) => {
   if (!order) return 0;
   
   const total = Number(order.total || order.totalAmount || 0);
-  const advance = Number(order.advance || 0);
+  const advance = Number(order.advance || order.advanceAmount || order.amountPaid || 0);
   const balance = Math.max(0, total - advance);
   
   // If explicitly marked as paid, balance is 0
@@ -19,12 +19,6 @@ export const calculateOrderBalance = (order) => {
 
 export const isOrderPendingPayment = (order) => {
   if (!order) return false;
-  
-  const status = String(order.status || 'inquiry').toLowerCase();
-  
-  // EXCLUDE inquiries and cancelled orders from pending payments
-  if (status === 'inquiry' || status === 'cancelled') return false;
-  
   const balance = calculateOrderBalance(order);
   return balance > 0;
 };

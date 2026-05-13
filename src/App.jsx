@@ -234,34 +234,100 @@ function SplashScreen() {
   return (
     <motion.div 
       initial={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.5 }}
+      exit={{ opacity: 0, scale: 1.05 }}
+      transition={{ duration: 0.8, ease: [0.43, 0.13, 0.23, 0.96] }}
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000, background: 'var(--bg)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
+        position: 'fixed', inset: 0, zIndex: 1000, 
+        background: 'linear-gradient(180deg, #FFF9F7 0%, #FFFFFF 100%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden'
       }}
     >
-      <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 200, damping: 20 }}
-        style={{ fontSize: '5rem' }}
-      >
-        🧁
-      </motion.div>
-      <motion.h1
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2 }}
-        style={{ marginTop: 20, fontSize: '1.8rem', letterSpacing: '-0.04em' }}
-      >
-        Cream & Crust
-      </motion.h1>
-      <motion.div
-        animate={{ scaleX: [0, 1, 1], opacity: [0.3, 0.6, 0] }}
-        transition={{ duration: 2, repeat: Infinity }}
-        style={{ width: 140, height: 2, background: 'var(--accent)', marginTop: 12, borderRadius: 1 }}
+      {/* Background Decorative Elements */}
+      <motion.div 
+        animate={{ 
+          scale: [1, 1.1, 1],
+          rotate: [0, 5, 0],
+          opacity: [0.3, 0.5, 0.3]
+        }}
+        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+        style={{ 
+          position: 'absolute', width: '120vw', height: '120vh', 
+          background: 'radial-gradient(circle at 30% 30%, var(--accent-light) 0%, transparent 60%)',
+          zIndex: -1, pointerEvents: 'none'
+        }}
       />
+
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <motion.div
+          initial={{ scale: 0.85, opacity: 0, y: 20 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+          style={{ position: 'relative' }}
+        >
+          {/* Logo Glow */}
+          <motion.div
+            animate={{ opacity: [0.4, 0.7, 0.4], scale: [1, 1.05, 1] }}
+            transition={{ duration: 3, repeat: Infinity }}
+            style={{
+              position: 'absolute', inset: -15, borderRadius: 28,
+              background: 'var(--accent)', filter: 'blur(20px)', zIndex: -1
+            }}
+          />
+          <img 
+            src="/logo.png" 
+            alt="Logo" 
+            style={{ 
+              width: 120, height: 120, objectFit: 'contain', 
+              borderRadius: 24, boxShadow: '0 12px 30px rgba(0,0,0,0.08)',
+              background: 'white', padding: 2
+            }} 
+          />
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.6 }}
+          style={{ marginTop: 32, textAlign: 'center' }}
+        >
+          <h1 style={{ 
+            fontSize: '2.4rem', fontWeight: 900, letterSpacing: '-0.05em', 
+            margin: 0, color: 'var(--text)', lineHeight: 1.1 
+          }}>
+            Cream & Crust
+          </h1>
+          <p style={{ 
+            marginTop: 8, fontSize: '1rem', color: 'var(--text2)', 
+            fontWeight: 600, letterSpacing: '0.2em', textTransform: 'uppercase'
+          }}>
+            Bakery Manager
+          </p>
+        </motion.div>
+
+        {/* Elegant Loader */}
+        <div style={{ marginTop: 48, width: 200, height: 3, background: 'rgba(0,0,0,0.04)', borderRadius: 10, overflow: 'hidden', position: 'relative' }}>
+          <motion.div
+            initial={{ left: '-100%' }}
+            animate={{ left: '100%' }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            style={{ 
+              position: 'absolute', top: 0, bottom: 0, width: '40%', 
+              background: 'linear-gradient(90deg, transparent, var(--accent), transparent)',
+              borderRadius: 10
+            }}
+          />
+        </div>
+      </div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1 }}
+        style={{ position: 'absolute', bottom: 40, fontSize: '0.8rem', color: 'var(--text3)', fontWeight: 700, letterSpacing: '0.05em' }}
+      >
+        MADE FOR PREMIUM BAKERS
+      </motion.div>
     </motion.div>
   );
 }

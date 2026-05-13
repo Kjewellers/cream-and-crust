@@ -194,8 +194,9 @@ export default function Portfolio() {
           </div>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 40, color: 'var(--text3)', fontSize: '0.9rem' }}>
-          Built with love on <strong>Cream & Crust</strong>
+        <div style={{ textAlign: 'center', marginTop: 40, color: 'var(--text3)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <img src="/logo.png" alt="Logo" style={{ height: 18, width: 18, objectFit: 'contain', borderRadius: 4 }} />
+          <span>Built with love on <strong>Cream & Crust</strong></span>
         </div>
       </div>
     </div>

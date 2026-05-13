@@ -13,6 +13,41 @@ import { IndianRupee, Store, Calendar as CalendarIcon } from 'lucide-react';
 const UNITS = ['kg', 'g', 'L', 'ml', 'pcs', 'boxes', 'packets'];
 const CATS = ['Ingredients', 'Packaging', 'Decor', 'Supplies', 'Other'];
 
+const QUICK_APPS = [
+  { name: 'Blinkit',    emoji: '💛', color: '#F8E000', textColor: '#1a1a00', webUrl: 'https://blinkit.com/',                tagline: '10 min delivery' },
+  { name: 'Zepto',      emoji: '⚡',   color: '#9B30FF', textColor: '#ffffff', webUrl: 'https://www.zeptonow.com/',            tagline: 'Instant grocery' },
+  { name: 'Instamart',  emoji: '🧡', color: '#FC8019', textColor: '#ffffff', webUrl: 'https://www.swiggy.com/instamart',   tagline: 'Swiggy express' },
+  { name: 'BigBasket',  emoji: '🥦', color: '#84C225', textColor: '#ffffff', webUrl: 'https://www.bigbasket.com/',         tagline: 'Fresh & bulk' },
+];
+
+const QuickOrderApps = () => (
+  <div style={{ marginBottom: 28 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+      <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text2)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Order Online</span>
+      <span style={{ fontSize: 11, background: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: 20, fontWeight: 700 }}>1 tap</span>
+    </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+      {QUICK_APPS.map((app) => (
+        <motion.button
+          key={app.name}
+          whileTap={{ scale: 0.93 }}
+          whileHover={{ scale: 1.04, y: -2 }}
+          onClick={() => window.open(app.webUrl, '_blank')}
+          style={{
+            background: app.color, border: 'none', borderRadius: 16, padding: '14px 6px 12px',
+            cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+            boxShadow: `0 4px 14px ${app.color}55`, transition: 'all 0.2s'
+          }}
+        >
+          <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>{app.emoji}</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: app.textColor }}>{app.name}</span>
+          <span style={{ fontSize: '0.62rem', color: app.textColor, opacity: 0.75 }}>{app.tagline}</span>
+        </motion.button>
+      ))}
+    </div>
+  </div>
+);
+
 export default function Inventory() {
   const { currentUser } = useAuth();
   const [inventory, setInventory] = useState([]);
@@ -156,6 +191,9 @@ export default function Inventory() {
           </button>
         </div>
       </div>
+
+      {/* Quick Order Apps */}
+      <QuickOrderApps />
 
       {/* Controls & Stats */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>

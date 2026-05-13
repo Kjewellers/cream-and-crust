@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, MessageCircle, Check, X, ChevronRight } from 'lucide-react';
+import { Plus, Search, MessageCircle, Check, X, ChevronRight, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToOrders, subscribeToCustomers, addOrderToDB, updateOrderStatusInDB, addCustomerToDB } from '../services/db';
+import { subscribeToOrders, subscribeToCustomers, addOrderToDB, updateOrderStatusInDB, addCustomerToDB, deleteOrderFromDB } from '../services/db';
 import { shareToWhatsApp } from '../services/whatsapp';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatTime, formatCurrency, formatOrderNumber } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
 import { Download } from 'lucide-react';
+import html2canvas from 'html2canvas';
 import {
   OrderRowSkeleton, EmptyState, showToast,
   SegmentedControl, SwipeRow, BottomSheet,
@@ -40,7 +41,7 @@ function StatusBadge({ status }) {
   );
 }
 
-function OrderRow({ o, allOrders, onAdvance, onWhatsApp, onCustomerClick, onRapido, onOrderClick }) {
+function OrderRow({ o, allOrders, onAdvance, onWhatsApp, onCustomerClick, onRapido, onOrderClick, onDelete }) {
   const cName = typeof o.customer === 'object'
     ? (o.customer?.name || 'Customer')
     : (o.customerName || o.customer || 'Customer');
@@ -108,13 +109,17 @@ function OrderRow({ o, allOrders, onAdvance, onWhatsApp, onCustomerClick, onRapi
             </motion.button>
             <span style={{ fontSize: 9, color: 'var(--text3)', fontWeight: 600 }}>Rapido</span>
           </div>
+          <motion.button whileTap={{ scale: 0.86 }} className="btn-icon" title="Delete" onClick={(e) => { e.stopPropagation(); onDelete(o); }}
+            style={{ color: '#D32F2F', width: 34, height: 34, borderRadius: 10, marginLeft: 6 }}>
+            <Trash2 size={15} />
+          </motion.button>
         </div>
       </td>
     </motion.tr>
   );
 }
 
-function MobileOrderCard({ o, allOrders, onAdvance, onWhatsApp, onCustomerClick, onRapido, onOrderClick }) {
+function MobileOrderCard({ o, allOrders, onAdvance, onWhatsApp, onCustomerClick, onRapido, onOrderClick, onDelete }) {
   const cName = typeof o.customer === 'object'
     ? (o.customer?.name || 'Customer')
     : (o.customerName || o.customer || 'Customer');
@@ -196,6 +201,18 @@ function MobileOrderCard({ o, allOrders, onAdvance, onWhatsApp, onCustomerClick,
                   <Check size={18} />
                 </motion.button>
               )}
+              <motion.button 
+                whileTap={{ scale: 0.9 }}
+                onClick={(e) => { e.stopPropagation(); onDelete(o); }}
+                style={{ 
+                  width: 38, height: 38, borderRadius: 12, 
+                  background: 'rgba(211,47,47,0.1)', color: '#D32F2F', border: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <Trash2 size={18} />
+              </motion.button>
             </div>
           </div>
         </div>
@@ -233,6 +250,38 @@ export default function Orders() {
   const [showSwipeGuide, setShowSwipeGuide] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { currentUser, isCustomer } = useAuth();
+
+  const handleDownloadCard = async () => {
+    const cardElement = document.getElementById('order-card-capture');
+    if (!cardElement) return;
+    try {
+      showToast('Generating card...', 'info', 1000);
+      const canvas = await html2canvas(cardElement, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+      const imageBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      if (navigator.share && navigator.canShare) {
+        const file = new File([imageBlob], `Order_${generatedOrderCard?.orderId || 'Card'}.png`, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ files: [file], title: 'Order Card' });
+            return;
+          } catch (e) { console.log('Share failed', e); }
+        }
+      }
+      const url = URL.createObjectURL(imageBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Order_${generatedOrderCard?.orderId || 'Card'}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      triggerHaptic('success');
+      showToast('Card saved!', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Failed to save card', 'error');
+    }
+  };
 
   const filtered = (orders || []).filter(o => {
     if (!o) return false;
@@ -282,6 +331,19 @@ export default function Orders() {
     });
   };
 
+
+  const handleDeleteOrder = async (o) => {
+    if (window.confirm('Are you sure you want to delete this order? This cannot be undone.')) {
+      try {
+        await deleteOrderFromDB(o.id);
+        triggerHaptic('success');
+        showToast('Order deleted', 'success');
+        if (generatedOrderCard?.id === o.id) setGeneratedOrderCard(null);
+      } catch (err) {
+        showToast('Failed to delete', 'error');
+      }
+    }
+  };
 
   const updateStatus = async (o) => {
     const idx = statusFlow.indexOf(String(o.status).toLowerCase());
@@ -450,7 +512,7 @@ export default function Orders() {
     const o = generatedOrderCard;
     return (
       <div style={{ padding: 20, maxWidth: 400, margin: '0 auto', animation: 'fade-in 0.3s ease-out' }}>
-        <div style={{ background: 'var(--cream)', borderRadius: 16, padding: 24, boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)' }}>
+        <div id="order-card-capture" style={{ background: 'var(--cream)', borderRadius: 16, padding: 24, boxShadow: 'var(--shadow-md)', border: '1px solid var(--border)' }}>
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div style={{ fontSize: 40 }}>🧁</div>
             <h2 style={{ margin: '10px 0 0', color: 'var(--accent2)' }}>Order Confirmed</h2>
@@ -489,7 +551,7 @@ export default function Orders() {
             </div>
           </div>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div data-html2canvas-ignore="true" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button className="btn btn-primary" onClick={() => handleWhatsApp(o)} style={{ display: 'flex', justifyContent: 'center', gap: 8, background: '#25D366', color: 'white', border: 'none' }}>
               <MessageCircle size={18} /> Share on WhatsApp
             </button>
@@ -498,7 +560,7 @@ export default function Orders() {
                 🛵 Book Rapido
               </button>
             )}
-            <button className="btn btn-outline" onClick={() => window.print()} style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+            <button className="btn btn-outline" onClick={handleDownloadCard} style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
               📥 Download Card
             </button>
             <button className="btn btn-outline" onClick={() => setGeneratedOrderCard(null)} style={{ display: 'flex', justifyContent: 'center', gap: 8, border: 'none', color: 'var(--text2)' }}>
@@ -617,7 +679,7 @@ export default function Orders() {
               <motion.tbody variants={listContainer} initial="hidden" animate="show">
                 <AnimatePresence>
                   {filtered.map(o => (
-                    <OrderRow key={o.id} o={o} allOrders={orders} onAdvance={updateStatus} onWhatsApp={handleWhatsApp} onRapido={handleRapidoBooking} onCustomerClick={openCustomerProfile} onOrderClick={setGeneratedOrderCard} />
+                    <OrderRow key={o.id} o={o} allOrders={orders} onAdvance={updateStatus} onWhatsApp={handleWhatsApp} onRapido={handleRapidoBooking} onCustomerClick={openCustomerProfile} onOrderClick={setGeneratedOrderCard} onDelete={handleDeleteOrder} />
                   ))}
                 </AnimatePresence>
               </motion.tbody>
@@ -646,6 +708,7 @@ export default function Orders() {
                   onRapido={handleRapidoBooking} 
                   onCustomerClick={openCustomerProfile} 
                   onOrderClick={setGeneratedOrderCard} 
+                  onDelete={handleDeleteOrder}
                 />
               ))}
             </AnimatePresence>

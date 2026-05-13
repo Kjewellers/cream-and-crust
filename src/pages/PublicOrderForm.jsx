@@ -202,8 +202,9 @@ export default function PublicOrderForm() {
           </form>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: 30, color: 'var(--text3)', fontSize: '0.85rem' }}>
-          Powered by <strong>Cream & Crust</strong>
+        <div style={{ textAlign: 'center', marginTop: 30, color: 'var(--text3)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <img src="/logo.png" alt="Logo" style={{ height: 16, width: 16, objectFit: 'contain', borderRadius: 3 }} />
+          <span>Powered by <strong>Cream & Crust</strong></span>
         </div>
       </div>
     </div>

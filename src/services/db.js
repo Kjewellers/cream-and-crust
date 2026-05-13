@@ -51,6 +51,16 @@ export const updateOrderFieldsInDB = async (orderId, fields) => {
   }
 };
 
+export const deleteOrderFromDB = async (orderId) => {
+  try {
+    const orderRef = doc(db, "orders", orderId);
+    await deleteDoc(orderRef);
+  } catch (e) {
+    console.error("Error deleting order: ", e);
+    throw e;
+  }
+};
+
 // Listen to orders in real-time
 export const subscribeToOrders = (callback, userId = null) => {
   let q;
@@ -305,6 +315,16 @@ export const updateCustomerInDB = async (customerId, customerData) => {
   }
 };
 
+export const deleteCustomerFromDB = async (customerId) => {
+  try {
+    const custRef = doc(db, "customers", customerId);
+    await deleteDoc(custRef);
+  } catch (e) {
+    console.error("Error deleting customer: ", e);
+    throw e;
+  }
+};
+
 // ==========================================
 // BUSINESS PROFILE
 // ==========================================
@@ -418,13 +438,15 @@ export const deleteExpenseFromDB = async (expenseId) => {
 export const subscribeToExpenses = (callback, errorCallback, userId = null) => {
   let q;
   if (userId) {
-    q = query(expensesCollection, where("userId", "==", userId), orderBy("createdAt", "desc"));
+    q = query(expensesCollection, where("userId", "==", userId));
   } else {
-    q = query(expensesCollection, orderBy("createdAt", "desc"));
+    q = query(expensesCollection);
   }
   
   return onSnapshot(q, (snapshot) => {
     const expenses = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Sort in memory to avoid index requirements
+    expenses.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     callback(expenses);
   }, (error) => {
     console.error("Expenses subscription error:", error);
@@ -473,13 +495,15 @@ export const deleteShoppingItemFromDB = async (itemId) => {
 export const subscribeToShoppingList = (callback, errorCallback, userId = null) => {
   let q;
   if (userId) {
-    q = query(shoppingListCollection, where("userId", "==", userId), orderBy("createdAt", "desc"));
+    q = query(shoppingListCollection, where("userId", "==", userId));
   } else {
-    q = query(shoppingListCollection, orderBy("createdAt", "desc"));
+    q = query(shoppingListCollection);
   }
   
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    // Sort in memory to avoid index requirements
+    items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     callback(items);
   }, (error) => {
     console.error("Shopping list subscription error:", error);

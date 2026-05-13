@@ -6,19 +6,16 @@ import { useAuth } from '../context/AuthContext';
 import { triggerHaptic } from '../components/iOS';
 
 export default function Login() {
-  const { currentUser, mockLogin } = useAuth();
+  const { currentUser } = useAuth();
   const [mode, setMode] = useState('select'); // 'select' | 'email' | 'register'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successAnim, setSuccessAnim] = useState(false);
-  const [devMode, setDevMode] = useState(false);
 
   useEffect(() => {
     if (currentUser) {
-      setSuccessAnim(true);
       triggerHaptic('success');
     }
   }, [currentUser]);
@@ -27,17 +24,6 @@ export default function Login() {
     setError('');
     setLoading(true);
     triggerHaptic('light');
-    
-    if (devMode) {
-      setTimeout(() => {
-        setSuccessAnim(true);
-        triggerHaptic('success');
-        // Actually update global state so App.jsx redirects
-        setTimeout(mockLogin, 1500);
-      }, 500);
-      return;
-    }
-
     try {
       await actionFn();
     } catch (err) {
@@ -49,39 +35,6 @@ export default function Login() {
 
   const handleGoogleLogin = () => handleAction(signInWithGoogle);
 
-  if (successAnim) {
-    return (
-      <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg2)', zIndex: 9999 }}>
-        <motion.div 
-          initial={{ scale: 0.9, opacity: 0 }} 
-          animate={{ scale: 1, opacity: 1 }} 
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}
-        >
-          <motion.div
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-            style={{ 
-              width: 80, height: 80, borderRadius: '50%', background: '#34C759', 
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 8px 24px rgba(52,199,89,0.3)'
-            }}
-          >
-            <Check size={48} color="white" strokeWidth={3} />
-          </motion.div>
-          
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            style={{ color: 'var(--text)', fontSize: '1.25rem', fontWeight: 600, letterSpacing: '-0.02em' }}
-          >
-            Sign in Successful
-          </motion.div>
-        </motion.div>
-      </div>
-    );
-  }
 
   const inputStyle = {
     width: '100%',
@@ -142,7 +95,7 @@ export default function Login() {
             <img src="/logo.png" alt="Cream & Crust Logo" style={{ height: 80, objectFit: 'contain' }} onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }} />
             <div style={{ fontSize: '3rem', display: 'none' }}>🧁</div>
           </div>
-          <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8 }}>Cream & Crust</h1>
+          <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 8 }}>Cream &amp; Crust</h1>
           <p style={{ color: 'var(--text2)', fontSize: '1rem', fontWeight: 500 }}>Sign in to continue</p>
         </div>
 
@@ -163,32 +116,6 @@ export default function Login() {
                 <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
               </div>
               <PrimaryButton label="Continue with Email" onClick={() => setMode('email')} />
-              
-              <div style={{ margin: '20px 0 10px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)', opacity: 0.5 }} />
-                <span style={{ fontSize: '0.7rem', color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase' }}>Testing Only</span>
-                <div style={{ flex: 1, height: 1, background: 'var(--border)', opacity: 0.5 }} />
-              </div>
-
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  triggerHaptic('medium');
-                  setLoading(true);
-                  setTimeout(() => {
-                    setSuccessAnim(true);
-                    triggerHaptic('success');
-                    setTimeout(mockLogin, 1000);
-                  }, 500);
-                }}
-                style={{
-                  width: '100%', padding: '12px', borderRadius: '10px',
-                  background: 'rgba(255, 149, 0, 0.1)', color: '#FF9500', border: '1px solid rgba(255, 149, 0, 0.3)',
-                  fontSize: '14px', fontWeight: 600, cursor: 'pointer'
-                }}
-              >
-                Login as Admin (Dev)
-              </motion.button>
 
               <div style={{ marginTop: 24 }}>
                 <button onClick={() => setMode('register')} style={{ color: 'var(--text3)', fontWeight: 500, fontSize: '0.9rem' }}>
@@ -236,13 +163,6 @@ export default function Login() {
             </motion.form>
           )}
         </AnimatePresence>
-
-        <button 
-          onClick={() => setDevMode(!devMode)}
-          style={{ position: 'fixed', bottom: 20, right: 20, fontSize: '10px', color: 'var(--text3)', opacity: 0.1, background: 'none', border: 'none' }}
-        >
-          {devMode ? 'MOCK_ON' : 'MOCK_OFF'}
-        </button>
       </motion.div>
     </div>
   );

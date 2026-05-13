@@ -46,15 +46,15 @@ export default function Dashboard() {
     
     const customersUnsub = subscribeToCustomers((newCust) => {
       setCustomers(newCust || []);
-    }, currentUser.uid);
+    }, null, currentUser.uid);
 
     const expensesUnsub = subscribeToExpenses((newExp) => {
       setExpenses(newExp || []);
-    }, currentUser.uid);
+    }, null, currentUser.uid);
 
     const inventoryUnsub = subscribeToInventory((items) => {
       setInventory(items || []);
-    }, currentUser.uid);
+    }, null, currentUser.uid);
 
     const shoppingUnsub = subscribeToShoppingList((items) => {
       setShoppingItems(items || []);
@@ -224,8 +224,8 @@ export default function Dashboard() {
         <div style={{ marginBottom: 32 }}>
           <motion.div variants={listItem} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24 }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', marginBottom: 4 }}>
-                <Sparkles size={16} fill="var(--accent)" />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', marginBottom: 8 }}>
+                <img src="/logo.png" alt="Logo" style={{ width: 20, height: 20, objectFit: 'contain', borderRadius: 4 }} />
                 <span style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Premium Baker Edition</span>
               </div>
               <h1 style={{ fontSize: '2.4rem', fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1.1 }}>{greeting}</h1>

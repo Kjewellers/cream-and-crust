@@ -70,11 +70,16 @@ export default function Products() {
 
       // Upload to Firebase Storage instead of the broken API endpoint
       if (imageFile) {
-        const uid = currentUser?.uid || 'anonymous';
-        const fileName = `products/${uid}/${Date.now()}_${imageFile.name}`;
-        const storageRef = ref(storage, fileName);
-        await uploadBytes(storageRef, imageFile);
-        imageUrl = await getDownloadURL(storageRef);
+        try {
+          const uid = currentUser?.uid || 'anonymous';
+          const fileName = `products/${uid}/${Date.now()}_${imageFile.name}`;
+          const storageRef = ref(storage, fileName);
+          await uploadBytes(storageRef, imageFile);
+          imageUrl = await getDownloadURL(storageRef);
+        } catch (error) {
+          console.error("Storage error:", error);
+          showToast('Storage error, saving without photo.', 'error');
+        }
       }
 
       const productData = {

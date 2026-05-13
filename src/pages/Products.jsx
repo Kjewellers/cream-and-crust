@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Search, Edit2, Trash2, X, Camera, Filter, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { subscribeToProducts, addProductToDB, updateProductInDB, deleteProductFromDB, subscribeToRecipes } from '../services/db';
+import { subscribeToProducts, addProductToDB, updateProductInDB, deleteProductFromDB, subscribeToRecipes, subscribeToBusiness } from '../services/db';
 import { storage } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Skeleton, showToast } from '../components/iOS';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { formatCurrency } from '../utils/date';
+import { ExternalLink, Share } from 'lucide-react';
 
 const DEFAULT_CATEGORIES = ['All', 'Cakes', 'Cupcakes', 'Brownies', 'Cookies', 'Dessert Boxes'];
 
@@ -15,6 +16,7 @@ export default function Products() {
   const { currentUser } = useAuth();
   const [products, setProducts] = useState([]);
   const [recipes, setRecipes] = useState([]);
+  const [business, setBusiness] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
@@ -40,11 +42,26 @@ export default function Products() {
       setRecipes(newRecipes || []);
     });
 
+    const bizUnsub = subscribeToBusiness((biz) => {
+      setBusiness(biz);
+    });
+
     return () => {
       unsubscribe();
       recipesUnsub();
+      bizUnsub();
     };
   }, []);
+
+  const handleSharePortfolio = () => {
+    if (!business?.username) {
+      showToast('No username set in profile', 'error');
+      return;
+    }
+    const url = `${window.location.origin}/portfolio/${business.username}`;
+    navigator.clipboard.writeText(url);
+    showToast('Portfolio link copied! 🔗', 'success');
+  };
 
   const categories = Array.from(new Set([...DEFAULT_CATEGORIES, ...products.map(p => p.category)]));
 
@@ -189,7 +206,12 @@ export default function Products() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fade-in">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div><h1>Product Catalog</h1><p>Visual showcase of your bakery menu</p></div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={18} /> Add Product</button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-outline" onClick={handleSharePortfolio} style={{ gap: 8 }}>
+            <Share size={18} /> <span className="desktop-only">Share Portfolio</span>
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={18} /> Add Product</button>
+        </div>
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' }}>

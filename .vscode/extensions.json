@@ -1,0 +1,12 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "dsznajder.es7-react-js-snippets",
+    "firebase.google-firebase-vscode",
+    "pkief.material-icon-theme",
+    "antfu.vite",
+    "bradlc.vscode-tailwindcss",
+    "christian-kohler.path-intellisense"
+  ]
+}

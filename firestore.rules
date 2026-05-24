@@ -1,73 +1,187 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isSignedIn() {
+
+    // ======================================================
+    // HELPER FUNCTIONS
+    // ======================================================
+
+    function isAuthenticated() {
       return request.auth != null;
     }
-    
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-    
-    function isAdmin() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+
+    function isDocOwner() {
+      return isAuthenticated() && resource.data.uid == request.auth.uid;
     }
 
-    // User Profiles
+    function isCreatingAsOwner() {
+      return isAuthenticated() && request.resource.data.uid == request.auth.uid;
+    }
+
+    function validString(field, minLen, maxLen) {
+      return field is string && field.size() >= minLen && field.size() <= maxLen;
+    }
+
+    function validNumber(field, minVal, maxVal) {
+      return field is number && field >= minVal && field <= maxVal;
+    }
+
+    // ======================================================
+    // USER PROFILES
+    // Only the owner can read/write their own profile doc.
+    // Doc ID = Firebase Auth UID.
+    // ======================================================
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && (isOwner(userId) || isAdmin());
+      allow read:            if isAuthenticated() && request.auth.uid == userId;
+      allow create:          if isAuthenticated() && request.auth.uid == userId;
+      allow update, delete:  if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Subscriptions
+    // ======================================================
+    // SUBSCRIPTIONS
+    // Doc ID = Firebase Auth UID.
+    // ======================================================
     match /subscriptions/{userId} {
-      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
-      allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isAdmin(); 
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Products (Public read, Owner/Admin write)
+    // ======================================================
+    // BUSINESS PROFILE
+    // Public read (storefront branding, menu, username lookup).
+    // Only the business owner can write. Doc ID = owner UID.
+    // ======================================================
+    match /business/{bizId} {
+      allow read:  if true;
+      allow write: if isAuthenticated() && request.auth.uid == bizId;
+    }
+
+    // ======================================================
+    // PRODUCTS
+    // Public read (storefront catalog).
+    // Only the owner (uid field) can create/update/delete.
+    // ======================================================
     match /products/{productId} {
       allow read: if true;
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isCreatingAsOwner()
+                    && validString(request.resource.data.name, 1, 200)
+                    && validNumber(request.resource.data.price, 0, 999999);
+
+      allow update: if isDocOwner()
+                    && validString(request.resource.data.name, 1, 200)
+                    && validNumber(request.resource.data.price, 0, 999999);
+
+      allow delete: if isDocOwner();
     }
 
-    // Orders (Public create, Owner/Admin read/update)
+    // ======================================================
+    // ORDERS
+    // Public create (customer checkout / inquiry-to-order).
+    // Only the business owner (uid field) can read/update/delete.
+    // ======================================================
     match /orders/{orderId} {
-      allow create: if true; 
-      allow read: if true; // Allow public to see order status maybe? Or restrict to owner.
-      // For now, let's allow read if it's the owner or admin
-      // But for public order form, we might need to read the order back after creation.
-      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if request.resource.data.keys().hasAll(['uid', 'status', 'product']);
+
+      allow read:            if isDocOwner();
+      allow update, delete:  if isDocOwner();
     }
-    
-    // Customers (Owner/Admin read/write)
+
+    // ======================================================
+    // CUSTOMERS
+    // Only the business owner (uid field) can access.
+    // ======================================================
     match /customers/{customerId} {
-      allow read, write: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, update, delete: if isDocOwner();
+      allow create:               if isCreatingAsOwner();
     }
 
-    // Expenses
-    match /expenses/{expenseId} {
-      allow read, write: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    // ======================================================
+    // INVENTORY
+    // Only the business owner (uid field) can access.
+    // ======================================================
+    match /inventory/{itemId} {
+      allow read, delete: if isDocOwner();
+
+      allow create: if isCreatingAsOwner()
+                    && validNumber(request.resource.data.stock, 0, 999999)
+                    && validNumber(request.resource.data.minStock, 0, 999999);
+
+      allow update: if isDocOwner();
     }
 
-    // Shopping List
-    match /shoppingList/{itemId} {
-      allow read, write: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-    }
-
-    // Recipes
+    // ======================================================
+    // RECIPES
+    // Only the business owner (uid field) can access.
+    // ======================================================
     match /recipes/{recipeId} {
-      allow read, write: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read, delete: if isDocOwner();
+
+      allow create: if isCreatingAsOwner()
+                    && validString(request.resource.data.name, 1, 200);
+
+      allow update: if isDocOwner();
     }
 
-    // Business Profile
-    match /business/{bizId} {
+    // ======================================================
+    // EXPENSES
+    // Only the business owner (uid field) can access.
+    // ======================================================
+    match /expenses/{expenseId} {
+      allow read, delete: if isDocOwner();
+
+      allow create: if isCreatingAsOwner()
+                    && validNumber(request.resource.data.amount, 0, 9999999);
+
+      allow update: if isDocOwner();
+    }
+
+    // ======================================================
+    // SHOPPING LIST
+    // Only the business owner (uid field) can access.
+    // ======================================================
+    match /shoppingList/{itemId} {
+      allow read, delete: if isDocOwner();
+      allow create:       if isCreatingAsOwner();
+      allow update:       if isDocOwner();
+    }
+
+    // ======================================================
+    // STORIES
+    // Public read (portfolio / public page).
+    // Only the owner can write.
+    // ======================================================
+    match /stories/{storyId} {
       allow read: if true;
-      allow write: if isSignedIn();
+
+      allow create:           if isCreatingAsOwner();
+      allow update, delete:   if isDocOwner();
+    }
+
+    // ======================================================
+    // NOTIFICATIONS
+    // Only the owner (uid field) can access.
+    // ======================================================
+    match /notifications/{notifId} {
+      allow read, update, delete: if isDocOwner();
+      allow create:               if isCreatingAsOwner();
+    }
+
+    // ======================================================
+    // INQUIRIES
+    // Public create (customer sends inquiry from storefront).
+    // Only the business owner can read/update/delete.
+    // ======================================================
+    match /inquiries/{inqId} {
+      allow create: if request.resource.data.keys().hasAll(['uid']);
+
+      allow read, update, delete: if isDocOwner();
+    }
+
+    // ======================================================
+    // BLOCK EVERYTHING ELSE
+    // ======================================================
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

@@ -6,7 +6,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { subscribeToOrders, subscribeToExpenses } from '../services/db';
 import { useAuth } from '../context/AuthContext';
-import { formatCurrency } from '../utils/date';
+import { formatCurrency, toISODate } from '../utils/date';
 import { calculateTotalRevenue } from '../utils/finance';
 import { Skeleton, EmptyState, triggerHaptic } from '../components/iOS';
 
@@ -148,9 +148,9 @@ export default function Analytics() {
                       transition={{ type: 'spring', damping: 20, stiffness: 100, delay: i * 0.05 }}
                       style={{ 
                         width: '100%', 
-                        background: i === 6 ? 'linear-gradient(to top, var(--accent), #D4714A)' : 'linear-gradient(to top, var(--accent-lt), var(--cream))', 
+                        background: i === 6 ? 'linear-gradient(to top, var(--accent), #8A3D4A)' : 'linear-gradient(to top, var(--accent-lt), var(--cream))', 
                         borderRadius: '10px 10px 4px 4px',
-                        boxShadow: i === 6 ? '0 4px 12px rgba(212,113,74,0.3)' : 'none'
+                        boxShadow: i === 6 ? '0 4px 12px rgba(181,96,106,0.3)' : 'none'
                       }} 
                     />
                     <AnimatePresence>
@@ -199,7 +199,7 @@ export default function Analytics() {
                   </div>
                 </div>
               ))}
-              <div style={{ marginTop: 12, padding: 16, background: 'rgba(212,113,74,0.05)', borderRadius: 16, border: '1px dashed var(--accent-lt)' }}>
+              <div style={{ marginTop: 12, padding: 16, background: 'rgba(181,96,106,0.05)', borderRadius: 16, border: '1px dashed var(--accent-lt)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent)', marginBottom: 4 }}>
                   <Star size={14} fill="var(--accent)" />
                   <span style={{ fontSize: '0.75rem', fontWeight: 800 }}>BEST SELLER</span>
@@ -218,28 +218,27 @@ export default function Analytics() {
          {expenses.length === 0 ? (
             <EmptyState icon="💸" title="No expense records" subtitle="Categorize your spending to optimize margins." />
          ) : (
-           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
-             {['Ingredients', 'Packaging', 'Marketing', 'Rent', 'Staff', 'Other'].map(cat => {
-                const catTotal = expenses.filter(e => e.category === cat).reduce((s, e) => s + Number(e.amount), 0);
-                if (catTotal === 0) return null;
-                const perc = Math.round((catTotal / totalExpenses) * 100);
-                return (
-                  <div key={cat} className="card" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: 20 }}>
-                    <div style={{ color: 'var(--text3)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>{cat}</div>
-                    <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{formatCurrency(catTotal)}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
-                       <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 2 }}>
-                         <div style={{ width: `${perc}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
-                       </div>
-                       <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)' }}>{perc}%</span>
-                    </div>
-                  </div>
-                );
-             })}
-           </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 20 }}>
+              {Array.from(new Set(expenses.map(e => e.category))).filter(Boolean).map(cat => {
+                 const catTotal = expenses.filter(e => e.category === cat).reduce((s, e) => s + Number(e.amount), 0);
+                 if (catTotal === 0) return null;
+                 const perc = Math.round((catTotal / totalExpenses) * 100);
+                 return (
+                   <div key={cat} className="card" style={{ background: 'var(--bg2)', border: '1px solid var(--border)', padding: 20 }}>
+                     <div style={{ color: 'var(--text3)', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: 8 }}>{cat}</div>
+                     <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>{formatCurrency(catTotal)}</div>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}>
+                        <div style={{ flex: 1, height: 4, background: 'var(--border)', borderRadius: 2 }}>
+                          <div style={{ width: `${perc}%`, height: '100%', background: 'var(--accent)', borderRadius: 2 }} />
+                        </div>
+                        <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--accent)' }}>{perc}%</span>
+                     </div>
+                   </div>
+                 );
+              })}
+            </div>
          )}
       </div>
     </motion.div>
   );
 }
-

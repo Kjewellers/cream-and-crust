@@ -94,3 +94,33 @@ export const formatOrderNumber = (order, allOrders = []) => {
   const hash = order.id ? order.id.replace(/\D/g, '').slice(0, 3) : '001';
   return `#${String(hash || '001').padStart(3, '0')}`;
 };
+
+export const toISODate = (val) => {
+  if (!val) return '';
+  try {
+    let date;
+    
+    // 1. Handle Firestore Timestamp
+    if (typeof val.toDate === 'function') {
+      date = val.toDate();
+    } else if (val.seconds !== undefined) {
+      date = new Date(val.seconds * 1000);
+    } 
+    // 2. Handle Date objects
+    else if (val instanceof Date) {
+      date = val;
+    }
+    // 3. Handle strings/numbers
+    else {
+      date = new Date(val);
+    }
+
+    if (isNaN(date.getTime())) {
+      return String(val);
+    }
+
+    return date.toISOString().split('T')[0];
+  } catch (err) {
+    return String(val);
+  }
+};

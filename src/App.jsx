@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, NavLink, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, ShoppingBag, CalendarDays, Users, Package, BookOpen, CreditCard, BarChart3, Settings, Menu, Database, WifiOff, LogOut, Lock, Sun, Moon, Receipt, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, CalendarDays, Users, Package, BookOpen, CreditCard, BarChart3, Settings, Menu, Database, WifiOff, LogOut, Lock, Sun, Moon, Receipt, ShoppingCart, Plus, MoreHorizontal, Bell } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import Orders from './pages/Orders';
 import Products from './pages/Products';
@@ -16,27 +16,38 @@ import Expenses from './pages/Expenses';
 import ShoppingList from './pages/ShoppingList';
 import Login from './pages/Login';
 import SetupAdmin from './pages/SetupAdmin';
-import PublicOrderForm from './pages/PublicOrderForm';
+ import PublicOrderForm from './pages/PublicOrderForm';
 import Portfolio from './pages/Portfolio';
+import MenuDashboard from './pages/MenuDashboard';
+import CreateMenu from './pages/CreateMenu';
+import MenuCategories from './pages/MenuCategories';
+import MenuProducts from './pages/MenuProducts';
+import MenuThemeCustomizer from './pages/MenuThemeCustomizer';
+import MenuLivePreview from './pages/MenuLivePreview';
+import PublishedMenu from './pages/PublishedMenu';
+import OnboardingModal from './components/OnboardingModal';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { subscribeToOrders } from './services/db';
-import { ToastContainer, Loader2 } from './components/iOS';
+import { subscribeToOrders, subscribeToInventory } from './services/db';
+import { ToastContainer, Loader2, showToast } from './components/iOS';
 import { ConfettiCanvas, SuccessBurstOverlay, FloatingRewardLayer } from './components/DopamineKit';
+import PremiumAppTour from './components/PremiumAppTour';
 import './index.css';
 
-
-
 function Sidebar({ open, onClose, theme, toggleTheme }) {
-  const { isAdmin, userRole, logout } = useAuth();
+  const { isAdmin, userRole, logout, currentUser } = useAuth();
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
+    if (!currentUser) { setPendingCount(0); return; }
     const unsubscribe = subscribeToOrders((orders) => {
-      const pending = orders.filter(o => ['new', 'confirmed', 'in-progress'].includes(o.status)).length;
+      const pending = orders.filter(o => {
+        const s = String(o.status || 'inquiry').toLowerCase();
+        return ['inquiry', 'confirmed', 'baking', 'ready', 'new'].includes(s);
+      }).length;
       setPendingCount(pending);
-    });
+    }, currentUser.uid);
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
   const adminNavItems = [
     { section: 'MAIN', items: [
@@ -46,6 +57,7 @@ function Sidebar({ open, onClose, theme, toggleTheme }) {
     ]},
     { section: 'BUSINESS', items: [
       { to: '/products', icon: Package, label: 'Products' },
+      { to: '/menu-builder', icon: Menu, label: 'Menu Builder' },
       { to: '/customers', icon: Users, label: 'Customers' },
       { to: '/payments', icon: CreditCard, label: 'Payments' },
     ]},
@@ -131,34 +143,161 @@ function Sidebar({ open, onClose, theme, toggleTheme }) {
 }
 
 function MobileHeader({ onMenuClick, theme, toggleTheme }) {
+  const { currentUser } = useAuth();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (!currentUser) { setPendingCount(0); return; }
+    const unsub = subscribeToOrders((orders) => {
+      const pending = orders.filter(o => {
+        const s = String(o.status || 'inquiry').toLowerCase();
+        return ['inquiry', 'confirmed', 'baking', 'ready', 'new'].includes(s);
+      }).length;
+      setPendingCount(pending);
+    }, currentUser.uid);
+    return () => unsub();
+  }, [currentUser]);
+
+  const handleBellClick = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('trigger-haptic', { detail: 'light' }));
+    } catch(e){}
+    import('./components/iOS').then(({ showToast }) => {
+      showToast(
+        pendingCount > 0
+          ? `${pendingCount} active order${pendingCount > 1 ? 's' : ''} need attention! 🥐`
+          : 'All orders up to date ✅',
+        pendingCount > 0 ? 'info' : 'success'
+      );
+    });
+  };
+
+  const initials = currentUser?.displayName?.[0]?.toUpperCase() || currentUser?.email?.[0]?.toUpperCase() || '👤';
+
   return (
-    <div className="mobile-header">
-      <div className="mobile-header-inner">
-        <button className="hamburger" onClick={onMenuClick} style={{ color: 'var(--accent)' }}>
-          <Menu size={26} strokeWidth={2.5} />
+    <div className="mobile-header" style={{
+      boxShadow: 'none',
+      borderBottom: '1px solid rgba(74, 59, 50, 0.05)',
+      background: '#FFFFFF',
+    }}>
+      <div className="mobile-header-inner" style={{ padding: '0 16px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+        <button 
+          className="hamburger" 
+          onClick={onMenuClick} 
+          style={{ 
+            color: 'var(--text)', 
+            background: 'none',
+            padding: 0,
+            width: 'auto',
+            height: 'auto',
+            border: 'none',
+            cursor: 'pointer'
+          }}
+        >
+          <Menu size={24} strokeWidth={2} />
         </button>
-        <span style={{ 
-          fontFamily: 'var(--font)', 
-          fontWeight: 700, 
-          fontSize: '17px', 
-          color: 'var(--text)', 
-          letterSpacing: '-0.02em',
-          position: 'absolute',
-          left: '50%',
-          transform: 'translateX(-50%)',
+        
+        <div style={{ 
           display: 'flex',
           alignItems: 'center',
-          gap: '8px'
+          gap: '8px',
+          position: 'absolute',
+          left: '50%',
+          transform: 'translateX(-50%)'
         }}>
-          <img src="/logo.png" alt="Logo" style={{ height: '24px', objectFit: 'contain', borderRadius: '4px' }} onError={(e) => e.target.style.display='none'} />
-          Cream & Crust
-        </span>
-        <button
-          onClick={toggleTheme}
-          style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--cream)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text2)', flexShrink: 0 }}
-        >
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
+          <div style={{
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #FFF1F2 0%, #FFE4E6 100%)',
+            border: '1px solid rgba(181, 96, 106, 0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '16px'
+          }}>🧁</div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.15 }}>
+            <span style={{ 
+              fontFamily: 'var(--font)', 
+              fontWeight: 900, 
+              fontSize: '15px', 
+              color: 'var(--text)', 
+              letterSpacing: '-0.02em'
+            }}>Cream &amp; Crust</span>
+            <span style={{ 
+              fontSize: '0.62rem', 
+              fontWeight: 700, 
+              color: 'var(--text3)',
+              letterSpacing: '0.01em'
+            }}>Let's bake happiness! 🧁</span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            onClick={handleBellClick}
+            style={{ 
+              width: 34, 
+              height: 34, 
+              borderRadius: '50%', 
+              background: 'none', 
+              border: 'none', 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              color: 'var(--text)',
+              position: 'relative'
+            }}
+          >
+            <Bell size={21} strokeWidth={2} />
+            {pendingCount > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: -1,
+                right: -1,
+                background: '#E15A3E',
+                color: 'white',
+                fontSize: '0.58rem',
+                fontWeight: 900,
+                padding: '1px 4.5px',
+                borderRadius: 99,
+                border: '1.5px solid white',
+                boxShadow: '0 2px 4px rgba(225,90,62,0.15)',
+                minWidth: 16,
+                textAlign: 'center',
+              }}>{pendingCount > 99 ? '99+' : pendingCount}</span>
+            )}
+          </button>
+
+          <div style={{ position: 'relative', width: 32, height: 32, cursor: 'pointer' }} onClick={() => window.location.href='/profile'}>
+            {currentUser?.photoURL ? (
+              <img 
+                src={currentUser.photoURL}
+                alt="Avatar"
+                style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover', border: '1.5px solid rgba(181, 96, 106, 0.15)' }}
+              />
+            ) : (
+              <div style={{
+                width: '100%', height: '100%', borderRadius: '50%',
+                background: 'linear-gradient(135deg, var(--accent), #8A3D4A)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontWeight: 900, fontSize: '0.8rem',
+                border: '1.5px solid rgba(181,96,106,0.2)',
+              }}>{initials}</div>
+            )}
+            <span style={{
+              position: 'absolute',
+              bottom: 0,
+              right: 0,
+              width: 8,
+              height: 8,
+              background: '#10B981',
+              borderRadius: '50%',
+              border: '1.5px solid white'
+            }} />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -167,28 +306,173 @@ function MobileHeader({ onMenuClick, theme, toggleTheme }) {
 function BottomNav() {
   const { isAdmin, userRole } = useAuth();
   const isBaker = userRole === 'baker';
-  
-  const items = (isAdmin || isBaker) ? [
-    { to: '/', icon: LayoutDashboard, label: 'Home' },
-    { to: '/orders', icon: ShoppingBag, label: 'Orders' },
-    { to: '/calendar', icon: CalendarDays, label: 'Schedule' },
-    { to: '/products', icon: Package, label: 'Products' },
-    { to: '/expenses', icon: Receipt, label: 'Expenses' },
-  ] : [
-    { to: '/', icon: Package, label: 'Shop' },
-    { to: '/orders', icon: ShoppingBag, label: 'Orders' },
-    { to: '/profile', icon: Settings, label: 'Profile' },
-  ];
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  if (!(isAdmin || isBaker)) {
+    const customerItems = [
+      { to: '/', icon: Package, label: 'Shop' },
+      { to: '/orders', icon: ShoppingBag, label: 'Orders' },
+      { to: '/profile', icon: Settings, label: 'Profile' },
+    ];
+    return (
+      <nav className="mobile-only" style={{
+        position: 'fixed',
+        bottom: 0, left: 0, right: 0,
+        background: 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderTop: '1px solid rgba(0, 0, 0, 0.08)',
+        zIndex: 999,
+        paddingBottom: 'env(safe-area-inset-bottom, 12px)',
+        paddingTop: 8,
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
+          {customerItems.map(item => (
+            <NavLink 
+              key={item.to} 
+              to={item.to} 
+              end 
+              style={({ isActive }) => ({
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                textDecoration: 'none',
+                color: isActive ? '#B5606A' : '#9CA3AF',
+                transition: 'all 0.3s ease',
+              })}
+            >
+              <item.icon size={22} />
+              <span style={{ fontSize: '0.7rem', fontWeight: 600 }}>{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </nav>
+    );
+  }
+
+  const handleFabClick = () => {
+    try { window.dispatchEvent(new CustomEvent('trigger-haptic', { detail: 'light' })); } catch(e){}
+    
+    if (location.pathname === '/orders') {
+      window.dispatchEvent(new CustomEvent('open-new-order-modal'));
+    } else {
+      navigate('/orders?new=true');
+    }
+  };
 
   return (
-    <nav className="bottom-nav">
-      <div className="bottom-nav-inner">
-        {items.map(item => (
-          <NavLink key={item.to} to={item.to} end className={({ isActive }) => `bottom-nav-item ${isActive ? 'active' : ''}`}>
-            <item.icon />
-            <span>{item.label}</span>
-          </NavLink>
-        ))}
+    <nav className="mobile-only" style={{
+      position: 'fixed',
+      bottom: 0, left: 0, right: 0,
+      background: 'rgba(255, 255, 255, 0.95)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+      boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.03)',
+      zIndex: 999,
+      paddingBottom: 'env(safe-area-inset-bottom, 8px)',
+      paddingTop: 8,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', position: 'relative', padding: '0 8px' }}>
+        
+        <NavLink 
+          to="/" 
+          end 
+          style={({ isActive }) => ({
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            width: 56,
+            textDecoration: 'none',
+            color: isActive ? '#B5606A' : '#9CA3AF',
+          })}
+        >
+          <LayoutDashboard size={22} />
+          <span style={{ fontSize: '0.65rem', fontWeight: 700 }}>Home</span>
+        </NavLink>
+
+        <NavLink 
+          to="/orders" 
+          end 
+          style={({ isActive }) => ({
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            width: 56,
+            textDecoration: 'none',
+            color: isActive ? '#B5606A' : '#9CA3AF',
+          })}
+        >
+          <ShoppingBag size={22} />
+          <span style={{ fontSize: '0.65rem', fontWeight: 700 }}>Orders</span>
+        </NavLink>
+
+        <div style={{ position: 'relative', width: 60, height: 44, display: 'flex', justifyContent: 'center' }}>
+          <button 
+            onClick={handleFabClick}
+            style={{
+              position: 'absolute',
+              top: -24,
+              width: 50,
+              height: 50,
+              borderRadius: '50%',
+              background: '#B5606A',
+              color: 'white',
+              boxShadow: '0 6px 16px rgba(181, 96, 106, 0.35)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '4px solid white',
+              zIndex: 1000,
+            }}
+          >
+            <Plus size={24} strokeWidth={3} />
+          </button>
+        </div>
+
+        <NavLink 
+          to="/products" 
+          end 
+          style={({ isActive }) => ({
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            width: 56,
+            textDecoration: 'none',
+            color: isActive ? '#B5606A' : '#9CA3AF',
+          })}
+        >
+          <Package size={22} />
+          <span style={{ fontSize: '0.65rem', fontWeight: 700 }}>Products</span>
+        </NavLink>
+
+        <NavLink 
+          to="/profile" 
+          end 
+          style={({ isActive }) => ({
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+            width: 56,
+            textDecoration: 'none',
+            color: isActive ? '#B5606A' : '#9CA3AF',
+          })}
+        >
+          <MoreHorizontal size={22} />
+          <span style={{ fontSize: '0.65rem', fontWeight: 700 }}>More</span>
+        </NavLink>
+
       </div>
     </nav>
   );
@@ -209,6 +493,7 @@ function AnimatedRoutes() {
         {(isAdmin || isBaker) ? (
           <>
             {renderRoute("/", <Dashboard />)}
+
             {renderRoute("/orders", <Orders />)}
             {renderRoute("/calendar", <Calendar />)}
             {renderRoute("/products", <Products />)}
@@ -219,7 +504,13 @@ function AnimatedRoutes() {
             {renderRoute("/analytics", <Analytics />)}
             {renderRoute("/expenses", <Expenses />)}
             {renderRoute("/shopping-list", <ShoppingList />)}
-            { renderRoute("/profile", <Profile />)}
+            {renderRoute("/profile", <Profile />)}
+            {renderRoute("/menu-builder", <MenuDashboard />)}
+            {renderRoute("/menu-builder/create", <CreateMenu />)}
+            {renderRoute("/menu-builder/categories", <MenuCategories />)}
+            {renderRoute("/menu-builder/products", <MenuProducts />)}
+            {renderRoute("/menu-builder/theme", <MenuThemeCustomizer />)}
+            {renderRoute("/menu-builder/preview", <MenuLivePreview />)}
           </>
         ) : (
           <>
@@ -228,6 +519,9 @@ function AnimatedRoutes() {
             { renderRoute("/profile", <Profile />)}
           </>
         )}
+        {renderRoute("/portfolio/:username", <Portfolio />)}
+        {renderRoute("/menu/:username", <PublishedMenu />)}
+        {renderRoute("/order/:username", <PublicOrderForm />)}
         {renderRoute("/setup-admin", <SetupAdmin />)}
         <Route path="*" element={<div style={{ padding: 40, textAlign: 'center' }}><h2>404 - Page Not Found</h2><button className="btn btn-primary" onClick={() => window.location.href='/'} style={{ marginTop: 20 }}>Go Home</button></div>} />
       </Routes>
@@ -353,20 +647,68 @@ function MainLayout() {
   }, []);
 
   const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
-  const { currentUser, userRole, loading: authLoading } = useAuth();
+  const { 
+    currentUser, userRole, onboardingCompleted, business, userDetails, 
+    finishOnboarding, hasSeenTourV1, loading: authLoading 
+  } = useAuth();
+  
+  const [localHasSeenTour, setLocalHasSeenTour] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const alertedItemsRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!currentUser) {
+      alertedItemsRef.current.clear();
+      return;
+    }
+
+    const unsubscribe = subscribeToInventory((items) => {
+      items.forEach((item) => {
+        const isLow = Number(item.stock) <= Number(item.minStock || 0);
+        if (isLow) {
+          if (!alertedItemsRef.current.has(item.id)) {
+            alertedItemsRef.current.add(item.id);
+            showToast(`⚠️ Low Stock: "${item.item}" is down to ${item.stock} ${item.unit}!`, 'error');
+            try {
+              window.dispatchEvent(new CustomEvent('trigger-haptic', { detail: 'warning' }));
+            } catch(e){}
+          }
+        } else {
+          alertedItemsRef.current.delete(item.id);
+        }
+      });
+    }, null, currentUser.uid);
+
+    return () => unsubscribe();
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser) {
+      const key = `cc_tour_v1_seen_${currentUser.uid}`;
+      setLocalHasSeenTour(localStorage.getItem(key) === 'true');
+    } else {
+      setLocalHasSeenTour(false);
+      setShowTutorial(false);
+    }
+  }, [currentUser]);
+
+  const handleTourComplete = () => {
+    if (currentUser) {
+      localStorage.setItem(`cc_tour_v1_seen_${currentUser.uid}`, 'true');
+      setLocalHasSeenTour(true);
+    }
+  };
+
   const location = useLocation();
   
-  const isPublicRoute = location.pathname.startsWith('/order/') || location.pathname.startsWith('/portfolio/');
+  const isPublicRoute = location.pathname.startsWith('/order/') || location.pathname.startsWith('/portfolio/') || location.pathname.startsWith('/menu/');
 
-  return (
-    <AnimatePresence mode="wait">
-      {showSplash && <SplashScreen key="splash" />}
-      
-      {isPublicRoute ? (
+  const content = isPublicRoute ? (
         <motion.div key="public" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
           <Routes>
             <Route path="/order/:username" element={<PublicOrderForm />} />
             <Route path="/portfolio/:username" element={<Portfolio />} />
+            <Route path="/menu/:username" element={<PublishedMenu />} />
           </Routes>
         </motion.div>
       ) : !currentUser && !authLoading ? (
@@ -381,13 +723,35 @@ function MainLayout() {
             <AnimatedRoutes />
           </main>
           <BottomNav />
+          {currentUser && !localHasSeenTour && !hasSeenTourV1 && onboardingCompleted && (
+            <PremiumAppTour onComplete={handleTourComplete} />
+          )}
+          {currentUser && !onboardingCompleted && !showTutorial && (
+            <OnboardingModal 
+              user={{ ...currentUser, ...userDetails }} 
+              business={business} 
+              onComplete={() => setShowTutorial(true)} 
+            />
+          )}
+          {currentUser && !onboardingCompleted && showTutorial && !localHasSeenTour && (
+            <PremiumAppTour onComplete={handleTourComplete} />
+          )}
         </motion.div>
       ) : (
         <div key="loading" style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Loader2 className="animate-spin" color="var(--accent)" />
         </div>
-      )}
-    </AnimatePresence>
+      );
+
+  return (
+    <>
+      <AnimatePresence>
+        {showSplash && <SplashScreen key="splash" />}
+      </AnimatePresence>
+      <AnimatePresence mode="wait">
+        {content}
+      </AnimatePresence>
+    </>
   );
 }
 

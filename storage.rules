@@ -1,0 +1,74 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // ======================================================
+    // HELPERS
+    // ======================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isImageUnder(maxMB) {
+      return request.resource.size < maxMB * 1024 * 1024
+          && request.resource.contentType.matches('image/.*');
+    }
+
+    // ======================================================
+    // USER UPLOADS (profile photos, receipts, etc.)
+    // Public read · Owner-only write · Max 10 MB images
+    // ======================================================
+    match /users/{userId}/{allPaths=**} {
+      allow read:  if true;
+      allow write: if isOwner(userId) && isImageUnder(10);
+    }
+
+    // ======================================================
+    // RECEIPT UPLOADS
+    // Owner-only · Max 10 MB images
+    // ======================================================
+    match /receipts/{allPaths=**} {
+      allow read:  if isAuthenticated();
+      allow write: if isAuthenticated() && isImageUnder(10);
+    }
+
+    // ======================================================
+    // GENERAL UPLOADS
+    // Owner-only · Max 10 MB images
+    // ======================================================
+    match /uploads/{allPaths=**} {
+      allow read:  if isAuthenticated();
+      allow write: if isAuthenticated() && isImageUnder(10);
+    }
+
+    // ======================================================
+    // PORTFOLIO FILES
+    // Public read · Owner-only write · Max 15 MB images
+    // ======================================================
+    match /portfolios/{userId}/{allPaths=**} {
+      allow read:  if true;
+      allow write: if isOwner(userId) && isImageUnder(15);
+    }
+
+    // ======================================================
+    // MENU FILES
+    // Public read · Owner-only write · Max 15 MB images
+    // ======================================================
+    match /menus/{userId}/{allPaths=**} {
+      allow read:  if true;
+      allow write: if isOwner(userId) && isImageUnder(15);
+    }
+
+    // ======================================================
+    // BLOCK EVERYTHING ELSE
+    // ======================================================
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

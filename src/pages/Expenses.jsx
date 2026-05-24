@@ -5,7 +5,7 @@ import { subscribeToExpenses, addExpenseToDB, deleteExpenseFromDB, uploadReceipt
 import { useAuth } from '../context/AuthContext';
 import { showToast, triggerHaptic } from '../components/iOS';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
-import { formatCurrency } from '../utils/date';
+import { formatCurrency, toISODate } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
@@ -51,7 +51,8 @@ export default function Expenses() {
   const filtered = useMemo(() => {
     return expenses.filter(e => {
       const catOk   = filterCat === 'All' || e.category === filterCat;
-      const monthStr = e.date?.slice(0, 7) || e.createdAt?.slice(0, 7);
+      const dStr    = toISODate(e.date || e.createdAt);
+      const monthStr = dStr.slice(0, 7);
       const monthOk = !filterMonth || monthStr === filterMonth;
       return catOk && monthOk;
     });
@@ -65,7 +66,7 @@ export default function Expenses() {
     d.setMonth(d.getMonth() - 1);
     const pmStr = d.toISOString().slice(0, 7);
     return expenses
-      .filter(e => (e.date?.slice(0, 7) || e.createdAt?.slice(0, 7)) === pmStr)
+      .filter(e => toISODate(e.date || e.createdAt).slice(0, 7) === pmStr)
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   }, [expenses, filterMonth]);
 
@@ -89,41 +90,65 @@ export default function Expenses() {
     };
   }, [filtered]);
 
-  const handleAdd = async (ev) => {
+  const handleAdd = (ev) => {
     ev.preventDefault();
     if (!form.amount || !form.description) return showToast('Fill all fields', 'error');
     setSubmitting(true);
     triggerHaptic('medium');
-    try {
-      let receiptUrl = '';
-      if (receiptFile) {
-        try {
-          receiptUrl = await uploadReceiptToStorage(receiptFile);
-        } catch (error) {
-          console.error("Receipt upload failed:", error);
-          showToast('Receipt upload failed, saving without it.', 'info');
+
+    const tempId = `temp-${Date.now()}`;
+    
+    // 1. Prepare Optimistic Data
+    const optimisticExpense = {
+      id: tempId,
+      ...form,
+      amount: Number(form.amount),
+      userId: currentUser.uid,
+      createdAt: new Date().toISOString(),
+      isOptimistic: true
+    };
+
+    // 2. Update Local State Immediately
+    setExpenses(prev => [optimisticExpense, ...prev]);
+
+    // 3. Close Modal Immediately
+    setForm(emptyForm);
+    setReceiptFile(null);
+    setShowModal(false);
+    triggerHaptic('success');
+    triggerConfetti(window.innerWidth / 2, window.innerHeight / 2, 50);
+    triggerFloatingReward('💰 Saved!', window.innerWidth / 2, window.innerHeight / 2);
+
+    // 4. Background Task
+    const performSave = async () => {
+      try {
+        let receiptUrl = '';
+        if (receiptFile) {
+          try {
+            receiptUrl = await uploadReceiptToStorage(receiptFile);
+          } catch (error) {
+            console.error("Receipt upload failed:", error);
+            showToast('Receipt upload failed, saving without it.', 'info');
+          }
         }
+        
+        const finalData = { ...optimisticExpense, receiptUrl };
+        delete finalData.id;
+        delete finalData.isOptimistic;
+
+        await addExpenseToDB(finalData);
+        showToast('Saved ✓', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Save failed, try again', 'error');
+        // Revert local state
+        setExpenses(prev => prev.filter(e => e.id !== tempId));
+      } finally {
+        setSubmitting(false);
       }
-      await addExpenseToDB({ 
-        ...form, 
-        amount: Number(form.amount),
-        receiptUrl,
-        userId: currentUser.uid,
-        createdAt: new Date().toISOString()
-      });
-      showToast('Expense recorded ✅', 'success');
-      setForm(emptyForm);
-      setReceiptFile(null);
-      setShowModal(false);
-      triggerHaptic('success');
-      // Dopamine: coin rain from center
-      triggerConfetti(window.innerWidth / 2, window.innerHeight / 2, 50);
-      triggerFloatingReward('💰 Saved!', window.innerWidth / 2, window.innerHeight / 2);
-    } catch (err) {
-      showToast('Failed to save expense', 'error');
-    } finally {
-      setSubmitting(false);
-    }
+    };
+
+    performSave();
   };
 
   const handleDelete = async (id) => {
@@ -188,6 +213,7 @@ export default function Expenses() {
           {filtered.length > 0 ? (
             <div style={{ width: '100%', maxWidth: 160 }}>
               <Doughnut 
+                key={`${filterMonth}-${filtered.length}`}
                 data={chartData} 
                 options={{ 
                   cutout: '70%', 
@@ -340,6 +366,7 @@ export default function Expenses() {
                       <span style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--accent)' }}>₹</span>
                       <input 
                         type="number" 
+                        inputMode="decimal"
                         required 
                         autoFocus
                         placeholder="0" 

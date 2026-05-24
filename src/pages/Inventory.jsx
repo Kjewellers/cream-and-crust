@@ -282,7 +282,7 @@ export default function Inventory() {
                       <PressButton 
                         onClick={() => handleAddToShoppingList(item)}
                         disabled={addingToShop === item.id}
-                        style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(212,113,74,0.1)', color: 'var(--accent)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(181,96,106,0.1)', color: 'var(--accent)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                       >
                         {addingToShop === item.id ? <Loader2 size={18} className="animate-spin" /> : <ShoppingCart size={18} />}
                       </PressButton>
@@ -313,11 +313,11 @@ export default function Inventory() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div className="form-group">
                       <label className="form-label">Current Stock</label>
-                      <input type="number" step="0.01" required value={addForm.stock} onChange={e => setAddForm({...addForm, stock: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
+                      <input type="number" inputMode="decimal" step="0.01" required value={addForm.stock} onChange={e => setAddForm({...addForm, stock: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Min Alert</label>
-                      <input type="number" step="0.01" required value={addForm.minStock} onChange={e => setAddForm({...addForm, minStock: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
+                      <input type="number" inputMode="decimal" step="0.01" required value={addForm.minStock} onChange={e => setAddForm({...addForm, minStock: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
                     </div>
                   </div>
 
@@ -345,7 +345,7 @@ export default function Inventory() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div className="form-group">
                       <label className="form-label">Initial Cost (₹)</label>
-                      <input type="number" placeholder="0" value={addForm.cost} onChange={e => setAddForm({...addForm, cost: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
+                      <input type="number" inputMode="decimal" placeholder="0" value={addForm.cost} onChange={e => setAddForm({...addForm, cost: e.target.value})} style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Vendor</label>

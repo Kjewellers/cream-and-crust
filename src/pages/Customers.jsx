@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Phone, MessageCircle, Star, Users, Clock, RefreshCw, Download, Trash2 } from 'lucide-react';
-import { subscribeToCustomers, subscribeToOrders, deleteCustomerFromDB } from '../services/db';
+import { Search, Phone, MessageCircle, Star, Users, Clock, RefreshCw, Download, Trash2, Edit2, X } from 'lucide-react';
+import { subscribeToCustomers, subscribeToOrders, deleteCustomerFromDB, updateCustomerInDB } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatCurrency } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
-import { Skeleton, showToast, triggerHaptic } from '../components/iOS';
+import { Skeleton, showToast, triggerHaptic, BottomSheet } from '../components/iOS';
+import { motion, AnimatePresence } from 'framer-motion';
+import { modalVariants } from '../utils/animations';
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
@@ -12,6 +14,10 @@ export default function Customers() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [editForm, setEditForm] = useState({ name: '', phone: '', address: '', instagram: '' });
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -40,7 +46,55 @@ export default function Customers() {
     return () => { unsubCust(); unsubOrders(); };
   }, [currentUser]);
 
-  // Build per-customer stats from real orders
+  const handleEditClick = (c) => {
+    setEditingCustomer(c);
+    setEditForm({
+      name: c.name || '',
+      phone: c.phone || '',
+      address: c.address || '',
+      instagram: c.instagram || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveCustomer = (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    
+    // 1. Prepare Optimistic Data
+    const optimisticCustomer = {
+      ...editingCustomer,
+      ...editForm,
+      userId: currentUser.uid
+    };
+
+    // 2. Update Local State Immediately
+    setCustomers(prev => prev.map(c => c.id === editingCustomer.id ? optimisticCustomer : c));
+
+    // 3. Close Modal Immediately
+    setShowEditModal(false);
+    triggerHaptic('success');
+
+    // 4. Background Task
+    const performSave = async () => {
+      try {
+        await updateCustomerInDB(editingCustomer.id, {
+          ...editForm,
+          userId: currentUser.uid
+        });
+        showToast('Saved ✓', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Save failed, try again', 'error');
+        // Revert local state (subscription will handle it usually, but for consistency...)
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    performSave();
+  };
+
   const handleDeleteCustomer = async (c) => {
     if (window.confirm(`Are you sure you want to delete ${c.name || 'this customer'}?`)) {
       try {
@@ -56,13 +110,11 @@ export default function Customers() {
   const customerStats = React.useMemo(() => {
     const stats = {};
     orders.forEach(o => {
-      // Match by customer name (encrypted data is already decrypted at this point)
       const cName = typeof o.customer === 'object'
         ? (o.customer?.name || '')
         : (o.customerName || o.customer || '');
       const phone = o.phone || '';
 
-      // Try to find matching customer by name or phone
       const matchedCust = customers.find(c => {
         const nameA = String(c.name || '').trim().toLowerCase();
         const nameB = String(cName || '').trim().toLowerCase();
@@ -79,7 +131,6 @@ export default function Customers() {
       const amt = Number(o.total || o.totalAmount || 0);
       stats[key].totalSpent += amt;
 
-      // Track most recent delivery date
       const dDate = o.deliveryDate || o.date || o.createdAt;
       if (dDate) {
         const d = new Date(typeof dDate === 'object' && dDate.seconds ? dDate.seconds * 1000 : dDate);
@@ -114,7 +165,6 @@ export default function Customers() {
     const totalSpent = st.totalSpent || c.totalSpent || 0;
     const lastOrderDate = st.lastOrderDate || c.lastOrder || null;
     
-    // Pro Features: CRM Tags
     const isVIP = totalOrders >= 3;
     const isChurning = lastOrderDate && (new Date() - new Date(lastOrderDate)) > (60 * 24 * 60 * 60 * 1000); // 60 days
     const isBigSpender = totalSpent > 5000;
@@ -132,6 +182,32 @@ export default function Customers() {
   const vipCount = enriched.filter(c => c.isVIP).length;
   const churnCount = enriched.filter(c => c.isChurning).length;
 
+  const editFormContent = (
+    <form onSubmit={handleSaveCustomer}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="form-group">
+          <label className="form-label">Full Name</label>
+          <input required value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Phone Number</label>
+          <input required value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} maxLength={10} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Delivery Address</label>
+          <textarea value={editForm.address} onChange={e => setEditForm({ ...editForm, address: e.target.value })} rows={2} />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Instagram Username</label>
+          <input value={editForm.instagram} onChange={e => setEditForm({ ...editForm, instagram: e.target.value })} placeholder="e.g. baker_girl" />
+        </div>
+        <button type="submit" className="btn btn-primary" disabled={submitting} style={{ marginTop: 8 }}>
+          {submitting ? 'Saving...' : 'Update Customer'}
+        </button>
+      </div>
+    </form>
+  );
+
   return (
     <div className="fade-in">
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -144,7 +220,6 @@ export default function Customers() {
         </button>
       </div>
 
-      {/* Stats — 2 cards (removed Birthdays) */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -165,7 +240,6 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Search */}
       <div style={{ position: 'relative', marginBottom: 16 }}>
         <Search size={18} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--text3)' }} />
         <input
@@ -176,9 +250,7 @@ export default function Customers() {
         />
       </div>
 
-      {/* Customer List */}
       {isMobile ? (
-        /* ── MOBILE: cards ── */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {filtered.length === 0 && (
             <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text3)' }}>No customers found</div>
@@ -191,7 +263,6 @@ export default function Customers() {
               padding: '14px 16px',
               boxShadow: 'var(--shadow)'
             }}>
-              {/* Name + VIP row */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{
@@ -203,33 +274,25 @@ export default function Customers() {
                     {(c.name || '?')[0].toUpperCase()}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{c.name || 'Unknown'}</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {c.name || 'Unknown'}
+                      {c.isVIP && <Star size={13} color="#E5A823" fill="#E5A823" />}
+                      {c.isVIP && <span style={{ fontSize: '0.65rem', background: '#FEF9C3', color: '#B45309', border: '1px solid #FDE68A', padding: '1px 7px', borderRadius: 20, fontWeight: 800 }}>VIP</span>}
+                      {c.isBigSpender && <span style={{ fontSize: '0.65rem', background: 'rgba(181,96,106,0.1)', color: 'var(--accent)', border: '1px solid rgba(181,96,106,0.3)', padding: '1px 7px', borderRadius: 20, fontWeight: 800 }}>💰 BIG</span>}
+                    </div>
                     {c.phone && <div style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>📞 {c.phone}</div>}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                  {c.isVIP && (
-                    <span style={{
-                      background: '#FEF9EC', color: '#E5A823', border: '1px solid #F0D68E',
-                      fontSize: '0.6rem', fontWeight: 700, padding: '2px 6px', borderRadius: 20,
-                    }}>⭐ VIP</span>
-                  )}
-                  {c.isBigSpender && (
-                    <span style={{
-                      background: 'rgba(212,113,74,0.1)', color: 'var(--accent)', border: '1px solid var(--accent)',
-                      fontSize: '0.6rem', fontWeight: 700, padding: '2px 6px', borderRadius: 20,
-                    }}>💎 BIG SPENDER</span>
-                  )}
-                  {c.isChurning && (
-                    <span style={{
-                      background: 'rgba(0,0,0,0.05)', color: 'var(--text3)', border: '1px solid var(--border)',
-                      fontSize: '0.6rem', fontWeight: 700, padding: '2px 6px', borderRadius: 20,
-                    }}>💤 INACTIVE</span>
-                  )}
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => handleEditClick(c)} style={{ background: 'var(--bg2)', color: 'var(--text2)', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer' }}>
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDeleteCustomer(c)} style={{ background: 'rgba(211,47,47,0.1)', color: '#D32F2F', border: 'none', padding: 8, borderRadius: 8, cursor: 'pointer' }}>
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
 
-              {/* Order stats */}
               <div style={{ fontSize: '0.82rem', color: 'var(--text2)', marginBottom: 10 }}>
                 <span style={{ fontWeight: 600 }}>{c.totalOrders} order{c.totalOrders !== 1 ? 's' : ''}</span>
                 {' · '}
@@ -241,56 +304,22 @@ export default function Customers() {
                 Last: {c.lastOrderDate ? formatDate(c.lastOrderDate) : 'No orders yet'}
               </div>
 
-              {/* Action buttons */}
               <div style={{ display: 'flex', gap: 8 }}>
                 {c.phone && (
-                  <a
-                    href={`tel:${c.phone}`}
-                    style={{
-                      flex: 1, padding: '8px 0', textAlign: 'center',
-                      borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)',
-                      color: 'var(--text2)', fontSize: '0.8rem', fontWeight: 600,
-                      textDecoration: 'none', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', gap: 6
-                    }}
-                  >
+                  <a href={`tel:${c.phone}`} style={{ flex: 1, padding: '8px 0', textAlign: 'center', borderRadius: 8, background: 'var(--bg)', border: '1px solid var(--border)', color: 'var(--text2)', fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                     <Phone size={14} /> Call
                   </a>
                 )}
                 {c.phone && (
-                  <a
-                    href={`https://wa.me/91${c.phone.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      flex: 1, padding: '8px 0', textAlign: 'center',
-                      borderRadius: 8, background: '#E8FBF0', border: '1px solid #A8D8C8',
-                      color: '#2E7A5A', fontSize: '0.8rem', fontWeight: 600,
-                      textDecoration: 'none', display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', gap: 6
-                    }}
-                  >
+                  <a href={`https://wa.me/91${c.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" style={{ flex: 1, padding: '8px 0', textAlign: 'center', borderRadius: 8, background: '#E8FBF0', border: '1px solid #A8D8C8', color: '#2E7A5A', fontSize: '0.8rem', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
                     <MessageCircle size={14} /> WhatsApp
                   </a>
                 )}
-                <button
-                  onClick={() => handleDeleteCustomer(c)}
-                  style={{
-                    padding: '8px 12px', textAlign: 'center',
-                    borderRadius: 8, background: 'rgba(211,47,47,0.1)', border: '1px solid rgba(211,47,47,0.2)',
-                    color: '#D32F2F', fontSize: '0.8rem', fontWeight: 600,
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                  }}
-                  title="Delete"
-                >
-                  <Trash2 size={14} />
-                </button>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        /* ── DESKTOP: table ── */
         <div className="card table-card">
           <div className="table-responsive">
             <table style={{ width: '100%', minWidth: 700 }}>
@@ -325,13 +354,12 @@ export default function Customers() {
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {c.isVIP && <span style={{ background: 'var(--cream)', color: 'var(--accent2)', border: '1px solid var(--accent2)', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>VIP</span>}
-                        {(c.tags || []).filter(t => t !== 'VIP').map(tag => (
-                          <span key={tag} style={{ background: 'var(--bg)', color: 'var(--text2)', border: '1px solid var(--border)', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>{tag}</span>
-                        ))}
+                        {c.isBigSpender && <span style={{ background: 'rgba(181,96,106,0.1)', color: 'var(--accent)', border: '1px solid var(--accent)', fontSize: '0.7rem', padding: '2px 8px', borderRadius: 20, fontWeight: 600 }}>BIG SPENDER</span>}
                       </div>
                     </td>
                     <td>
                       <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={() => handleEditClick(c)} className="btn-icon" title="Edit"><Edit2 size={16} /></button>
                         {c.phone && <a href={`tel:${c.phone}`} className="btn-icon" title="Call"><Phone size={16} /></a>}
                         {c.phone && <a href={`https://wa.me/91${c.phone.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="btn-icon" title="WhatsApp"><MessageCircle size={16} /></a>}
                         <button onClick={() => handleDeleteCustomer(c)} className="btn-icon" title="Delete" style={{ color: '#D32F2F', cursor: 'pointer', border: 'none', background: 'transparent' }}>
@@ -346,6 +374,27 @@ export default function Customers() {
           </div>
         </div>
       )}
+
+      {/* Edit Customer Modal */}
+      <AnimatePresence>
+        {showEditModal && (
+          <div className="modal-overlay desktop-only" onClick={() => setShowEditModal(false)}>
+            <motion.div variants={modalVariants} initial="hidden" animate="show" exit="exit" className="modal" onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
+                <h2>Edit Customer</h2>
+                <button className="btn-icon" onClick={() => setShowEditModal(false)}><X size={18} /></button>
+              </div>
+              {editFormContent}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <div className="mobile-only">
+        <BottomSheet open={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Customer">
+          {editFormContent}
+        </BottomSheet>
+      </div>
     </div>
   );
 }

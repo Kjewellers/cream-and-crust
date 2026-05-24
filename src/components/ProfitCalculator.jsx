@@ -21,7 +21,7 @@ export default function ProfitCalculator({ open, onClose }) {
       <motion.div variants={modalVariants} initial="hidden" animate="show" exit="exit" className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ background: 'rgba(212,113,74,0.1)', padding: 8, borderRadius: 10 }}>
+            <div style={{ background: 'rgba(181,96,106,0.1)', padding: 8, borderRadius: 10 }}>
               <Calculator size={20} color="var(--accent)" />
             </div>
             <h3 style={{ margin: 0 }}>ROI / Profit Calculator</h3>

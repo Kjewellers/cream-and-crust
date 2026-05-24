@@ -10,8 +10,8 @@
  * Run from browser console or as a temporary page component.
  */
 
-import { collection, getDocs, deleteDoc, doc, query } from "firebase/firestore";
-import { db } from "../services/firebase";
+import { collection, getDocs, deleteDoc, doc, query, where } from "firebase/firestore";
+import { db, auth } from "../services/firebase";
 
 const GARBAGE_ORDER_IDS = ['CC-104', 'CXTfE', 'TFptt', 'jH65m'];
 const GARBAGE_CUSTOMER_NAMES = ['Customer', 'Test UserTest User', 'Test Order', 'Test Customer'];
@@ -27,7 +27,7 @@ export async function cleanFirestoreData() {
 
   // ===== CLEAN ORDERS =====
   try {
-    const ordersSnap = await getDocs(collection(db, "orders"));
+    const ordersSnap = await getDocs(query(collection(db, "orders"), where("uid", "==", auth.currentUser?.uid)));
     for (const docSnap of ordersSnap.docs) {
       const data = docSnap.data();
       const orderId = data.orderId || '';
@@ -68,7 +68,7 @@ export async function cleanFirestoreData() {
 
   // ===== CLEAN INVENTORY =====
   try {
-    const invSnap = await getDocs(collection(db, "inventory"));
+    const invSnap = await getDocs(query(collection(db, "inventory"), where("uid", "==", auth.currentUser?.uid)));
     for (const docSnap of invSnap.docs) {
       const data = docSnap.data();
       const name = String(data.name || data.item || '').toLowerCase();
@@ -86,7 +86,7 @@ export async function cleanFirestoreData() {
 
   // ===== CLEAN CUSTOMERS =====
   try {
-    const custSnap = await getDocs(collection(db, "customers"));
+    const custSnap = await getDocs(query(collection(db, "customers"), where("uid", "==", auth.currentUser?.uid)));
     for (const docSnap of custSnap.docs) {
       const data = docSnap.data();
       const name = String(data.name || '').trim();

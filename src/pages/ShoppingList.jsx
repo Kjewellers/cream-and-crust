@@ -181,6 +181,7 @@ const ProcessItemModal = ({ item, inventory, onClose, onProcess }) => {
                 <span style={{ position: 'absolute', left: 14, top: 14, fontWeight: 700, color: 'var(--text)' }}>₹</span>
                 <input 
                   type="number" 
+                  inputMode="decimal"
                   autoFocus 
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
@@ -308,26 +309,52 @@ export default function ShoppingList() {
     return inventory.filter(i => Number(i.stock) <= Number(i.minStock || 0)).length;
   }, [inventory]);
 
-  const handleAdd = async (ev) => {
+  const handleAdd = (ev) => {
     ev.preventDefault();
     if (!form.name) return showToast('Enter item name', 'error');
     setSubmitting(true);
     triggerHaptic('medium');
-    try {
-      await addShoppingItemToDB({ 
-        ...form,
-        userId: currentUser.uid,
-        createdAt: new Date().toISOString()
-      });
-      showToast('Item added!', 'success');
-      setForm(emptyForm);
-      setShowModal(false);
-      triggerHaptic('success');
-    } catch {
-      showToast('Failed to add item', 'error');
-    } finally {
-      setSubmitting(false);
-    }
+
+    const tempId = `temp-${Date.now()}`;
+    
+    // 1. Prepare Optimistic Data
+    const optimisticItem = {
+      id: tempId,
+      ...form,
+      userId: currentUser.uid,
+      createdAt: new Date().toISOString(),
+      bought: false,
+      isOptimistic: true
+    };
+
+    // 2. Update Local State Immediately
+    setItems(prev => [optimisticItem, ...prev]);
+
+    // 3. Close Modal Immediately
+    setForm(emptyForm);
+    setShowModal(false);
+    triggerHaptic('success');
+
+    // 4. Background Task
+    const performSave = async () => {
+      try {
+        const finalData = { ...optimisticItem };
+        delete finalData.id;
+        delete finalData.isOptimistic;
+
+        await addShoppingItemToDB(finalData);
+        showToast('Saved ✓', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Save failed, try again', 'error');
+        // Revert local state
+        setItems(prev => prev.filter(i => i.id !== tempId));
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    performSave();
   };
 
   const handleToggle = async (item, e) => {
@@ -450,7 +477,7 @@ export default function ShoppingList() {
             background: lowStockCount > 0 ? 'linear-gradient(135deg, var(--bg2), var(--cream))' : 'var(--bg2)'
           }}
         >
-          <div style={{ width: 54, height: 54, borderRadius: 16, background: lowStockCount > 0 ? 'rgba(212, 113, 74, 0.1)' : 'rgba(0,0,0,0.05)', color: lowStockCount > 0 ? 'var(--accent)' : 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 54, height: 54, borderRadius: 16, background: lowStockCount > 0 ? 'rgba(181, 96, 106, 0.1)' : 'rgba(0,0,0,0.05)', color: lowStockCount > 0 ? 'var(--accent)' : 'var(--text3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <RefreshCcw size={28} className={lowStockCount > 0 ? 'animate-spin-slow' : ''} />
           </div>
           <div style={{ flex: 1 }}>
@@ -585,7 +612,7 @@ export default function ShoppingList() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Quantity</label>
-                      <input type="number" min="0" step="0.1" placeholder="5" value={form.qty} onChange={e => setForm({ ...form, qty: e.target.value })} style={{ height: 50, borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--border)', textAlign: 'center', fontWeight: 800 }} />
+                      <input type="number" inputMode="decimal" min="0" step="0.1" placeholder="5" value={form.qty} onChange={e => setForm({ ...form, qty: e.target.value })} style={{ height: 50, borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--border)', textAlign: 'center', fontWeight: 800 }} />
                     </div>
                     <div className="form-group">
                       <label className="form-label">Unit</label>

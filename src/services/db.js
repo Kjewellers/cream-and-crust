@@ -1,6 +1,6 @@
-import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, query, orderBy, onSnapshot, where, setDoc } from "firebase/firestore";
+import { collection, addDoc, getDoc, getDocs, updateDoc, doc, deleteDoc, query, orderBy, onSnapshot, where, setDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "./firebase";
+import { db, storage, auth } from "./firebase";
 import { encryptData, decryptData } from "../utils/crypto";
 
 // ==========================================
@@ -20,6 +20,7 @@ export const addOrderToDB = async (orderData) => {
 
     const docRef = await addDoc(ordersCollection, {
       ...encryptedData,
+      uid: orderData.userId || auth.currentUser?.uid,
       createdAt: new Date().toISOString()
     });
     return docRef.id;
@@ -29,12 +30,89 @@ export const addOrderToDB = async (orderData) => {
   }
 };
 
+export const deductIngredientsForOrder = async (orderId, orderData) => {
+  try {
+    const uid = orderData.userId || orderData.uid || auth.currentUser?.uid;
+    if (!uid) return;
+
+    const productName = (orderData.product || "").toLowerCase();
+    
+    // 1. Fetch user's recipes
+    const recipesSnapshot = await getDocs(query(collection(db, "recipes"), where("uid", "==", uid)));
+    const recipes = recipesSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // 2. Find matching recipe
+    const matchedRecipe = recipes.find(r => {
+      const rName = (r.name || "").toLowerCase();
+      return productName.includes(rName) || rName.includes(productName);
+    });
+
+    if (!matchedRecipe || !matchedRecipe.ingredients || matchedRecipe.ingredients.length === 0) {
+      console.log("No matching recipe or no ingredients to deduct.");
+      return;
+    }
+
+    // 3. Determine multiplier based on order size/weight
+    const sizeStr = String(orderData.size || "1kg").toLowerCase();
+    let multiplier = 1.0;
+    if (sizeStr.includes("500g") || sizeStr.includes("500gm") || sizeStr.includes("0.5")) {
+      multiplier = 0.5;
+    } else if (sizeStr.includes("1.5")) {
+      multiplier = 1.5;
+    } else if (sizeStr.includes("2")) {
+      multiplier = 2.0;
+    }
+
+    // 4. Fetch all inventory items
+    const invSnapshot = await getDocs(query(collection(db, "inventory"), where("uid", "==", uid)));
+    const inventoryItems = invSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    // 5. Deduct ingredients
+    for (const ing of matchedRecipe.ingredients) {
+      const ingName = (ing.name || "").toLowerCase();
+      // Match inventory item that has the closest name
+      const matchedInv = inventoryItems.find(item => {
+        const itemName = (item.item || "").toLowerCase();
+        return itemName.includes(ingName) || ingName.includes(itemName);
+      });
+
+      if (matchedInv) {
+        const unit = String(matchedInv.unit || "kg").toLowerCase();
+        let deduction = 0.2 * multiplier; // Default for kg or L (e.g. 200g flour)
+        
+        if (["g", "ml"].includes(unit)) {
+          deduction = 200 * multiplier;
+        } else if (["pcs", "boxes", "packets"].includes(unit)) {
+          deduction = Math.ceil(1 * multiplier);
+        }
+
+        const newStock = Math.max(0, Number(matchedInv.stock || 0) - deduction);
+        // Format to 2 decimal places to avoid float precision issues
+        const roundedStock = parseFloat(newStock.toFixed(2));
+        
+        await updateInventoryStockInDB(matchedInv.id, roundedStock);
+        console.log(`Auto-deducted ${deduction} ${unit} from ${matchedInv.item}. New stock: ${roundedStock}`);
+      }
+    }
+  } catch (e) {
+    console.error("Error auto-deducting ingredients: ", e);
+  }
+};
+
 export const updateOrderStatusInDB = async (orderId, newStatus) => {
   try {
     const orderRef = doc(db, "orders", orderId);
     await updateDoc(orderRef, {
       status: newStatus
     });
+
+    if (newStatus.toLowerCase() === "baking") {
+      const orderSnap = await getDoc(orderRef);
+      if (orderSnap.exists()) {
+        const orderData = orderSnap.data();
+        await deductIngredientsForOrder(orderId, { id: orderSnap.id, ...orderData });
+      }
+    }
   } catch (e) {
     console.error("Error updating order: ", e);
     throw e;
@@ -51,6 +129,23 @@ export const updateOrderFieldsInDB = async (orderId, fields) => {
   }
 };
 
+export const updateOrderInDB = async (orderId, orderData) => {
+  try {
+    const encryptedData = { ...orderData };
+    if (encryptedData.customer) encryptedData.customer = await encryptData(encryptedData.customer);
+    if (encryptedData.customerName) encryptedData.customerName = await encryptData(encryptedData.customerName);
+    if (encryptedData.phone) encryptedData.phone = await encryptData(encryptedData.phone);
+    if (encryptedData.deliveryAddress) encryptedData.deliveryAddress = await encryptData(encryptedData.deliveryAddress);
+    if (encryptedData.notes) encryptedData.notes = await encryptData(encryptedData.notes);
+
+    const orderRef = doc(db, "orders", orderId);
+    await updateDoc(orderRef, encryptedData);
+  } catch (e) {
+    console.error("Error updating order: ", e);
+    throw e;
+  }
+};
+
 export const deleteOrderFromDB = async (orderId) => {
   try {
     const orderRef = doc(db, "orders", orderId);
@@ -62,13 +157,8 @@ export const deleteOrderFromDB = async (orderId) => {
 };
 
 // Listen to orders in real-time
-export const subscribeToOrders = (callback, userId = null) => {
-  let q;
-  if (userId) {
-    q = query(ordersCollection, where("userId", "==", userId));
-  } else {
-    q = query(ordersCollection);
-  }
+export const subscribeToOrders = (callback, userId) => {
+  const q = query(ordersCollection, where("uid", "==", userId || auth.currentUser?.uid));
   
   return onSnapshot(q, async (snapshot) => {
     const ordersPromises = snapshot.docs.map(async (doc) => {
@@ -103,7 +193,7 @@ export const productsCollection = collection(db, "products");
 
 export const addProductToDB = async (productData) => {
   try {
-    const docRef = await addDoc(productsCollection, productData);
+    const docRef = await addDoc(productsCollection, { ...productData, uid: auth.currentUser?.uid });
     return docRef.id;
   } catch (e) {
     console.error("Error adding product: ", e);
@@ -131,11 +221,8 @@ export const deleteProductFromDB = async (productId) => {
   }
 };
 
-export const subscribeToProducts = (callback, errorCallback, userId = null) => {
-  let q = productsCollection;
-  if (userId) {
-    q = query(productsCollection, where("userId", "==", userId));
-  }
+export const subscribeToProducts = (callback, errorCallback, userId) => {
+  const q = query(productsCollection, where("uid", "==", userId || auth.currentUser?.uid));
   
   return onSnapshot(q, (snapshot) => {
     const products = [];
@@ -157,7 +244,7 @@ export const recipesCollection = collection(db, "recipes");
 
 export const addRecipeToDB = async (recipeData) => {
   try {
-    const docRef = await addDoc(recipesCollection, recipeData);
+    const docRef = await addDoc(recipesCollection, { ...recipeData, uid: auth.currentUser?.uid });
     return docRef.id;
   } catch (e) {
     console.error("Error adding recipe: ", e);
@@ -185,11 +272,8 @@ export const deleteRecipeFromDB = async (recipeId) => {
   }
 };
 
-export const subscribeToRecipes = (callback, errorCallback, userId = null) => {
-  let q = recipesCollection;
-  if (userId) {
-    q = query(recipesCollection, where("userId", "==", userId));
-  }
+export const subscribeToRecipes = (callback, errorCallback, userId) => {
+  const q = query(recipesCollection, where("uid", "==", userId || auth.currentUser?.uid));
   
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -207,7 +291,7 @@ export const inventoryCollection = collection(db, "inventory");
 
 export const addInventoryToDB = async (itemData) => {
   try {
-    const docRef = await addDoc(inventoryCollection, itemData);
+    const docRef = await addDoc(inventoryCollection, { ...itemData, uid: auth.currentUser?.uid });
     return docRef.id;
   } catch (e) {
     console.error("Error adding inventory item: ", e);
@@ -237,11 +321,8 @@ export const deleteInventoryFromDB = async (itemId) => {
   }
 };
 
-export const subscribeToInventory = (callback, errorCallback, userId = null) => {
-  let q = inventoryCollection;
-  if (userId) {
-    q = query(inventoryCollection, where("userId", "==", userId));
-  }
+export const subscribeToInventory = (callback, errorCallback, userId) => {
+  const q = query(inventoryCollection, where("uid", "==", userId || auth.currentUser?.uid));
   
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -257,11 +338,8 @@ export const subscribeToInventory = (callback, errorCallback, userId = null) => 
 
 export const customersCollection = collection(db, "customers");
 
-export const subscribeToCustomers = (callback, errorCallback, userId = null) => {
-  let q = customersCollection;
-  if (userId) {
-    q = query(customersCollection, where("userId", "==", userId));
-  }
+export const subscribeToCustomers = (callback, errorCallback, userId) => {
+  const q = query(customersCollection, where("uid", "==", userId || auth.currentUser?.uid));
   
   return onSnapshot(q, async (snapshot) => {
     const customersPromises = snapshot.docs.map(async (doc) => {
@@ -291,6 +369,7 @@ export const addCustomerToDB = async (customerData) => {
 
     const docRef = await addDoc(customersCollection, {
       ...encryptedData,
+      uid: auth.currentUser?.uid,
       createdAt: new Date().toISOString()
     });
     return docRef.id;
@@ -331,29 +410,60 @@ export const deleteCustomerFromDB = async (customerId) => {
 
 export const businessCollection = collection(db, "business");
 
-export const subscribeToBusiness = (callback, errorCallback, userId = null) => {
-  let q = businessCollection;
-  if (userId) {
-    q = query(businessCollection, where("userId", "==", userId));
-  }
-  return onSnapshot(q, (snapshot) => {
-    const data = [];
-    snapshot.forEach((doc) => {
-      data.push({ id: doc.id, ...doc.data() });
+export const subscribeToBusiness = (callback, errorCallback, identifier = null) => {
+  // If identifier is a 28-char Firebase UID (approx), treat as userId
+  // Otherwise, treat as username
+  const isUserId = identifier && identifier.length > 20 && !identifier.includes(' ');
+
+  if (isUserId) {
+    const bizRef = doc(db, "business", identifier);
+    return onSnapshot(bizRef, (docSnap) => {
+      if (docSnap.exists()) {
+        callback({ id: docSnap.id, ...docSnap.data() });
+      } else {
+        callback({ id: identifier, name: 'Cream & Crust', logo: '🧁' });
+      }
+    }, (error) => {
+      console.error("Business subscription error:", error);
+      if (errorCallback) errorCallback(error);
     });
+  }
+
+  if (identifier && typeof identifier === 'string') {
+    const q = query(businessCollection, where("username", "==", identifier.toLowerCase()));
+    return onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const docSnap = snapshot.docs[0];
+        callback({ id: docSnap.id, ...docSnap.data() });
+      } else {
+        callback(null);
+      }
+    }, (error) => {
+      console.error("Business subscription by username error:", error);
+      if (errorCallback) errorCallback(error);
+    });
+  }
+
+  // Global fallback
+  return onSnapshot(businessCollection, (snapshot) => {
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     callback(data[0] || { name: 'Cream & Crust', logo: '🧁' });
-  }, (error) => {
-    console.error("Business subscription error:", error);
-    if (errorCallback) errorCallback(error);
   });
 };
 
+
 export const getBusinessByUsername = async (username) => {
   try {
-    const q = query(businessCollection, where("username", "==", username.toLowerCase()));
-    const snapshot = await getDocs(q);
-    if (snapshot.empty) return null;
-    return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+    const q1 = query(businessCollection, where("username", "==", username.toLowerCase()));
+    const snapshot1 = await getDocs(q1);
+    if (!snapshot1.empty) return { id: snapshot1.docs[0].id, ...snapshot1.docs[0].data() };
+
+    // Fallback for mixed-case usernames if any exist
+    const q2 = query(businessCollection, where("username", "==", username));
+    const snapshot2 = await getDocs(q2);
+    if (!snapshot2.empty) return { id: snapshot2.docs[0].id, ...snapshot2.docs[0].data() };
+
+    return null;
   } catch (e) {
     console.error("Error fetching business by username:", e);
     return null;
@@ -364,10 +474,97 @@ export const updateBusinessInDB = async (businessId, businessData) => {
   try {
     const safeId = businessId || "main";
     const bizRef = doc(db, "business", safeId);
-    await setDoc(bizRef, businessData, { merge: true });
+    // Ensure userId is stored for querying purposes if needed
+    const dataWithId = { ...businessData, uid: safeId };
+    await setDoc(bizRef, dataWithId, { merge: true });
   } catch (e) {
     console.error("Error updating business: ", e);
     throw e;
+  }
+};
+
+// ==========================================
+// PORTFOLIO SETTINGS (Stored in users/{uid})
+// ==========================================
+
+export const updatePortfolioSettings = async (uid, settings) => {
+  try {
+    const userRef = doc(db, "users", uid);
+    await updateDoc(userRef, { portfolioSettings: settings });
+  } catch (e) {
+    console.error("Error updating portfolio settings:", e);
+    throw e;
+  }
+};
+
+export const subscribeToPortfolioSettings = (uid, callback) => {
+  const userRef = doc(db, "users", uid);
+  return onSnapshot(userRef, (docSnap) => {
+    if (docSnap.exists()) {
+      callback(docSnap.data().portfolioSettings || {});
+    } else {
+      callback({});
+    }
+  });
+};
+
+// ==========================================
+// MENU BUILDER SETTINGS (Stored in users/{uid})
+// ==========================================
+
+export const updateMenuSettings = async (uid, settings) => {
+  try {
+    const userRef = doc(db, "users", uid);
+    await setDoc(userRef, {
+      menuBuilder: {
+        ...settings,
+        updatedAt: new Date().toISOString()
+      }
+    }, { merge: true });
+  } catch (e) {
+    console.error("Error updating menu settings:", e);
+    throw e;
+  }
+};
+
+export const publishMenuSettings = async (uid, settings) => {
+  try {
+    const publishedAt = new Date().toISOString();
+    await updateMenuSettings(uid, { ...settings, published: true, publishedAt });
+    await updateBusinessInDB(uid, { menuPublished: true, menuPublishedAt: publishedAt });
+  } catch (e) {
+    console.error("Error publishing menu:", e);
+    throw e;
+  }
+};
+
+export const subscribeToMenuSettings = (uid, callback) => {
+  const userRef = doc(db, "users", uid);
+  return onSnapshot(userRef, (docSnap) => {
+    callback(docSnap.exists() ? (docSnap.data().menuBuilder || {}) : {});
+  });
+};
+
+export const getMenuSettingsByUserId = async (uid) => {
+  try {
+    const { getDoc } = await import("firebase/firestore");
+    const userSnap = await getDoc(doc(db, "users", uid));
+    return userSnap.exists() ? (userSnap.data().menuBuilder || {}) : {};
+  } catch (e) {
+    console.error("Error fetching menu settings:", e);
+    return {};
+  }
+};
+
+export const getUserByUsername = async (username) => {
+  try {
+    const q = query(collection(db, "users"), where("username", "==", username.toLowerCase()));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) return null;
+    return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+  } catch (e) {
+    console.error("Error fetching user by username:", e);
+    return null;
   }
 };
 
@@ -381,6 +578,7 @@ export const addNotificationToDB = async (notificationData) => {
   try {
     await addDoc(notificationsCollection, {
       ...notificationData,
+      uid: auth.currentUser?.uid,
       read: false,
       createdAt: new Date().toISOString()
     });
@@ -390,7 +588,7 @@ export const addNotificationToDB = async (notificationData) => {
 };
 
 export const subscribeToNotifications = (userId, callback) => {
-  const q = query(notificationsCollection, where("userId", "==", userId), orderBy("createdAt", "desc"));
+  const q = query(notificationsCollection, where("uid", "==", userId || auth.currentUser?.uid), orderBy("createdAt", "desc"));
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
   });
@@ -400,15 +598,19 @@ export const subscribeToNotifications = (userId, callback) => {
 // EXPENSES
 // ==========================================
 
-export const uploadReceiptToStorage = async (file) => {
+export const uploadImageToStorage = async (file, path = 'uploads') => {
   try {
-    const storageRef = ref(storage, `receipts/${Date.now()}_${file.name}`);
+    const storageRef = ref(storage, `${path}/${Date.now()}_${file.name}`);
     await uploadBytes(storageRef, file);
     return await getDownloadURL(storageRef);
   } catch (e) {
-    console.error("Error uploading receipt:", e);
+    console.error("Error uploading image:", e);
     throw e;
   }
+};
+
+export const uploadReceiptToStorage = async (file) => {
+  return await uploadImageToStorage(file, 'receipts');
 };
 
 export const expensesCollection = collection(db, "expenses");
@@ -417,6 +619,7 @@ export const addExpenseToDB = async (expenseData) => {
   try {
     const docRef = await addDoc(expensesCollection, {
       ...expenseData,
+      uid: auth.currentUser?.uid,
       createdAt: new Date().toISOString()
     });
     return docRef.id;
@@ -435,13 +638,8 @@ export const deleteExpenseFromDB = async (expenseId) => {
   }
 };
 
-export const subscribeToExpenses = (callback, errorCallback, userId = null) => {
-  let q;
-  if (userId) {
-    q = query(expensesCollection, where("userId", "==", userId));
-  } else {
-    q = query(expensesCollection);
-  }
+export const subscribeToExpenses = (callback, errorCallback, userId) => {
+  const q = query(expensesCollection, where("uid", "==", userId || auth.currentUser?.uid));
   
   return onSnapshot(q, (snapshot) => {
     const expenses = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -464,6 +662,7 @@ export const addShoppingItemToDB = async (itemData) => {
   try {
     const docRef = await addDoc(shoppingListCollection, {
       ...itemData,
+      uid: auth.currentUser?.uid,
       bought: false,
       createdAt: new Date().toISOString()
     });
@@ -492,13 +691,8 @@ export const deleteShoppingItemFromDB = async (itemId) => {
   }
 };
 
-export const subscribeToShoppingList = (callback, errorCallback, userId = null) => {
-  let q;
-  if (userId) {
-    q = query(shoppingListCollection, where("userId", "==", userId));
-  } else {
-    q = query(shoppingListCollection);
-  }
+export const subscribeToShoppingList = (callback, errorCallback, userId) => {
+  const q = query(shoppingListCollection, where("uid", "==", userId || auth.currentUser?.uid));
   
   return onSnapshot(q, (snapshot) => {
     const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -510,4 +704,70 @@ export const subscribeToShoppingList = (callback, errorCallback, userId = null) 
     if (errorCallback) errorCallback(error);
   });
 };
+
+// ==========================================
+// STORIES
+// ==========================================
+
+export const storiesCollection = collection(db, "stories");
+
+export const subscribeToStories = (callback, userId) => {
+  const q = query(storiesCollection, where("uid", "==", userId || auth.currentUser?.uid));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+  });
+};
+
+export const addStoryToDB = async (storyData) => {
+  try {
+    const docRef = await addDoc(storiesCollection, {
+      ...storyData,
+      uid: auth.currentUser?.uid,
+      createdAt: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (e) {
+    console.error("Error adding story:", e);
+    throw e;
+  }
+};
+
+export const deleteStoryFromDB = async (storyId) => {
+  try {
+    await deleteDoc(doc(db, "stories", storyId));
+  } catch (e) {
+    console.error("Error deleting story:", e);
+    throw e;
+  }
+};
+
+// ==========================================
+// INQUIRIES
+// ==========================================
+
+export const inquiriesCollection = collection(db, "inquiries");
+
+export const addInquiryToDB = async (inquiryData) => {
+  try {
+    const docRef = await addDoc(inquiriesCollection, {
+      ...inquiryData,
+      uid: inquiryData.userId || auth.currentUser?.uid,
+      createdAt: new Date().toISOString()
+    });
+    return docRef.id;
+  } catch (e) {
+    console.error("Error adding inquiry:", e);
+    throw e;
+  }
+};
+
+export const subscribeToInquiries = (callback, userId) => {
+  const q = query(inquiriesCollection, where("uid", "==", userId || auth.currentUser?.uid));
+  return onSnapshot(q, (snapshot) => {
+    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    callback(data);
+  });
+};
+
 

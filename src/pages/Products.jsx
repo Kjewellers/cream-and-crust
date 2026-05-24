@@ -1,18 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Camera, Filter, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Search, Edit2, Trash2, X, Camera, Loader2, ExternalLink, Share, UtensilsCrossed, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { subscribeToProducts, addProductToDB, updateProductInDB, deleteProductFromDB, subscribeToRecipes, subscribeToBusiness } from '../services/db';
-import { storage } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { Skeleton, showToast } from '../components/iOS';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { formatCurrency } from '../utils/date';
-import { ExternalLink, Share } from 'lucide-react';
+import { uploadToCloudinary } from '../services/cloudinary';
 
 const DEFAULT_CATEGORIES = ['All', 'Cakes', 'Cupcakes', 'Brownies', 'Cookies', 'Dessert Boxes'];
 
 export default function Products() {
+  const navigate = useNavigate();
   const { currentUser } = useAuth();
   const [products, setProducts] = useState([]);
   const [recipes, setRecipes] = useState([]);
@@ -22,29 +22,44 @@ export default function Products() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false });
+  const [form, setForm] = useState({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false, featureInPortfolio: true });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [customCategories, setCustomCategories] = useState([]);
+  const [newCatInput, setNewCatInput] = useState('');
   const fileInputRef = useRef();
+  const newCatRef = useRef();
 
   useEffect(() => {
     const unsubscribe = subscribeToProducts((newProducts) => {
       setProducts(newProducts);
       setLoading(false);
+      
+      // Auto-extract custom categories from Firestore products
+      if (newProducts && newProducts.length > 0) {
+        const extraCats = newProducts
+          .map(p => p.category)
+          .filter(cat => cat && !DEFAULT_CATEGORIES.includes(cat));
+        if (extraCats.length > 0) {
+          setCustomCategories(prev => Array.from(new Set([...prev, ...extraCats])));
+        }
+      }
     }, (error) => {
       console.error("Products subscription error:", error);
       setLoading(false);
     }, currentUser?.uid);
 
-    const recipesUnsub = subscribeToRecipes((newRecipes) => {
-      setRecipes(newRecipes || []);
-    });
+    const recipesUnsub = subscribeToRecipes(
+      (newRecipes) => { setRecipes(newRecipes || []); },
+      null,
+      currentUser?.uid
+    );
 
     const bizUnsub = subscribeToBusiness((biz) => {
       setBusiness(biz);
-    });
+    }, null, currentUser?.uid);
 
     return () => {
       unsubscribe();
@@ -53,14 +68,29 @@ export default function Products() {
     };
   }, []);
 
-  const handleSharePortfolio = () => {
+  const handleShareMenu = () => {
     if (!business?.username) {
-      showToast('No username set in profile', 'error');
+      showToast('Set a username in Settings first', 'warning');
+      navigate('/profile');
       return;
     }
-    const url = `${window.location.origin}/portfolio/${business.username}`;
+    const url = `${window.location.origin}/menu/${business.username}`;
     navigator.clipboard.writeText(url);
-    showToast('Portfolio link copied! 🔗', 'success');
+    showToast('Menu link copied! 🍽️', 'success');
+  };
+
+  const handleToggleMenu = async (product) => {
+    const next = !product.menuHidden;
+    // Optimistic update
+    setProducts(prev => prev.map(p => p.id === product.id ? { ...p, menuHidden: next } : p));
+    try {
+      await updateProductInDB(product.id, { menuHidden: next });
+      showToast(next ? 'Hidden from menu' : 'Visible on menu 🍽️', next ? 'info' : 'success');
+    } catch {
+      // revert on error
+      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, menuHidden: product.menuHidden } : p));
+      showToast('Failed to update', 'error');
+    }
   };
 
   const categories = Array.from(new Set([...DEFAULT_CATEGORIES, ...products.map(p => p.category)]));
@@ -72,7 +102,7 @@ export default function Products() {
   });
 
   const compressImage = (file) => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = (event) => {
@@ -94,9 +124,14 @@ export default function Products() {
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.7);
+          canvas.toBlob((blob) => {
+            if (blob) resolve(blob);
+            else reject(new Error('Failed to create blob from canvas'));
+          }, 'image/jpeg', 0.7);
         };
+        img.onerror = () => reject(new Error('Failed to load image for compression'));
       };
+      reader.onerror = () => reject(new Error('Failed to read image file'));
     });
   };
 
@@ -108,59 +143,87 @@ export default function Products() {
     }
   };
 
-  const handleSaveProduct = async (e) => {
+  const handleSaveProduct = (e) => {
     e.preventDefault();
     setUploading(true);
 
-    try {
-      let imageUrl = editingId ? products.find(p => p.id === editingId)?.imageUrl : null;
+    const tempId = editingId || `temp-${Date.now()}`;
+    const currentImageUrl = editingId ? products.find(p => p.id === editingId)?.imageUrl : null;
+    
+    // 1. Prepare Optimistic Data
+    const optimisticData = {
+      id: tempId,
+      name: form.name,
+      category: form.category,
+      basePrice: Number(form.basePrice),
+      costPrice: Number(form.costPrice || 0),
+      recipeId: form.recipeId || null,
+      flavors: form.flavors,
+      prepTime: form.prepTime,
+      variants: form.variants || 'Regular',
+      emoji: form.emoji,
+      bestseller: form.bestseller,
+      featureInPortfolio: form.featureInPortfolio,
+      imageUrl: imagePreview || currentImageUrl, // Use local preview optimistically
+      userId: currentUser?.uid || null,
+      updatedAt: new Date().toISOString(),
+      createdAt: editingId ? (products.find(p => p.id === editingId)?.createdAt) : new Date().toISOString(),
+      isOptimistic: true // Marker to handle cleanup if needed
+    };
 
-      if (imageFile) {
-        try {
-          const compressedBlob = await compressImage(imageFile);
-          const uid = currentUser?.uid || 'anonymous';
-          const fileName = `products/${uid}/${Date.now()}_prod.jpg`;
-          const storageRef = ref(storage, fileName);
-          await uploadBytes(storageRef, compressedBlob);
-          imageUrl = await getDownloadURL(storageRef);
-        } catch (error) {
-          console.error("Storage error:", error);
-          showToast('Failed to upload photo. Saving text only.', 'error');
-        }
-      }
-
-      const productData = {
-        name: form.name,
-        category: form.category,
-        basePrice: Number(form.basePrice),
-        costPrice: Number(form.costPrice || 0),
-        recipeId: form.recipeId || null,
-        flavors: form.flavors,
-        prepTime: form.prepTime,
-        variants: form.variants || 'Regular',
-        emoji: form.emoji,
-        bestseller: form.bestseller,
-        imageUrl: imageUrl || null,
-        userId: currentUser?.uid || null,
-        updatedAt: new Date().toISOString()
-      };
-
-      if (editingId) {
-        await updateProductInDB(editingId, productData);
-        showToast('Product updated! ✅', 'success');
-      } else {
-        await addProductToDB({ ...productData, createdAt: new Date().toISOString() });
-        showToast('Product added! 🎂', 'success');
-        triggerConfetti(window.innerWidth / 2, window.innerHeight / 3, 80);
-        triggerFloatingReward('🎉 Added!', window.innerWidth / 2, window.innerHeight / 3);
-      }
-      closeModal();
-    } catch (error) {
-      console.error('Save product error:', error);
-      showToast(`Failed to save: ${error.message}`, 'error');
-    } finally {
-      setUploading(false);
+    // 2. Update Local State Immediately
+    if (editingId) {
+      setProducts(prev => prev.map(p => p.id === editingId ? optimisticData : p));
+    } else {
+      setProducts(prev => [optimisticData, ...prev]);
     }
+
+    // 3. Close Modal Immediately
+    closeModal();
+
+    // 4. Background Task
+    const performSave = async () => {
+      try {
+        let finalImageUrl = currentImageUrl;
+
+        if (imageFile) {
+          try {
+            finalImageUrl = await uploadToCloudinary(imageFile);
+          } catch (error) {
+            console.error("❌ Upload error details:", error);
+            showToast(`Photo upload failed. Saving without photo.`, 'error');
+          }
+        }
+
+        const productData = { ...optimisticData, imageUrl: finalImageUrl };
+        delete productData.id;
+        delete productData.isOptimistic;
+
+        if (editingId) {
+          await updateProductInDB(editingId, productData);
+          showToast('Saved ✓', 'success');
+        } else {
+          await addProductToDB(productData);
+          showToast('Saved ✓', 'success');
+          triggerConfetti(window.innerWidth / 2, window.innerHeight / 3, 80);
+          triggerFloatingReward('🎉 Added!', window.innerWidth / 2, window.innerHeight / 3);
+        }
+      } catch (error) {
+        console.error('Save product error:', error);
+        showToast(`Save failed, try again`, 'error');
+        // Revert local state on error
+        if (editingId) {
+          // Hard to revert perfectly without a deep copy, but the subscription will eventually fix it
+          // For now, just let the subscription fix it on next sync
+        } else {
+          setProducts(prev => prev.filter(p => p.id !== tempId));
+        }
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    performSave();
   };
 
   const handleDelete = async (id) => {
@@ -187,7 +250,8 @@ export default function Products() {
       prepTime: product.prepTime,
       variants: product.variants,
       emoji: product.emoji,
-      bestseller: product.bestseller
+      bestseller: product.bestseller,
+      featureInPortfolio: product.featureInPortfolio ?? true
     });
     setImagePreview(product.imageUrl);
     setShowModal(true);
@@ -197,7 +261,7 @@ export default function Products() {
     setShowModal(false);
     setEditingId(null);
     setShowAdvanced(false);
-    setForm({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false });
+    setForm({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false, featureInPortfolio: true });
     setImageFile(null);
     setImagePreview(null);
   };
@@ -207,8 +271,11 @@ export default function Products() {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
         <div><h1>Product Catalog</h1><p>Visual showcase of your bakery menu</p></div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-outline" onClick={handleSharePortfolio} style={{ gap: 8 }}>
-            <Share size={18} /> <span className="desktop-only">Share Portfolio</span>
+          <button className="btn btn-outline" onClick={() => navigate('/menu-builder')} style={{ gap: 8 }}>
+            <UtensilsCrossed size={16} /> <span className="desktop-only">Menu Builder</span>
+          </button>
+          <button className="btn btn-outline" onClick={handleShareMenu} style={{ gap: 8 }}>
+            <Share size={16} /> <span className="desktop-only">Share Menu</span>
           </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={18} /> Add Product</button>
         </div>
@@ -238,7 +305,7 @@ export default function Products() {
               cursor: 'pointer',
               background: activeCategory === cat ? 'var(--accent)' : 'var(--bg2)',
               color: activeCategory === cat ? 'white' : 'var(--text2)',
-              boxShadow: activeCategory === cat ? '0 4px 12px rgba(212,113,74,0.3)' : 'none',
+              boxShadow: activeCategory === cat ? '0 4px 12px rgba(181,96,106,0.3)' : 'none',
               transition: 'all 0.2s'
             }}
           >
@@ -261,10 +328,30 @@ export default function Products() {
         <div className="product-grid">
           <AnimatePresence>
             {filtered.map(p => (
-              <motion.div key={p.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} layout className="product-card">
-                <div className="product-img" style={{ backgroundImage: p.imageUrl ? `url(${p.imageUrl})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: 'var(--bg)', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem' }}>
+              <motion.div key={p.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} layout className="product-card" style={{ opacity: p.menuHidden ? 0.75 : 1 }}>
+                <div className="product-img" style={{ backgroundImage: p.imageUrl ? `url("${p.imageUrl}")` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: 'var(--bg)', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', position: 'relative' }}>
                   {!p.imageUrl && p.emoji}
                   {p.bestseller && <span className="product-bestseller" style={{ top: 12, left: 12 }}>Bestseller</span>}
+                  {/* Menu visibility badge on image */}
+                  <motion.button
+                    whileTap={{ scale: 0.92 }}
+                    onClick={() => handleToggleMenu(p)}
+                    title={p.menuHidden ? 'Hidden from menu — tap to show' : 'Visible on menu — tap to hide'}
+                    style={{
+                      position: 'absolute', top: 10, right: 10,
+                      display: 'flex', alignItems: 'center', gap: 4,
+                      padding: '4px 9px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                      background: p.menuHidden ? 'rgba(0,0,0,0.55)' : 'rgba(16,185,129,0.9)',
+                      color: 'white', fontWeight: 800, fontSize: '0.62rem',
+                      backdropFilter: 'blur(4px)',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      transition: 'background 0.2s',
+                    }}
+                  >
+                    {p.menuHidden
+                      ? <><EyeOff size={11} /> Hidden</>
+                      : <><Eye size={11} /> On Menu</>}
+                  </motion.button>
                 </div>
                 <div className="product-body" style={{ padding: 16 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
@@ -287,7 +374,7 @@ export default function Products() {
                           {Math.round(((p.basePrice - p.costPrice) / p.basePrice) * 100)}% Margin
                         </div>
                       )}
-                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', background: 'rgba(212,113,74,0.1)', padding: '4px 10px', borderRadius: 8 }}>{p.variants || 'Standard'}</div>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', background: 'rgba(181,96,106,0.1)', padding: '4px 10px', borderRadius: 8 }}>{p.variants || 'Standard'}</div>
                     </div>
                   </div>
                 </div>
@@ -299,117 +386,235 @@ export default function Products() {
 
       {showModal && (
         <div className="modal-overlay" onClick={closeModal}>
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 550, maxHeight: '90vh', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2>{editingId ? 'Edit Product' : 'Add New Product'}</h2>
+          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, maxHeight: '95vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h2 style={{ fontSize: '1.5rem' }}>{editingId ? 'Edit Product' : 'Add New Product'}</h2>
               <button className="btn-icon" onClick={closeModal}><X size={18} /></button>
             </div>
-            <form onSubmit={handleSaveProduct}>
-              <div className="form-grid">
-                <div className="form-group full">
-                  <label className="form-label">Catalog Photo</label>
-                  <div 
-                    onClick={() => fileInputRef.current.click()}
-                    style={{ 
-                      width: '100%', 
-                      height: 180, 
-                      borderRadius: 12, 
-                      background: 'var(--bg)', 
-                      border: '2px dashed var(--border)', 
-                      display: 'flex', 
-                      flexDirection: 'column',
-                      alignItems: 'center', 
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                      position: 'relative'
-                    }}
-                  >
-                    {uploading ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                        <Loader2 className="animate-spin" size={32} color="var(--accent)" />
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text3)', marginTop: 8 }}>Uploading...</span>
-                      </div>
-                    ) : imagePreview ? (
-                      <img src={imagePreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <>
-                        <Camera size={32} color="var(--text3)" />
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text3)', marginTop: 8 }}>Tap to upload product photo</span>
-                      </>
-                    )}
-                  </div>
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
-                </div>
 
-                <div className="form-group full"><label className="form-label">Product Name</label><input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Dreamy Vanilla Cake" /></div>
-                
-                <div className="form-group">
-                  <label className="form-label">Category</label>
-                  <select value={form.category} onChange={e => setForm({...form, category: e.target.value})}>
-                    {DEFAULT_CATEGORIES.slice(1).map(cat => <option key={cat}>{cat}</option>)}
-                    {!DEFAULT_CATEGORIES.includes(form.category) && <option>{form.category}</option>}
-                  </select>
+            <form onSubmit={handleSaveProduct} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              {/* PHOTO SECTION - BIG & BOLD */}
+              <div style={{ position: 'relative' }}>
+                <div 
+                  onClick={() => fileInputRef.current.click()}
+                  style={{ 
+                    width: '100%', height: 200, borderRadius: 20, background: 'var(--bg)', border: '2px dashed var(--border)', 
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer', overflow: 'hidden', transition: '0.2s',
+                    borderColor: imagePreview ? 'var(--accent)' : 'var(--border)'
+                  }}
+                >
+                  {uploading ? (
+                    <Loader2 className="animate-spin" size={32} color="var(--accent)" />
+                  ) : imagePreview ? (
+                    <img src={imagePreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <>
+                      <Camera size={40} color="var(--text3)" />
+                      <span style={{ fontSize: '0.9rem', color: 'var(--text3)', fontWeight: 600, marginTop: 10 }}>Tap to upload photo</span>
+                    </>
+                  )}
                 </div>
-
-                <div className="form-group"><label className="form-label">Price (₹)</label><input type="number" required value={form.basePrice} onChange={e => setForm({...form, basePrice: e.target.value})} placeholder="0" /></div>
-                
-                {/* Advanced Options Toggle */}
-                <div className="form-group full" style={{ marginTop: 10 }}>
-                  <button 
-                    type="button" 
-                    className="btn btn-sm btn-outline" 
-                    style={{ width: '100%', borderStyle: 'dashed', justifyContent: 'space-between' }}
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                  >
-                    {showAdvanced ? 'Hide Advanced Details' : 'Show Advanced Details (Recipe, Costs, etc.)'}
-                    <Plus size={14} style={{ transform: showAdvanced ? 'rotate(45deg)' : 'none', transition: '0.2s' }} />
+                {imagePreview && !uploading && (
+                  <button type="button" onClick={(e) => { e.stopPropagation(); setImagePreview(null); setImageFile(null); }} 
+                    style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <X size={14} />
                   </button>
+                )}
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
+              </div>
+
+              {/* CORE FIELDS */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}>PRODUCT NAME</label>
+                  <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Belgian Chocolate Cake" style={{ fontSize: '1.1rem', padding: '12px 16px' }} />
                 </div>
 
-                {showAdvanced && (
-                  <>
-                    <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="form-group full">
-                      <label className="form-label">Linked Recipe (Auto-calculates Cost)</label>
-                      <select 
-                        value={form.recipeId} 
-                        onChange={e => {
-                          const recipeId = e.target.value;
-                          const recipe = recipes.find(r => r.id === recipeId);
-                          const cost = recipe ? (recipe.ingredients?.reduce((s, i) => s + Number(i.cost || 0), 0) + Number(recipe.packagingCost || 0) + Number(recipe.laborCost || 0)) : form.costPrice;
-                          setForm({...form, recipeId, costPrice: cost});
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}>CATEGORY</label>
+
+                  {/* All available categories as pill buttons */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                    {[...DEFAULT_CATEGORIES.slice(1), ...customCategories].map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setForm({ ...form, category: cat })}
+                        style={{
+                          padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                          fontWeight: 700, fontSize: '0.78rem',
+                          background: form.category === cat ? 'var(--accent)' : 'var(--bg2)',
+                          color: form.category === cat ? 'white' : 'var(--text2)',
+                          boxShadow: form.category === cat ? '0 2px 8px rgba(181,96,106,0.3)' : 'none',
+                          transition: 'all 0.15s',
                         }}
-                      >
+                      >{cat}</button>
+                    ))}
+                  </div>
+
+                  {/* Add custom category inline */}
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input
+                      ref={newCatRef}
+                      value={newCatInput}
+                      onChange={e => setNewCatInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const trimmed = newCatInput.trim();
+                          if (!trimmed) return;
+                          if ([...DEFAULT_CATEGORIES, ...customCategories].some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+                            setForm({ ...form, category: trimmed });
+                          } else {
+                            setCustomCategories(prev => [...prev, trimmed]);
+                            setForm({ ...form, category: trimmed });
+                          }
+                          setNewCatInput('');
+                        }
+                      }}
+                      placeholder="Add missing category… (press Enter)"
+                      style={{ flex: 1, height: 38, fontSize: '0.82rem' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = newCatInput.trim();
+                        if (!trimmed) { newCatRef.current?.focus(); return; }
+                        if (![...DEFAULT_CATEGORIES, ...customCategories].some(c => c.toLowerCase() === trimmed.toLowerCase())) {
+                          setCustomCategories(prev => [...prev, trimmed]);
+                        }
+                        setForm({ ...form, category: trimmed });
+                        setNewCatInput('');
+                      }}
+                      style={{
+                        flexShrink: 0, height: 38, padding: '0 14px', borderRadius: 10, border: 'none',
+                        background: 'var(--accent)', color: 'white', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer'
+                      }}
+                    >+ Add</button>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}>PRICE (₹)</label>
+                    <input type="number" inputMode="decimal" required value={form.basePrice} onChange={e => setForm({...form, basePrice: e.target.value})} placeholder="0" style={{ height: 48, fontSize: '1.1rem', fontWeight: 700 }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* ADVANCED TOGGLE */}
+              <button 
+                type="button" 
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                style={{ background: 'var(--bg2)', border: 'none', padding: '12px', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+              >
+                <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text2)' }}>
+                  {showAdvanced ? 'Hide Optional Details' : 'Show More Details (Recipe, Cost, etc.)'}
+                </span>
+                <Plus size={16} style={{ transform: showAdvanced ? 'rotate(45deg)' : 'none', transition: '0.2s' }} />
+              </button>
+
+              <AnimatePresence>
+                {showAdvanced && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Linked Recipe</label>
+                      <select value={form.recipeId} onChange={e => setForm({...form, recipeId: e.target.value})}>
                         <option value="">No Recipe Linked</option>
                         {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                       </select>
-                    </motion.div>
-
-                    <div className="form-group"><label className="form-label">Cost Price (₹)</label><input type="number" value={form.costPrice} onChange={e => setForm({...form, costPrice: e.target.value})} placeholder="e.g. 250" /></div>
-                    
-                    <div className="form-group"><label className="form-label">Weight/Variants</label><input placeholder="0.5kg, 1kg" value={form.variants} onChange={e => setForm({...form, variants: e.target.value})} /></div>
-                    
-                    <div className="form-group"><label className="form-label">Prep Time</label><input placeholder="e.g. 24h" value={form.prepTime} onChange={e => setForm({...form, prepTime: e.target.value})} /></div>
-                    
-                    <div className="form-group"><label className="form-label">Emoji (Fallback)</label><input placeholder="🎂" value={form.emoji} onChange={e => setForm({...form, emoji: e.target.value})} /></div>
-
-                    <div className="form-group full"><label className="form-label">Available Flavors</label><input placeholder="Chocolate, Red Velvet, Vanilla..." value={form.flavors} onChange={e => setForm({...form, flavors: e.target.value})} /></div>
-                    
-                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', height: '100%', paddingTop: 28 }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
-                        <input type="checkbox" style={{ width: 20, height: 20 }} checked={form.bestseller} onChange={e => setForm({...form, bestseller: e.target.checked})} />
-                        Bestseller Product
-                      </label>
                     </div>
-                  </>
-                )}
-              </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div className="form-group">
+                        <label className="form-label">Cost Price (₹)</label>
+                        <input type="number" value={form.costPrice} onChange={e => setForm({...form, costPrice: e.target.value})} placeholder="0" />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Weight/Variants</label>
+                        <input value={form.variants} onChange={e => setForm({...form, variants: e.target.value})} placeholder="0.5kg" />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {/* Bestseller toggle */}
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, bestseller: !form.bestseller })}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '13px 16px', borderRadius: 14, border: 'none', cursor: 'pointer',
+                          background: form.bestseller ? 'rgba(245,158,11,0.1)' : 'var(--bg2)',
+                          outline: form.bestseller ? '1.5px solid rgba(245,158,11,0.4)' : '1.5px solid var(--border)',
+                          transition: 'all 0.18s', textAlign: 'left', width: '100%',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: '1.2rem' }}>⭐</span>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '0.88rem', color: form.bestseller ? '#B45309' : 'var(--text)' }}>Mark as Bestseller</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 1 }}>Highlighted badge on menu & catalog</div>
+                          </div>
+                        </div>
+                        {/* Toggle pill */}
+                        <div style={{
+                          width: 42, height: 24, borderRadius: 99, flexShrink: 0,
+                          background: form.bestseller ? '#F59E0B' : 'var(--border)',
+                          position: 'relative', transition: 'background 0.2s',
+                        }}>
+                          <div style={{
+                            position: 'absolute', top: 3, borderRadius: '50%',
+                            width: 18, height: 18, background: 'white',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                            left: form.bestseller ? 21 : 3,
+                            transition: 'left 0.2s',
+                          }} />
+                        </div>
+                      </button>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 24 }}>
-                <button type="submit" disabled={uploading} className="btn btn-primary" style={{ flex: 1 }}>
-                  {uploading ? 'Saving...' : editingId ? 'Update Product' : 'Add Product'}
+                      {/* Show on Menu toggle */}
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, featureInPortfolio: !form.featureInPortfolio })}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '13px 16px', borderRadius: 14, border: 'none', cursor: 'pointer',
+                          background: form.featureInPortfolio ? 'rgba(181,96,106,0.08)' : 'var(--bg2)',
+                          outline: form.featureInPortfolio ? '1.5px solid rgba(181,96,106,0.3)' : '1.5px solid var(--border)',
+                          transition: 'all 0.18s', textAlign: 'left', width: '100%',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontSize: '1.2rem' }}>🍽️</span>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '0.88rem', color: form.featureInPortfolio ? 'var(--accent)' : 'var(--text)' }}>Show on Public Menu</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 1 }}>Include this product in your public menu</div>
+                          </div>
+                        </div>
+                        {/* Toggle pill */}
+                        <div style={{
+                          width: 42, height: 24, borderRadius: 99, flexShrink: 0,
+                          background: form.featureInPortfolio ? 'var(--accent)' : 'var(--border)',
+                          position: 'relative', transition: 'background 0.2s',
+                        }}>
+                          <div style={{
+                            position: 'absolute', top: 3, borderRadius: '50%',
+                            width: 18, height: 18, background: 'white',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                            left: form.featureInPortfolio ? 21 : 3,
+                            transition: 'left 0.2s',
+                          }} />
+                        </div>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
+                <button type="submit" disabled={uploading} className="btn btn-primary" style={{ flex: 2, height: 55, fontSize: '1.1rem' }}>
+                  {uploading ? <Loader2 className="animate-spin" /> : editingId ? 'Update Product' : 'Add to Catalog'}
                 </button>
-                <button type="button" className="btn btn-outline" onClick={closeModal}>Cancel</button>
+                <button type="button" className="btn btn-outline" onClick={closeModal} style={{ flex: 1 }}>Cancel</button>
               </div>
             </form>
           </motion.div>

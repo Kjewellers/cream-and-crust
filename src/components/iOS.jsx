@@ -425,15 +425,18 @@ export function BottomSheet({ open, onClose, title, children }) {
 /* ─────────────────────────────────────────────────────────────────
    SWIPE ROW  — iOS-style swipe-to-reveal actions
    ───────────────────────────────────────────────────────────────── */
-export function SwipeRow({ children, onDelete, onWhatsApp }) {
+export function SwipeRow({ children, onDelete, onWhatsApp, onRapido }) {
   const [offset, setOffset] = useState(0);
   const startX = useRef(null);
   const isDragging = useRef(false);
   const [isPeeking, setIsPeeking] = useState(false);
-  const THRESHOLD = 80;
+  const THRESHOLD = 74;
+
+  const hasLeftActions = onWhatsApp || onRapido;
+  const leftActionWidth = (onWhatsApp && onRapido) ? THRESHOLD * 2 : THRESHOLD;
 
   useEffect(() => {
-    if (offset === -THRESHOLD / 2 || offset === THRESHOLD / 2) {
+    if (offset === -THRESHOLD / 2 || offset === leftActionWidth / 2) {
       setIsPeeking(true);
       const timer = setTimeout(() => {
         setOffset(0);
@@ -441,7 +444,7 @@ export function SwipeRow({ children, onDelete, onWhatsApp }) {
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [offset]);
+  }, [offset, leftActionWidth]);
 
   const handleTouchStart = (e) => {
     startX.current = e.touches[0].clientX;
@@ -454,8 +457,8 @@ export function SwipeRow({ children, onDelete, onWhatsApp }) {
     
     if (dx < 0 && onDelete) {
       setOffset(Math.max(dx, -THRESHOLD * 1.5));
-    } else if (dx > 0 && onWhatsApp) {
-      setOffset(Math.min(dx, THRESHOLD * 1.5));
+    } else if (dx > 0 && hasLeftActions) {
+      setOffset(Math.min(dx, leftActionWidth * 1.5));
     }
   };
 
@@ -463,8 +466,8 @@ export function SwipeRow({ children, onDelete, onWhatsApp }) {
     isDragging.current = false;
     if (offset < -THRESHOLD / 2) {
       setOffset(-THRESHOLD);
-    } else if (offset > THRESHOLD / 2) {
-      setOffset(THRESHOLD);
+    } else if (offset > leftActionWidth / 2) {
+      setOffset(leftActionWidth);
     } else {
       setOffset(0);
     }
@@ -476,21 +479,30 @@ export function SwipeRow({ children, onDelete, onWhatsApp }) {
       {onDelete && (
         <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: THRESHOLD, display: 'flex', justifyContent: 'flex-end', zIndex: 0 }}>
           <button onClick={() => { setOffset(0); onDelete(); }}
-            style={{ height: '100%', width: 74, background: '#FF3B30', color: 'white', border: 'none', borderRadius: '0 12px 12px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-            <Trash2 size={20} />
+            style={{ height: '100%', width: THRESHOLD, background: '#FF3B30', color: 'white', border: 'none', borderRadius: '0 16px 16px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
+            <Trash2 size={18} />
             <span style={{ fontSize: 10, fontWeight: 700 }}>Delete</span>
           </button>
         </div>
       )}
 
-      {/* Left side reveal (WhatsApp) */}
-      {onWhatsApp && (
-        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: THRESHOLD, display: 'flex', justifyContent: 'flex-start', zIndex: 0 }}>
-          <button onClick={() => { setOffset(0); onWhatsApp(); }}
-            style={{ height: '100%', width: 74, background: '#34C759', color: 'white', border: 'none', borderRadius: '12px 0 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-            <MessageSquare size={20} />
-            <span style={{ fontSize: 10, fontWeight: 700 }}>Share</span>
-          </button>
+      {/* Left side reveal (WhatsApp & Rapido) */}
+      {hasLeftActions && (
+        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: leftActionWidth, display: 'flex', zIndex: 0 }}>
+          {onWhatsApp && (
+            <button onClick={() => { setOffset(0); onWhatsApp(); }}
+              style={{ height: '100%', width: THRESHOLD, background: '#10B981', color: 'white', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', borderRadius: onRapido ? '0' : '16px 0 0 16px' }}>
+              <MessageSquare size={18} />
+              <span style={{ fontSize: 9, fontWeight: 800 }}>WhatsApp</span>
+            </button>
+          )}
+          {onRapido && (
+            <button onClick={() => { setOffset(0); onRapido(); }}
+              style={{ height: '100%', width: THRESHOLD, background: '#FBBF24', color: 'var(--text)', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', borderRadius: onWhatsApp ? '0' : '16px 0 0 16px' }}>
+              <span style={{ fontSize: 18 }}>🛵</span>
+              <span style={{ fontSize: 9, fontWeight: 800 }}>Rapido</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -580,7 +592,7 @@ export function OnboardingTutorial({ onFinish }) {
                 style={{
                   width: 50, height: 50, borderRadius: '50%',
                   background: 'linear-gradient(135deg, var(--accent), var(--accent2))',
-                  boxShadow: '0 8px 24px rgba(212,113,74,0.4)',
+                  boxShadow: '0 8px 24px rgba(181,96,106,0.4)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: 'white', fontSize: 24, border: '2px solid white'
                 }}

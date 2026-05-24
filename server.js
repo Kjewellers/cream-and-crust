@@ -1,9 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import multer from 'multer';
 import crypto from 'crypto';
 import admin from 'firebase-admin';
 import Razorpay from 'razorpay';
@@ -51,22 +49,7 @@ app.use(express.json());
 // Serve static files from the 'dist' directory (Vite build)
 app.use(express.static(path.join(__dirname, 'dist')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
-
-// ─── IMAGE UPLOAD (Multer) ────────────────────────────────────
-const uploadDir = path.join(__dirname, 'public/uploads');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`)
-});
-const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
-
-app.post('/api/upload', upload.single('image'), (req, res) => {
-  if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
-  res.json({ success: true, url: `/uploads/${req.file.filename}` });
-});
-
+app.use('/api/uploads', express.static(path.join(__dirname, 'public/uploads'))); // Dual path for flexibility
 
 // ─── PAYMENTS ────────────────────────────────────────────────
 app.post('/api/payments/create-subscription', async (req, res) => {
@@ -370,9 +353,116 @@ app.get('/api/analytics', async (req, res) => {
   }
 });
 
+// ─── RECIPE SCRAPER (WEB IMPORTER) ─────────────────────────
+app.post('/api/scrape-recipe', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'URL is required' });
+
+    // Fetch the HTML of the target URL
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+      }
+    });
+    
+    if (!response.ok) throw new Error('Failed to fetch the URL');
+    
+    const html = await response.text();
+    
+    // Naive regex to extract JSON-LD (Schema.org) blocks
+    // In production, use cheerio, but this is extremely fast and effective for JSON-LD.
+    const jsonLdRegex = /<script type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi;
+    let match;
+    let recipeData = null;
+
+    while ((match = jsonLdRegex.exec(html)) !== null) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        // Handle array or object
+        const items = Array.isArray(parsed) ? parsed : (parsed['@graph'] || [parsed]);
+        for (const item of items) {
+          if (item['@type'] === 'Recipe' || (Array.isArray(item['@type']) && item['@type'].includes('Recipe'))) {
+            recipeData = item;
+            break;
+          }
+        }
+        if (recipeData) break;
+      } catch (e) {
+        // Ignore JSON parse errors for invalid scripts
+      }
+    }
+
+    if (!recipeData) {
+      return res.status(404).json({ error: 'No standard recipe data (Schema.org JSON-LD) found on this page.' });
+    }
+
+    // Extract standardized data
+    const name = recipeData.name || '';
+    const ingredientsRaw = recipeData.recipeIngredient || [];
+    
+    // Parse ingredients to fit our DB schema { name, qty, unit }
+    const ingredients = ingredientsRaw.map(ing => {
+      // Basic heuristic: first number is qty, second word is unit
+      const parts = ing.split(' ');
+      const qty = parseFloat(parts[0]) ? parts[0] : '1';
+      return {
+        name: ing,
+        qty,
+        unit: 'unit',
+        cost: 0
+      };
+    });
+
+    const stepsRaw = recipeData.recipeInstructions || [];
+    let steps = [];
+    if (typeof stepsRaw === 'string') {
+      steps = [{ title: 'Instructions', desc: stepsRaw }];
+    } else {
+      steps = stepsRaw.map(s => ({
+        title: s.name || 'Step',
+        desc: s.text || s
+      }));
+    }
+
+    // Handle image URLs (can be string or object/array)
+    let imageUrl = '';
+    if (recipeData.image) {
+      if (typeof recipeData.image === 'string') imageUrl = recipeData.image;
+      else if (Array.isArray(recipeData.image)) imageUrl = recipeData.image[0];
+      else if (recipeData.image.url) imageUrl = recipeData.image.url;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        name,
+        imageUrl,
+        prepTime: recipeData.prepTime ? recipeData.prepTime.replace('PT', '') : '',
+        bakeTime: recipeData.cookTime ? recipeData.cookTime.replace('PT', '') : '',
+        yield: recipeData.recipeYield || '1 batch',
+        ingredients,
+        steps,
+        category: recipeData.recipeCategory || 'Other',
+        status: 'Draft'
+      }
+    });
+
+  } catch (error) {
+    console.error('Recipe scrape error:', error);
+    res.status(500).json({ error: 'Internal server error scraping recipe' });
+  }
+});
+
 // Catch-all route to serve the frontend (SPA support)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error('💥 Unhandled Error:', err);
+  res.status(500).json({ success: false, message: err.message || 'Internal Server Error' });
 });
 
 app.listen(PORT, () => {

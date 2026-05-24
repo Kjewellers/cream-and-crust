@@ -501,7 +501,7 @@ export default function Recipes() {
       {/* Removed the sticky bottom Add button. It is now at the top right of the header, Native iOS style. */}
       </>
       )}
-        </motion.div>
+        </div>
 
       {/* ── SIDEBAR DRAWER ── */}
       <AnimatePresence>

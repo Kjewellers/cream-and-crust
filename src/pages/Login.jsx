@@ -1,9 +1,45 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, User, Loader, Globe, EyeOff, Eye, ChevronRight, ShieldCheck, Cloud, Heart, Clock, Check } from 'lucide-react';
+import { Mail, Lock, User, Loader, EyeOff, Eye, ChevronRight, Heart, Sparkles, Star } from 'lucide-react';
 import { loginUser, registerUser, signInWithGoogle } from '../services/auth';
 import { useAuth } from '../context/AuthContext';
 import { triggerHaptic, showToast } from '../components/iOS';
+
+// Floating background particles component
+const FloatingParticles = () => {
+  return (
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 1 }}>
+      {[...Array(8)].map((_, i) => (
+        <motion.div
+          key={i}
+          animate={{
+            y: [0, -100, 0],
+            x: [0, Math.random() * 50 - 25, 0],
+            scale: [1, 1.2, 1],
+            opacity: [0.3, 0.8, 0.3],
+            rotate: [0, 180, 360]
+          }}
+          transition={{
+            duration: 8 + Math.random() * 5,
+            repeat: Infinity,
+            delay: Math.random() * 5,
+            ease: "easeInOut"
+          }}
+          style={{
+            position: 'absolute',
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+            color: i % 2 === 0 ? '#FF6B8B' : '#FFD166',
+          }}
+        >
+          {i % 3 === 0 ? <Heart size={14 + Math.random()*10} /> : 
+           i % 3 === 1 ? <Sparkles size={16 + Math.random()*12} /> : 
+           <Star size={12 + Math.random()*8} />}
+        </motion.div>
+      ))}
+    </div>
+  );
+};
 
 export default function Login() {
   const { currentUser } = useAuth();
@@ -13,12 +49,9 @@ export default function Login() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
 
   useEffect(() => {
-    if (currentUser) {
-      triggerHaptic('success');
-    }
+    if (currentUser) triggerHaptic('success');
   }, [currentUser]);
 
   const handleAction = async (actionFn) => {
@@ -33,168 +66,115 @@ export default function Login() {
     }
   };
 
-  const handleGoogleLogin = () => handleAction(signInWithGoogle);
-  const handleSocialStub = (provider) => {
-    triggerHaptic('warning');
-    showToast(`${provider} login coming soon!`, 'info');
-  };
-
   return (
     <div style={{
       minHeight: '100vh',
       display: 'flex',
       flexDirection: 'column',
-      background: 'linear-gradient(180deg, #FFF1F2 0%, #FFFFFF 100%)',
+      background: 'radial-gradient(circle at top right, #FFE5EC 0%, #FFFFFF 60%, #FFF0F3 100%)',
       fontFamily: 'var(--font)',
       position: 'relative',
       overflowX: 'hidden',
       overflowY: 'auto'
     }}>
-      {/* Background Mascot Image */}
-      {/* Assuming the user copies the generated mascot to public/login-bg.png */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        right: '-15%',
-        width: '100%',
-        height: '70%',
-        backgroundImage: 'url(/login_bg.png)',
-        backgroundSize: 'contain',
-        backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'top right',
-        zIndex: 0,
-        opacity: 0.95,
-        mixBlendMode: 'multiply'
-      }} />
+      
+      {/* Animated Background Particles */}
+      <FloatingParticles />
 
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '24px', position: 'relative', zIndex: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/logo.png" alt="Logo" style={{ height: 40, width: 40, objectFit: 'contain' }} onError={e => e.target.style.display='none'} />
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '1.2rem', fontWeight: 800, color: '#FF6B8B', lineHeight: 1 }}>Cream & Crust</span>
-            <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#8C7A6B', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Bakery Studio</span>
-          </div>
-        </div>
+      {/* Hero Mascot Animation */}
+      <div style={{ 
+        position: 'relative', 
+        height: '45vh', 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'flex-end',
+        zIndex: 5 
+      }}>
+        <motion.div
+          animate={{ y: [0, -15, 0], rotate: [-1, 2, -1] }}
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          style={{
+            width: '100%',
+            maxWidth: '380px',
+            height: '120%',
+            position: 'absolute',
+            bottom: '-10%',
+            backgroundImage: 'url(/login_bg.png)',
+            backgroundSize: 'contain',
+            backgroundRepeat: 'no-repeat',
+            backgroundPosition: 'bottom center',
+            mixBlendMode: 'multiply', // Flawlessly blends the white background
+            filter: 'drop-shadow(0 20px 30px rgba(255, 107, 139, 0.15))'
+          }}
+        />
         
-        <button style={{ 
-          background: 'white', border: '1px solid #FFE4E6', borderRadius: 99, 
-          padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8,
-          fontSize: '0.85rem', fontWeight: 600, color: '#4A3B32', cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(255, 107, 139, 0.08)'
-        }}>
-          <Globe size={14} color="#FF6B8B" /> English <span style={{ fontSize: '0.7rem', color: '#8C7A6B' }}>▼</span>
-        </button>
+        {/* Floating Greeting Bubble */}
+        <motion.div 
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', delay: 0.5 }}
+          style={{
+            position: 'absolute',
+            top: '15%',
+            right: '10%',
+            background: 'white',
+            padding: '12px 20px',
+            borderRadius: '24px 24px 24px 4px',
+            boxShadow: '0 8px 24px rgba(255, 107, 139, 0.12)',
+            border: '2px solid #FFE4E6',
+            zIndex: 10
+          }}
+        >
+          <span style={{ fontFamily: "'Dancing Script', cursive", fontSize: '1.4rem', color: '#FF6B8B', fontWeight: 700 }}>
+            Hi, Baker! ✨
+          </span>
+        </motion.div>
       </div>
 
-      {/* Hero Typography */}
-      <div style={{ padding: '0 32px', marginTop: '2vh', position: 'relative', zIndex: 10 }}>
-        <h1 style={{ 
-          fontFamily: 'Playfair Display, serif', 
-          fontSize: '3.2rem', 
-          fontWeight: 700, 
-          color: '#4A3B32', 
-          margin: 0, 
-          lineHeight: 1.1 
-        }}>Bake</h1>
-        <h1 style={{ 
-          fontFamily: 'Playfair Display, serif', 
-          fontSize: '3.2rem', 
-          fontWeight: 700, 
-          color: '#FF6B8B', 
-          margin: 0, 
-          lineHeight: 1.1 
-        }}>beautifully,</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
-          <span style={{ 
-            fontFamily: "'Dancing Script', cursive", 
-            fontSize: '2.5rem', 
-            color: '#4A3B32',
-            lineHeight: 1
-          }}>Run effortlessly.</span>
-          <span style={{ color: '#FF6B8B', fontSize: '1.2rem' }}>♥</span>
-        </div>
-        <div style={{ width: 80, height: 2, background: '#FF6B8B', marginTop: 12, opacity: 0.3, borderRadius: 2 }} />
-        
-        <p style={{ 
-          marginTop: 16, 
-          color: '#4A3B32', 
-          fontSize: '0.95rem', 
-          fontWeight: 500, 
-          maxWidth: 220, 
-          lineHeight: 1.5,
-          opacity: 0.8
-        }}>
-          Your all-in-one bakery management studio to create, manage & grow.
-        </p>
-      </div>
-
-      {/* Floating Badge */}
-      <motion.div 
-        animate={{ y: [0, -10, 0] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        style={{
-          position: 'absolute',
-          top: '38%',
-          left: '24px',
-          background: 'rgba(255, 255, 255, 0.9)',
-          backdropFilter: 'blur(10px)',
-          borderRadius: 99,
-          padding: '12px 20px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          boxShadow: '0 8px 24px rgba(255, 107, 139, 0.15)',
-          border: '1px solid #FFE4E6',
-          zIndex: 10
-        }}
-      >
-        <span style={{ fontSize: '1.2rem', marginBottom: 2 }}>🧁</span>
-        <span style={{ fontSize: '0.65rem', color: '#8C7A6B', fontWeight: 600 }}>Trusted by</span>
-        <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#4A3B32' }}>10,000+</span>
-        <span style={{ fontSize: '0.65rem', color: '#FF6B8B', fontWeight: 700 }}>Home Bakers</span>
-        <span style={{ fontSize: '0.7rem', color: '#FF6B8B', marginTop: 4 }}>♥</span>
-      </motion.div>
-
-      {/* Bottom Login Card Container */}
+      {/* Main Glassmorphic Card Container */}
       <div style={{ 
         flex: 1, 
         display: 'flex', 
-        alignItems: 'flex-end', 
-        justifyContent: 'center',
-        padding: '0 20px 20px 20px',
+        flexDirection: 'column',
+        alignItems: 'center', 
+        padding: '0 24px 40px',
         position: 'relative',
         zIndex: 20
       }}>
+        
         <motion.div 
-          initial={{ y: 50, opacity: 0 }}
+          initial={{ y: 60, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+          transition={{ type: 'spring', stiffness: 280, damping: 25, delay: 0.1 }}
           style={{
-            background: 'rgba(255, 255, 255, 0.92)',
-            backdropFilter: 'blur(24px)',
-            borderRadius: '40px',
-            padding: '32px 24px',
+            background: 'rgba(255, 255, 255, 0.85)',
+            backdropFilter: 'blur(30px)',
+            WebkitBackdropFilter: 'blur(30px)',
+            borderRadius: '48px',
+            padding: '36px 28px',
             width: '100%',
             maxWidth: 420,
-            boxShadow: '0 -10px 40px rgba(255, 107, 139, 0.1)',
-            border: '1px solid rgba(255, 255, 255, 0.8)',
+            boxShadow: '0 24px 48px rgba(255, 107, 139, 0.12), inset 0 2px 0 rgba(255,255,255,1)',
+            border: '1px solid rgba(255, 255, 255, 0.6)',
           }}
         >
-          <div style={{ textAlign: 'center', marginBottom: 28 }}>
-            <h2 style={{ 
-              fontFamily: "'Dancing Script', cursive", 
-              fontSize: '2.4rem', 
-              color: '#FF6B8B', 
-              margin: 0,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10
-            }}>
-              <span style={{ opacity: 0.5, fontSize: '1.2rem' }}>♥</span>
-              Welcome back!
-              <span style={{ opacity: 0.5, fontSize: '1.2rem' }}>♥</span>
-            </h2>
-            <p style={{ color: '#4A3B32', fontSize: '0.95rem', fontWeight: 600, marginTop: 4 }}>
-              Let's continue your baking journey 🧁
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <motion.h2 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              style={{ 
+                fontFamily: 'Playfair Display, serif', 
+                fontSize: '2.2rem', 
+                fontWeight: 800,
+                color: '#4A3B32', 
+                margin: 0,
+                letterSpacing: '-0.02em'
+              }}
+            >
+              Cream & Crust
+            </motion.h2>
+            <p style={{ color: '#8C7A6B', fontSize: '0.9rem', fontWeight: 600, marginTop: 6 }}>
+              {mode === 'login' ? "Welcome back, let's bake!" : "Start your sweet journey!"} 🧁
             </p>
           </div>
 
@@ -204,6 +184,7 @@ export default function Login() {
               initial={{ opacity: 0, x: mode === 'login' ? -20 : 20 }} 
               animate={{ opacity: 1, x: 0 }} 
               exit={{ opacity: 0, x: mode === 'login' ? 20 : -20 }} 
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               onSubmit={(e) => { 
                 e.preventDefault(); 
                 if (mode === 'login') handleAction(() => loginUser(email, password)); 
@@ -212,155 +193,129 @@ export default function Login() {
               style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
             >
               {mode === 'register' && (
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#FAFAFA', border: '1px solid #F0F0F0', borderRadius: 20, padding: '6px' }}>
-                  <div style={{ width: 44, height: 44, borderRadius: 16, background: '#FFF1F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FF6B8B', flexShrink: 0 }}>
-                    <User size={20} strokeWidth={2.5} />
+                <motion.div whileFocus={{ scale: 1.02 }} style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#FFF', border: '2px solid #FFE4E6', borderRadius: 24, padding: '8px 12px', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(255,107,139,0.03)' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 16, background: '#FFF0F3', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FF6B8B' }}>
+                    <User size={18} strokeWidth={3} />
                   </div>
-                  <input type="text" required placeholder="Full Name" value={name} onChange={e => setName(e.target.value)}
+                  <input type="text" required placeholder="Your beautiful name" value={name} onChange={e => setName(e.target.value)}
                     style={{ flex: 1, background: 'none', border: 'none', outline: 'none', padding: '0 16px', fontSize: '15px', color: '#4A3B32', fontWeight: 600 }} 
                   />
-                </div>
+                </motion.div>
               )}
 
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#FAFAFA', border: '1px solid #F0F0F0', borderRadius: 20, padding: '6px' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 16, background: '#FFF1F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FF6B8B', flexShrink: 0 }}>
-                  <Mail size={20} strokeWidth={2.5} />
+              <motion.div whileFocus={{ scale: 1.02 }} style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#FFF', border: '2px solid #FFE4E6', borderRadius: 24, padding: '8px 12px', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(255,107,139,0.03)' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 16, background: '#FFF0F3', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FF6B8B' }}>
+                  <Mail size={18} strokeWidth={3} />
                 </div>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 16 }}>
-                  <span style={{ fontSize: '0.65rem', color: '#8C7A6B', fontWeight: 600 }}>Email address</span>
-                  <input type="email" required placeholder="priya.baker@email.com" value={email} onChange={e => setEmail(e.target.value)}
+                  <input type="email" required placeholder="priya@bakery.com" value={email} onChange={e => setEmail(e.target.value)}
                     style={{ background: 'none', border: 'none', outline: 'none', fontSize: '15px', color: '#4A3B32', fontWeight: 600, padding: 0 }} 
                   />
                 </div>
-                {email.includes('@') && <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#FF6B8B', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}><Check size={14} strokeWidth={3} /></div>}
-              </div>
+              </motion.div>
 
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#FAFAFA', border: '1px solid #F0F0F0', borderRadius: 20, padding: '6px' }}>
-                <div style={{ width: 44, height: 44, borderRadius: 16, background: '#FFF1F2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FF6B8B', flexShrink: 0 }}>
-                  <Lock size={20} strokeWidth={2.5} />
+              <motion.div whileFocus={{ scale: 1.02 }} style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#FFF', border: '2px solid #FFE4E6', borderRadius: 24, padding: '8px 12px', transition: 'all 0.2s', boxShadow: '0 4px 12px rgba(255,107,139,0.03)' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 16, background: '#FFF0F3', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FF6B8B' }}>
+                  <Lock size={18} strokeWidth={3} />
                 </div>
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', paddingLeft: 16 }}>
-                  <span style={{ fontSize: '0.65rem', color: '#8C7A6B', fontWeight: 600 }}>Password</span>
                   <input type={showPassword ? "text" : "password"} required placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)}
-                    style={{ background: 'none', border: 'none', outline: 'none', fontSize: '20px', letterSpacing: '0.1em', color: '#4A3B32', fontWeight: 900, padding: 0 }} 
+                    style={{ background: 'none', border: 'none', outline: 'none', fontSize: '18px', letterSpacing: '0.15em', color: '#4A3B32', fontWeight: 900, padding: 0, marginTop: 4 }} 
                   />
                 </div>
-                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ background: 'none', border: 'none', color: '#8C7A6B', cursor: 'pointer', padding: '0 16px' }}>
-                  {showPassword ? <Eye size={20} /> : <EyeOff size={20} />}
+                <button type="button" onClick={() => setShowPassword(!showPassword)} style={{ background: 'none', border: 'none', color: '#FF6B8B', cursor: 'pointer', padding: '0 12px' }}>
+                  {showPassword ? <Eye size={18} strokeWidth={2.5} /> : <EyeOff size={18} strokeWidth={2.5} />}
                 </button>
-              </div>
+              </motion.div>
 
               {mode === 'login' && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 8px', marginTop: 4 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem', color: '#4A3B32', fontWeight: 600 }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 6, background: rememberMe ? '#FF6B8B' : '#F0F0F0', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
-                      {rememberMe && <Check size={14} color="white" strokeWidth={3} />}
-                    </div>
-                    <input type="checkbox" checked={rememberMe} onChange={() => setRememberMe(!rememberMe)} style={{ display: 'none' }} />
-                    Remember me
-                  </label>
-                  <button type="button" style={{ background: 'none', border: 'none', color: '#FF6B8B', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 8px', marginTop: -4 }}>
+                  <button type="button" style={{ background: 'none', border: 'none', color: '#FF6B8B', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
                     Forgot Password?
                   </button>
                 </div>
               )}
 
               <motion.button 
-                whileTap={{ scale: 0.96 }}
+                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.02 }}
                 type="submit"
                 disabled={loading}
                 style={{
-                  background: 'linear-gradient(90deg, #FF8DA1 0%, #FF6B8B 100%)',
+                  background: 'linear-gradient(135deg, #FF6B8B 0%, #FF8DA1 100%)',
                   color: 'white',
                   border: 'none',
-                  borderRadius: 99,
-                  padding: '18px',
+                  borderRadius: 24,
+                  padding: '20px',
                   fontSize: '1.1rem',
-                  fontWeight: 700,
+                  fontWeight: 800,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   gap: 8,
-                  marginTop: 8,
-                  boxShadow: '0 12px 24px rgba(255, 107, 139, 0.3)',
+                  marginTop: 12,
+                  boxShadow: '0 12px 24px rgba(255, 107, 139, 0.4)',
                   position: 'relative',
                   overflow: 'hidden'
                 }}
               >
-                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '40%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent)', transform: 'skewX(-20deg) translateX(-150%)', animation: 'shimmer 3s infinite' }} />
+                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '40%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent)', transform: 'skewX(-20deg) translateX(-150%)', animation: 'shimmer 2.5s infinite' }} />
                 {loading ? <Loader className="spin" size={24} /> : (
                   <>
-                    {mode === 'login' ? 'Login to Bake' : 'Start Baking'} ♥ 
-                    <div style={{ position: 'absolute', right: 20, width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ChevronRight size={18} strokeWidth={3} />
-                    </div>
+                    {mode === 'login' ? 'Let\'s Bake!' : 'Create Studio'} 
+                    <ChevronRight size={20} strokeWidth={3} />
                   </>
                 )}
               </motion.button>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 0' }}>
-                <div style={{ flex: 1, height: 1, borderTop: '1px dashed #E5E5EA' }} />
-                <span style={{ fontSize: '0.8rem', color: '#8C7A6B', fontWeight: 600 }}>♥ or continue with ♥</span>
-                <div style={{ flex: 1, height: 1, borderTop: '1px dashed #E5E5EA' }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '12px 0' }}>
+                <div style={{ flex: 1, height: 2, background: '#FFF0F3', borderRadius: 2 }} />
+                <span style={{ fontSize: '0.75rem', color: '#FF6B8B', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>OR</span>
+                <div style={{ flex: 1, height: 2, background: '#FFF0F3', borderRadius: 2 }} />
               </div>
 
-              <div style={{ display: 'flex', gap: 12 }}>
-                <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={handleGoogleLogin} style={{ flex: 1, background: 'white', border: '1px solid #F0F0F0', borderRadius: 16, padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: '0.9rem', fontWeight: 600, color: '#4A3B32', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                  <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="G" style={{ width: 18 }} /> Google
-                </motion.button>
-                <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => handleSocialStub('Apple')} style={{ flex: 1, background: 'white', border: '1px solid #F0F0F0', borderRadius: 16, padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: '0.9rem', fontWeight: 600, color: '#4A3B32', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                  <img src="https://www.svgrepo.com/show/511330/apple-173.svg" alt="A" style={{ width: 18 }} /> Apple
-                </motion.button>
-                <motion.button type="button" whileTap={{ scale: 0.95 }} onClick={() => handleSocialStub('Facebook')} style={{ flex: 1, background: 'white', border: '1px solid #F0F0F0', borderRadius: 16, padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: '0.9rem', fontWeight: 600, color: '#4A3B32', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                  <img src="https://www.svgrepo.com/show/475647/facebook-color.svg" alt="F" style={{ width: 18 }} /> Facebook
-                </motion.button>
-              </div>
+              <motion.button 
+                type="button" 
+                whileTap={{ scale: 0.95 }} 
+                onClick={handleGoogleLogin} 
+                style={{ 
+                  width: '100%', background: '#FFF', border: '2px solid #FFE4E6', 
+                  borderRadius: 24, padding: '16px', display: 'flex', alignItems: 'center', 
+                  justifyContent: 'center', gap: 12, fontSize: '0.95rem', fontWeight: 700, 
+                  color: '#4A3B32', cursor: 'pointer', boxShadow: '0 4px 12px rgba(255,107,139,0.05)' 
+                }}
+              >
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" style={{ width: 22 }} /> 
+                Continue with Google
+              </motion.button>
             </motion.form>
           </AnimatePresence>
-
         </motion.div>
-      </div>
 
-      {/* Footer Toggle */}
-      <div style={{ display: 'flex', justifyContent: 'center', position: 'relative', zIndex: 20, marginBottom: 32 }}>
-        <div style={{ background: '#FFF1F2', padding: '12px 24px', borderRadius: 99, border: '1px solid #FFE4E6', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src="https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=100&auto=format&fit=crop" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="cupcake" />
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: '0.75rem', color: '#4A3B32', fontWeight: 600 }}>
-              {mode === 'login' ? 'New to Cream & Crust?' : 'Already a member?'}
+        {/* Toggle Mode Button */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          style={{ marginTop: 32 }}
+        >
+          <button 
+            onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+            style={{ 
+              background: 'rgba(255,255,255,0.9)', border: '1px solid #FFE4E6', padding: '12px 24px', 
+              borderRadius: 99, color: '#4A3B32', fontSize: '0.9rem', fontWeight: 700, 
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+              boxShadow: '0 8px 16px rgba(255, 107, 139, 0.08)'
+            }}
+          >
+            {mode === 'login' ? "New here? " : "Already baking? "}
+            <span style={{ color: '#FF6B8B' }}>
+              {mode === 'login' ? 'Create an account' : 'Sign In'}
             </span>
-            <button 
-              onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
-              style={{ background: 'none', border: 'none', padding: 0, color: '#FF6B8B', fontSize: '1.05rem', fontWeight: 800, cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 6 }}
-            >
-              {mode === 'login' ? 'Create your account' : 'Sign in to Bake'} 
-              <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(255, 107, 139, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ChevronRight size={14} strokeWidth={3} />
-              </div>
-            </button>
-          </div>
-        </div>
-      </div>
+          </button>
+        </motion.div>
 
-      {/* Footer Features */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 24px 24px 24px', position: 'relative', zIndex: 20 }}>
-        {[
-          { icon: ShieldCheck, title: 'Secure', sub: 'Your data is 100% safe' },
-          { icon: Cloud, title: 'Cloud Sync', sub: 'Access anywhere' },
-          { icon: Heart, title: 'Made for Bakers', sub: 'Designed with love' },
-          { icon: Clock, title: 'Save Time', sub: 'Automate & grow' },
-        ].map((feat, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 12, border: '1.5px solid #FF6B8B', color: '#FF6B8B', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'white' }}>
-              <feat.icon size={18} strokeWidth={2.5} />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#4A3B32' }}>{feat.title}</span>
-              <span style={{ fontSize: '0.6rem', color: '#8C7A6B', fontWeight: 600 }}>{feat.sub}</span>
-            </div>
-          </div>
-        ))}
       </div>
 
       <style dangerouslySetInnerHTML={{__html: `

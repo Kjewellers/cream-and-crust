@@ -47,20 +47,21 @@ export default function Login() {
       background: 'linear-gradient(180deg, #FFF1F2 0%, #FFFFFF 100%)',
       fontFamily: 'var(--font)',
       position: 'relative',
-      overflow: 'hidden'
+      overflowX: 'hidden',
+      overflowY: 'auto'
     }}>
       {/* Background Mascot Image */}
       {/* Assuming the user copies the generated mascot to public/login-bg.png */}
       <div style={{
         position: 'absolute',
-        top: '10%',
-        right: '-10%',
-        width: '80%',
-        height: '60%',
+        top: 0,
+        right: '-15%',
+        width: '100%',
+        height: '70%',
         backgroundImage: 'url(/login_bg.png)',
         backgroundSize: 'contain',
         backgroundRepeat: 'no-repeat',
-        backgroundPosition: 'center right',
+        backgroundPosition: 'top right',
         zIndex: 0,
         opacity: 0.95
       }} />

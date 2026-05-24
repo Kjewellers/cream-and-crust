@@ -289,12 +289,8 @@ export default function Recipes() {
       </div>
 
       {/* ── MAIN CONTENT ── */}
-      <div className="rv-main-content" style={{ background: '#000' }}>
-        <motion.div 
-          animate={{ scale: (selectedRecipe || showCreate || showSidebar) ? 0.94 : 1, filter: (selectedRecipe || showCreate || showSidebar) ? 'blur(8px)' : 'blur(0px)', opacity: (selectedRecipe || showCreate || showSidebar) ? 0.6 : 1, borderRadius: (selectedRecipe || showCreate || showSidebar) ? 24 : 0 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-          className="rv" style={{ minHeight: '100%', paddingBottom: 80, background: 'var(--bg)' }}
-        >
+      <div className="rv-main-content" style={{ background: 'var(--bg)' }}>
+        <div className="rv" style={{ minHeight: '100%', paddingBottom: 80, background: 'var(--bg)' }}>
           {/* ── APP TABS RENDERING ── */}
           {activeTab === 'captures' && (
             <MyCaptures userId={currentUser?.uid} />

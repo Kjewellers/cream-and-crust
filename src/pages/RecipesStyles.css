@@ -60,13 +60,6 @@
 .rv-main-content {
   flex: 1; overflow-y: auto; position: relative;
   background: #FFFFFF;
-  border-top-left-radius: 20px;
-  border-bottom-left-radius: 20px;
-  box-shadow: -4px 0 24px rgba(0,0,0,0.04);
-  margin-top: 8px;
-  margin-bottom: 8px;
-  margin-right: 8px;
-  border: 1px solid rgba(60,60,67,0.05);
 }
 
 @media (max-width: 768px) {

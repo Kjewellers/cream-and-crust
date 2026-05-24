@@ -63,7 +63,8 @@ export default function Login() {
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'top right',
         zIndex: 0,
-        opacity: 0.95
+        opacity: 0.95,
+        mixBlendMode: 'multiply'
       }} />
 
       {/* Header */}

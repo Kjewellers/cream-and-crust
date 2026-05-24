@@ -323,7 +323,7 @@ function BottomNav() {
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
         borderTop: '1px solid rgba(0, 0, 0, 0.08)',
-        zIndex: 999,
+        zIndex: 90,
         paddingBottom: 'env(safe-area-inset-bottom, 12px)',
         paddingTop: 8,
       }}>
@@ -372,7 +372,7 @@ function BottomNav() {
       WebkitBackdropFilter: 'blur(20px)',
       borderTop: '1px solid rgba(0, 0, 0, 0.06)',
       boxShadow: '0 -4px 20px rgba(0, 0, 0, 0.03)',
-      zIndex: 999,
+      zIndex: 90,
       paddingBottom: 'env(safe-area-inset-bottom, 8px)',
       paddingTop: 8,
     }}>
@@ -430,7 +430,7 @@ function BottomNav() {
               alignItems: 'center',
               justifyContent: 'center',
               border: '4px solid white',
-              zIndex: 1000,
+              zIndex: 91,
             }}
           >
             <Plus size={24} strokeWidth={3} />

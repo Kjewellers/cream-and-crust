@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, ChevronLeft, Plus, Search, TrendingUp, Clock, AlertTriangle, SlidersHorizontal, ChevronDown, X, BookOpen, Scale, IndianRupee, Package, Link } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Plus, Search, TrendingUp, Clock, AlertTriangle, SlidersHorizontal, ChevronDown, X, BookOpen, Scale, IndianRupee, Package, Link, Menu } from 'lucide-react';
 import { subscribeToRecipes, deleteRecipeFromDB } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { showToast } from '../components/iOS';
@@ -159,6 +159,7 @@ export default function Recipes() {
   const [activeModal, setActiveModal] = useState(null);
   const [deletedIds, setDeletedIds] = useState(new Set());
   const [activeTab, setActiveTab] = useState('library');
+  const [showSidebar, setShowSidebar] = useState(false);
   const undoRef = useRef(null);
   const searchRef = useRef(null);
 
@@ -312,9 +313,14 @@ export default function Recipes() {
               <div className="rv-greeting">Recipes</div>
               <div className="rv-subtitle" style={{ marginBottom: 0 }}>{recipes.length} items • {getGreeting()}</div>
             </div>
-            <button onClick={() => { setEditRecipe(null); setShowCreate(true); }} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--rv-pink-light)', color: 'var(--rv-pink)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-              <Plus size={20} />
-            </button>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => { setEditRecipe(null); setShowCreate(true); }} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--rv-pink-light)', color: 'var(--rv-pink)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <Plus size={20} />
+              </button>
+              <button onClick={() => setShowSidebar(true)} style={{ width: 32, height: 32, borderRadius: '50%', background: '#F2F2F7', color: 'var(--rv-dark)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <Menu size={20} />
+              </button>
+            </div>
           </div>
 
           {/* ── QUICK ACTION ICONS (HORIZONTAL) ── */}
@@ -492,21 +498,36 @@ export default function Recipes() {
       </>
       )}
 
-      {/* ── CUSTOM BOTTOM TAB BAR (MOBILE ONLY) ── */}
-      <div className="rv-app-tab-bar">
-        <button className={`rv-app-tab ${activeTab === 'library' ? 'active' : ''}`} onClick={() => setActiveTab('library')}>
-          <Book size={22} /><span>Library</span>
-        </button>
-        <button className={`rv-app-tab ${activeTab === 'importer' ? 'active' : ''}`} onClick={() => setActiveTab('importer')}>
-          <DownloadCloud size={22} /><span>Import</span>
-        </button>
-        <button className={`rv-app-tab ${activeTab === 'shopping' ? 'active' : ''}`} onClick={() => setActiveTab('shopping')}>
-          <ShoppingCart size={22} /><span>List</span>
-        </button>
-        <button className={`rv-app-tab ${activeTab === 'captures' ? 'active' : ''}`} onClick={() => setActiveTab('captures')}>
-          <Camera size={22} /><span>Captures</span>
-        </button>
-      </div>
+      {/* ── SIDEBAR DRAWER ── */}
+      <AnimatePresence>
+        {showSidebar && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setShowSidebar(false)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 120 }} />
+            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 280, background: '#fff', zIndex: 130, boxShadow: '-4px 0 24px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ padding: '44px 20px 20px', borderBottom: '1px solid var(--rv-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ fontWeight: 800, fontSize: 20 }}>Studio Menu</div>
+                <button onClick={() => setShowSidebar(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}><X size={24} color="var(--rv-muted)" /></button>
+              </div>
+              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { id: 'library', label: 'Recipe Library', icon: <Book size={20} /> },
+                  { id: 'importer', label: 'Web Importer', icon: <DownloadCloud size={20} /> },
+                  { id: 'shopping', label: 'Shopping List', icon: <ShoppingCart size={20} /> },
+                  { id: 'captures', label: 'My Captures', icon: <Camera size={20} /> }
+                ].map(item => (
+                  <button key={item.id} onClick={() => { setActiveTab(item.id); setShowSidebar(false); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', borderRadius: 12, background: activeTab === item.id ? 'var(--rv-pink-light)' : 'transparent', color: activeTab === item.id ? 'var(--rv-pink)' : 'var(--rv-dark)', border: 'none', cursor: 'pointer', fontWeight: activeTab === item.id ? 700 : 600, fontSize: 16, textAlign: 'left', transition: 'all 0.2s' }}>
+                    {item.icon} {item.label}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ── MODALS ── */}
       <AnimatePresence>

@@ -283,23 +283,14 @@ export default function RecipeDetail({ recipe, onClose, onEdit, onDelete, onDupl
               const { jsPDF } = await import('jspdf');
               const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
               const imgData = canvas.toDataURL('image/jpeg', 0.95);
-              const pdf = new jsPDF('p', 'mm', 'a4');
-              const pdfWidth = pdf.internal.pageSize.getWidth();
-              const pageHeight = pdf.internal.pageSize.getHeight();
+              const pdfWidth = 210; // A4 width in mm
               const imgHeight = (canvas.height * pdfWidth) / canvas.width;
               
-              let heightLeft = imgHeight;
-              let position = 0;
-
-              pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
-              heightLeft -= pageHeight;
-
-              while (heightLeft > 0) {
-                position = heightLeft - imgHeight;
-                pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
-                heightLeft -= pageHeight;
-              }
+              // Use a custom page size matching the exact height of the rendered recipe
+              // This creates a single continuous, scrollable PDF page without text getting cut off!
+              const pdf = new jsPDF('p', 'mm', [pdfWidth, imgHeight]);
+              
+              pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, imgHeight);
 
               const safeName = recipe.name.replace(/[^a-zA-Z0-9]/g, '_');
               pdf.save(`${safeName}_Recipe.pdf`);

@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Trash2, Camera, Plus } from 'lucide-react';
+import { ArrowLeft, Trash2, Camera, Plus, Loader2 } from 'lucide-react';
 import { addRecipeToDB, updateRecipeInDB } from '../../services/db';
+import { uploadToCloudinary } from '../../services/cloudinary';
 import { showToast } from '../iOS';
 
 const STEP_LABELS = ['Basic Info', 'Ingredients', 'Steps', 'Costing'];
@@ -56,6 +57,8 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
     notes: '',
   });
   const [tagInput, setTagInput] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (existingRecipe) setData({ ...existingRecipe, ingredients: existingRecipe.ingredients?.length ? existingRecipe.ingredients : DEFAULT_INGS, steps: existingRecipe.steps?.length ? existingRecipe.steps : DEFAULT_STEPS });
@@ -115,14 +118,38 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
             {/* Thumbnail */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 24 }}>
-              <div onClick={() => { const url = prompt('Image URL:', data.imageUrl); if (url !== null) setData({ ...data, imageUrl: url }); }}
-                style={{ width: 120, height: 90, borderRadius: 12, border: '2px dashed var(--rv-pink)', background: 'var(--rv-pink-light)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden' }}>
-                {data.imageUrl
-                  ? <img src={data.imageUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                  : <><Camera size={28} color="var(--rv-pink)" /><div style={{ fontSize: 11, color: 'var(--rv-pink)', fontWeight: 600, marginTop: 4 }}>Thumbnail Image</div></>
-                }
+              <input 
+                type="file" 
+                accept="image/*" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }}
+                onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  setUploading(true);
+                  try {
+                    const url = await uploadToCloudinary(file);
+                    setData({ ...data, imageUrl: url });
+                    showToast('Image uploaded!', 'success');
+                  } catch (err) {
+                    showToast('Failed to upload image', 'error');
+                  } finally {
+                    setUploading(false);
+                  }
+                }}
+              />
+              <div onClick={() => fileInputRef.current?.click()}
+                style={{ width: 120, height: 90, borderRadius: 12, border: '2px dashed var(--rv-pink)', background: 'var(--rv-pink-light)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden', position: 'relative' }}>
+                {uploading ? (
+                  <Loader2 size={24} color="var(--rv-pink)" style={{ animation: 'spin 1s linear infinite' }} />
+                ) : data.imageUrl ? (
+                  <img src={data.imageUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                ) : (
+                  <><Camera size={28} color="var(--rv-pink)" /><div style={{ fontSize: 11, color: 'var(--rv-pink)', fontWeight: 600, marginTop: 4 }}>Thumbnail</div></>
+                )}
               </div>
-              {data.imageUrl && <button onClick={() => setData({ ...data, imageUrl: '' })} style={{ marginTop: 6, fontSize: 12, color: 'var(--rv-pink)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Change Image</button>}
+              {data.imageUrl && !uploading && <button onClick={() => fileInputRef.current?.click()} style={{ marginTop: 6, fontSize: 12, color: 'var(--rv-pink)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Change Image</button>}
+              <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
             </div>
 
             <div style={row}><label style={s}>Recipe Name</label><input style={inp} value={data.name} onChange={e => setData({ ...data, name: e.target.value })} placeholder="e.g. Chocolate Truffle Cake" /></div>

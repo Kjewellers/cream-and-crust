@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, User, Loader, Globe, EyeOff, Eye, ChevronRight, ShieldCheck, Cloud, Heart, Clock } from 'lucide-react';
+import { Mail, Lock, User, Loader, Globe, EyeOff, Eye, ChevronRight, ShieldCheck, Cloud, Heart, Clock, Check } from 'lucide-react';
 import { loginUser, registerUser, signInWithGoogle } from '../services/auth';
 import { useAuth } from '../context/AuthContext';
 import { triggerHaptic, showToast } from '../components/iOS';

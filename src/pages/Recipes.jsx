@@ -195,13 +195,17 @@ export default function Recipes() {
   }, {});
 
   // Filter + sort
-  const getIngCost = (r) => (r.ingredients || []).reduce((s, i) => s + Number(i.cost || 0), 0);
+  const getIngCost = (r) => (Array.isArray(r.ingredients) ? r.ingredients : []).reduce((s, i) => s + Number(i.cost || 0), 0);
   const getProfit = (r) => Number(r.sellPrice || 0) - getIngCost(r) - (r.packaging || 40) - (r.labor || 80) - (r.gas || 25) - (r.other || 11);
 
   const filtered = recipes
     .filter(r => !deletedIds.has(r.id))
     .filter(r => activeCategory === 'All' || r.category === activeCategory)
-    .filter(r => !debouncedSearch || r.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || (r.tags || []).some(t => t.toLowerCase().includes(debouncedSearch.toLowerCase())) || (r.ingredients || []).some(ing => ing.name.toLowerCase().includes(debouncedSearch.toLowerCase())))
+    .filter(r => !debouncedSearch || 
+      r.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || 
+      (Array.isArray(r.tags) ? r.tags : []).some(t => typeof t === 'string' && t.toLowerCase().includes(debouncedSearch.toLowerCase())) || 
+      (Array.isArray(r.ingredients) ? r.ingredients : []).some(ing => ing && typeof ing.name === 'string' && ing.name.toLowerCase().includes(debouncedSearch.toLowerCase()))
+    )
     .sort((a, b) => {
       if (sortBy === 'name') return a.name.localeCompare(b.name);
       if (sortBy === 'cost_asc') return getIngCost(a) - getIngCost(b);

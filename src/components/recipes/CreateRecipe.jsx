@@ -61,7 +61,15 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (existingRecipe) setData({ ...existingRecipe, ingredients: existingRecipe.ingredients?.length ? existingRecipe.ingredients : DEFAULT_INGS, steps: existingRecipe.steps?.length ? existingRecipe.steps : DEFAULT_STEPS });
+    if (existingRecipe) {
+      setData(prev => ({ 
+        ...prev, 
+        ...existingRecipe, 
+        tags: Array.isArray(existingRecipe.tags) ? existingRecipe.tags : prev.tags || [],
+        ingredients: Array.isArray(existingRecipe.ingredients) && existingRecipe.ingredients.length ? existingRecipe.ingredients : DEFAULT_INGS, 
+        steps: Array.isArray(existingRecipe.steps) && existingRecipe.steps.length ? existingRecipe.steps : DEFAULT_STEPS 
+      }));
+    }
   }, [existingRecipe]);
 
   const ingCost = data.ingredients.reduce((s, i) => s + Number(i.cost || 0), 0);

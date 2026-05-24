@@ -4,11 +4,11 @@
 
 // Page entry animation – subtle spring lift
 export const pageVariants = {
-  hidden:  { opacity: 0, y: 12, scale: 0.99 },
-  show:    { opacity: 1, y: 0,  scale: 1,
-    transition: { type: 'spring', stiffness: 340, damping: 28, mass: 0.9 } },
-  exit:    { opacity: 0, y: -8, scale: 0.99,
-    transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } },
+  hidden:  { opacity: 0, y: 16, scale: 0.98, filter: "blur(6px)" },
+  show:    { opacity: 1, y: 0,  scale: 1, filter: "blur(0px)",
+    transition: { type: 'spring', stiffness: 380, damping: 28, mass: 0.9 } },
+  exit:    { opacity: 0, y: -12, scale: 0.98, filter: "blur(4px)",
+    transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } },
 };
 
 // Stagger container for list items
@@ -19,11 +19,11 @@ export const listContainer = {
 
 // Individual list item
 export const listItem = {
-  hidden: { opacity: 0, y: 14, scale: 0.97 },
-  show:   { opacity: 1, y: 0,  scale: 1,
-    transition: { type: 'spring', stiffness: 380, damping: 26 } },
-  exit:   { opacity: 0, x: -30, scale: 0.96,
-    transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } },
+  hidden: { opacity: 0, y: 20, scale: 0.96, filter: "blur(8px)" },
+  show:   { opacity: 1, y: 0,  scale: 1, filter: "blur(0px)",
+    transition: { type: 'spring', stiffness: 400, damping: 28 } },
+  exit:   { opacity: 0, scale: 0.96, filter: "blur(4px)",
+    transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } },
 };
 
 // Card hover/tap
@@ -41,11 +41,11 @@ export const buttonPress = {
 
 // Modal spring entry
 export const modalVariants = {
-  hidden: { opacity: 0, scale: 0.88, y: 32 },
-  show:   { opacity: 1, scale: 1,    y: 0,
-    transition: { type: 'spring', stiffness: 360, damping: 26 } },
-  exit:   { opacity: 0, scale: 0.92, y: 20,
-    transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } },
+  hidden: { opacity: 0, scale: 0.94, y: 40, filter: "blur(8px)" },
+  show:   { opacity: 1, scale: 1,    y: 0, filter: "blur(0px)",
+    transition: { type: 'spring', stiffness: 380, damping: 30 } },
+  exit:   { opacity: 0, scale: 0.96, y: 20, filter: "blur(6px)",
+    transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } },
 };
 
 // Bottom sheet slide-up (mobile modals)

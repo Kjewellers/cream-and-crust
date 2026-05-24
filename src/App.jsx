@@ -31,6 +31,7 @@ import { subscribeToOrders, subscribeToInventory } from './services/db';
 import { ToastContainer, Loader2, showToast } from './components/iOS';
 import { ConfettiCanvas, SuccessBurstOverlay, FloatingRewardLayer } from './components/DopamineKit';
 import PremiumAppTour from './components/PremiumAppTour';
+import { PageWrapper } from './animations';
 import './index.css';
 
 function Sidebar({ open, onClose, theme, toggleTheme }) {
@@ -484,7 +485,7 @@ function AnimatedRoutes() {
   const isBaker = userRole === 'baker';
 
   const renderRoute = (path, element) => (
-    <Route path={path} element={<motion.div initial={{ opacity: 0, y: 8, scale: 0.99 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -8, scale: 0.99 }} transition={{ type: 'spring', stiffness: 320, damping: 28 }}>{element}</motion.div>} />
+    <Route path={path} element={<PageWrapper>{element}</PageWrapper>} />
   );
 
   return (

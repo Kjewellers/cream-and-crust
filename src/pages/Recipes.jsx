@@ -560,7 +560,6 @@ export default function Recipes() {
 
       {/* Sort backdrop */}
       {showSort && <div onClick={() => setShowSort(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />}
-        </div>
       </div>
     </div>
   );

@@ -106,16 +106,4 @@ export const modalVariants = {
   }
 };
 
-// Higher Order Component to wrap pages seamlessly
-export const PageWrapper = ({ children, className = "" }) => (
-  <motion.div
-    initial="initial"
-    animate="in"
-    exit="out"
-    variants={pageVariants}
-    className={`page-wrapper ${className}`}
-    style={{ minHeight: '100%', width: '100%', originY: 0 }}
-  >
-    {children}
-  </motion.div>
-);
+// Removed PageWrapper (moved to App.jsx to fix Vite compilation error)

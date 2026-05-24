@@ -31,8 +31,22 @@ import { subscribeToOrders, subscribeToInventory } from './services/db';
 import { ToastContainer, Loader2, showToast } from './components/iOS';
 import { ConfettiCanvas, SuccessBurstOverlay, FloatingRewardLayer } from './components/DopamineKit';
 import PremiumAppTour from './components/PremiumAppTour';
-import { PageWrapper } from './animations';
+import { pageVariants } from './animations';
 import './index.css';
+
+// Higher Order Component to wrap pages seamlessly
+export const PageWrapper = ({ children, className = "" }) => (
+  <motion.div
+    initial="initial"
+    animate="in"
+    exit="out"
+    variants={pageVariants}
+    className={`page-wrapper ${className}`}
+    style={{ minHeight: '100%', width: '100%', originY: 0 }}
+  >
+    {children}
+  </motion.div>
+);
 
 function Sidebar({ open, onClose, theme, toggleTheme }) {
   const { isAdmin, userRole, logout, currentUser } = useAuth();

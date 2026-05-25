@@ -117,6 +117,7 @@ function DeletableCard({ children, onDelete, onClick }) {
         {showDel && (
           <motion.button initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
             onClick={(e) => { e.stopPropagation(); setShowDel(false); onDelete(); }}
+            onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); setShowDel(false); onDelete(); }}
             style={{ position: 'absolute', top: 8, right: 8, zIndex: 20, background: '#EF4444', color: '#fff', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(239,68,68,0.4)', fontSize: 16 }}>
             ✕
           </motion.button>
@@ -164,7 +165,12 @@ export default function Recipes() {
   const searchRef = useRef(null);
   // Keep a ref to selectedRecipe to avoid stale closures in handleDelete
   const selectedRecipeRef = useRef(null);
-  useEffect(() => { selectedRecipeRef.current = selectedRecipe; }, [selectedRecipe]);
+  const [cachedRecipe, setCachedRecipe] = useState(null);
+  
+  useEffect(() => { 
+    selectedRecipeRef.current = selectedRecipe; 
+    if (selectedRecipe) setCachedRecipe(selectedRecipe);
+  }, [selectedRecipe]);
 
   // Debounce search
   useEffect(() => {
@@ -541,18 +547,16 @@ export default function Recipes() {
 
       {/* ── MODALS ── */}
       <AnimatePresence>
-        {selectedRecipe && (
-          <RecipeDetail key="detail" recipe={selectedRecipe}
-            onClose={() => setSelectedRecipe(null)}
+        {(selectedRecipe || cachedRecipe) && !showCreate && selectedRecipe && (
+          <RecipeDetail 
+            recipe={selectedRecipe || cachedRecipe} 
+            onClose={() => setSelectedRecipe(null)} 
+            onDelete={handleDelete}
             onEdit={(r) => {
-              // Keep selectedRecipeRef populated so onClose can restore the updated recipe
-              // We pass the recipe to edit but don't clear selectedRecipe from the ref
               setEditRecipe(r);
               setShowCreate(true);
               setSelectedRecipe(null);
             }}
-            onDelete={handleDelete}
-            onDuplicate={handleDuplicate}
             onShowInventory={() => setActiveModal('inventory')}
             onShowChecklist={() => { setActiveModal('checklist'); }}
           />

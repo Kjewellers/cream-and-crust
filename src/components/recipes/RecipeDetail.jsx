@@ -78,7 +78,9 @@ export default function RecipeDetail({ recipe, onClose, onEdit, onDelete, onDupl
                       </button>
                     )}
                     <div style={{ height: 1, background: 'var(--rv-border)', margin: '4px 0' }} />
-                    <button onClick={() => { triggerHaptic('medium'); setMenuOpen(false); onClose(); onDelete && onDelete(recipe.id); }}
+                    <button 
+                      onClick={(e) => { e.preventDefault(); triggerHaptic('medium'); setMenuOpen(false); onClose(); onDelete && onDelete(recipe.id); }}
+                      onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); triggerHaptic('medium'); setMenuOpen(false); onClose(); onDelete && onDelete(recipe.id); }}
                       style={{ width: '100%', padding: '11px 12px', textAlign: 'left', background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#EF4444', borderRadius: 8 }}>
                       <Trash2 size={16} /> Delete
                     </button>

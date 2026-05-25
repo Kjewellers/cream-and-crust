@@ -32,7 +32,20 @@ export default function Dashboard() {
   const [searchResults, setSearchResults] = useState({ orders: [], customers: [] });
   const [isListening, setIsListening] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
+  const [showCustomizer, setShowCustomizer] = useState(false);
   const [cardStyle, setCardStyle] = useState(() => localStorage.getItem('dashCardStyle') || 'showcase');
+  const [visibleActions, setVisibleActions] = useState(() => {
+    const saved = localStorage.getItem('dashVisibleActions');
+    return saved ? JSON.parse(saved) : ['orders', 'customers', 'products', 'menu', 'expenses', 'recipes'];
+  });
+
+  const toggleAction = (id) => {
+    setVisibleActions(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      localStorage.setItem('dashVisibleActions', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const toggleCardStyle = useCallback(() => {
     setCardStyle(prev => {
@@ -360,7 +373,7 @@ export default function Dashboard() {
               {/* Bottom Section: 4 Stat Cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, position: 'relative', zIndex: 2 }}>
                 {/* Edit customizer icon in top corner */}
-                <div style={{ position: 'absolute', right: -6, top: -38, color: '#8C7A6B', opacity: 0.7, cursor: 'pointer', fontSize: '0.78rem' }} title="Customize Dashboard">
+                <div onClick={() => setShowCustomizer(true)} style={{ position: 'absolute', right: -6, top: -38, color: '#8C7A6B', opacity: 0.7, cursor: 'pointer', fontSize: '0.78rem' }} title="Customize Dashboard">
                   ✎
                 </div>
 
@@ -501,7 +514,7 @@ export default function Dashboard() {
             <button 
               onClick={() => {
                 triggerHaptic('light');
-                showToast('Action customization opened', 'info');
+                setShowCustomizer(true);
               }}
               style={{
                 display: 'flex',
@@ -523,171 +536,183 @@ export default function Dashboard() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
             
             {/* New Order */}
-            <motion.div 
-              whileTap={{ scale: 0.94 }}
-              onClick={() => {
-                triggerHaptic('light');
-                navigate('/orders?new=true');
-              }}
-              style={{
-                background: 'white',
-                borderRadius: 18,
-                padding: '12px 2px 10px 2px',
-                textAlign: 'center',
-                border: '1px solid rgba(74, 59, 50, 0.04)',
-                boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#FFF5EC', color: '#E15A3E', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <Plus size={16} strokeWidth={3} />
-              </div>
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>New Order</span>
-            </motion.div>
+            {visibleActions.includes('orders') && (
+              <motion.div 
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  navigate('/orders?new=true');
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(74, 59, 50, 0.04)',
+                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#FFF5EC', color: '#E15A3E', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                  <Plus size={16} strokeWidth={3} />
+                </div>
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>New Order</span>
+              </motion.div>
+            )}
 
             {/* Customers */}
-            <motion.div 
-              whileTap={{ scale: 0.94 }}
-              onClick={() => {
-                triggerHaptic('light');
-                navigate('/customers');
-              }}
-              style={{
-                background: 'white',
-                borderRadius: 18,
-                padding: '12px 2px 10px 2px',
-                textAlign: 'center',
-                border: '1px solid rgba(74, 59, 50, 0.04)',
-                boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#FAF5FF', color: '#9333EA', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <Users size={16} strokeWidth={2.5} />
-              </div>
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Customers</span>
-            </motion.div>
+            {visibleActions.includes('customers') && (
+              <motion.div 
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  navigate('/customers');
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(74, 59, 50, 0.04)',
+                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#FAF5FF', color: '#9333EA', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                  <Users size={16} strokeWidth={2.5} />
+                </div>
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Customers</span>
+              </motion.div>
+            )}
 
             {/* Products */}
-            <motion.div 
-              whileTap={{ scale: 0.94 }}
-              onClick={() => {
-                triggerHaptic('light');
-                navigate('/products');
-              }}
-              style={{
-                background: 'white',
-                borderRadius: 18,
-                padding: '12px 2px 10px 2px',
-                textAlign: 'center',
-                border: '1px solid rgba(74, 59, 50, 0.04)',
-                boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#FEFCE8', color: '#CA8A04', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <Package size={16} strokeWidth={2.5} />
-              </div>
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Products</span>
-            </motion.div>
+            {visibleActions.includes('products') && (
+              <motion.div 
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  navigate('/products');
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(74, 59, 50, 0.04)',
+                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#FEFCE8', color: '#CA8A04', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                  <Package size={16} strokeWidth={2.5} />
+                </div>
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Products</span>
+              </motion.div>
+            )}
 
             {/* View Menu */}
-            <motion.div 
-              whileTap={{ scale: 0.94 }}
-              onClick={() => {
-                triggerHaptic('light');
-                if (business?.username) {
-                  window.open(`/menu/${business.username}`, '_blank');
-                } else {
-                  navigate('/menu-builder');
-                  showToast('Set a username in Settings to get your public menu link', 'info');
-                }
-              }}
-              style={{
-                background: 'white',
-                borderRadius: 18,
-                padding: '12px 2px 10px 2px',
-                textAlign: 'center',
-                border: '1px solid rgba(74, 59, 50, 0.04)',
-                boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#F0F9FF', color: '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <span style={{ fontSize: '16px' }}>🍽️</span>
-              </div>
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>View Menu</span>
-            </motion.div>
+            {visibleActions.includes('menu') && (
+              <motion.div 
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  if (business?.username) {
+                    window.open(`/menu/${business.username}`, '_blank');
+                  } else {
+                    navigate('/menu-builder');
+                    showToast('Set a username in Settings to get your public menu link', 'info');
+                  }
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(74, 59, 50, 0.04)',
+                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#F0F9FF', color: '#0284C7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                  <span style={{ fontSize: '16px' }}>🍽️</span>
+                </div>
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>View Menu</span>
+              </motion.div>
+            )}
 
             {/* Expenses */}
-            <motion.div 
-              whileTap={{ scale: 0.94 }}
-              onClick={() => {
-                triggerHaptic('light');
-                navigate('/expenses');
-              }}
-              style={{
-                background: 'white',
-                borderRadius: 18,
-                padding: '12px 2px 10px 2px',
-                textAlign: 'center',
-                border: '1px solid rgba(74, 59, 50, 0.04)',
-                boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <Receipt size={16} strokeWidth={2.5} />
-              </div>
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Expenses</span>
-            </motion.div>
+            {visibleActions.includes('expenses') && (
+              <motion.div 
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  navigate('/expenses');
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(74, 59, 50, 0.04)',
+                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#F0FDF4', color: '#16A34A', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                  <Receipt size={16} strokeWidth={2.5} />
+                </div>
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Expenses</span>
+              </motion.div>
+            )}
 
             {/* Recipes */}
-            <motion.div 
-              whileTap={{ scale: 0.94 }}
-              onClick={() => {
-                triggerHaptic('light');
-                navigate('/recipes');
-              }}
-              style={{
-                background: 'white',
-                borderRadius: 18,
-                padding: '12px 2px 10px 2px',
-                textAlign: 'center',
-                border: '1px solid rgba(74, 59, 50, 0.04)',
-                boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#FFF1F2', color: '#DB2777', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <ChefHat size={16} strokeWidth={2.5} />
-              </div>
-              <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Recipes</span>
-            </motion.div>
+            {visibleActions.includes('recipes') && (
+              <motion.div 
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  navigate('/recipes');
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(74, 59, 50, 0.04)',
+                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#FFF1F2', color: '#DB2777', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+                  <ChefHat size={16} strokeWidth={2.5} />
+                </div>
+                <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--text)', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>Recipes</span>
+              </motion.div>
+            )}
 
           </div>
         </motion.div>
@@ -1148,6 +1173,47 @@ export default function Dashboard() {
       </AnimatePresence>
 
       <ProfitCalculator open={showCalculator} onClose={() => setShowCalculator(false)} />
+      <AnimatePresence>
+        {showCustomizer && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} style={{ background: '#F9FAFB', width: '100%', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 48, boxShadow: '0 -10px 40px rgba(0,0,0,0.1)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#111827' }}>Customize Quick Actions</h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#6B7280', fontWeight: 500 }}>Select which shortcuts appear on your dashboard</p>
+                </div>
+                <button onClick={() => setShowCustomizer(false)} style={{ background: '#E5E7EB', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#4B5563' }}><X size={16} /></button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[
+                  { id: 'orders', label: 'New Order', icon: Plus, color: '#E15A3E' },
+                  { id: 'customers', label: 'Customers', icon: Users, color: '#9333EA' },
+                  { id: 'products', label: 'Products', icon: Package, color: '#CA8A04' },
+                  { id: 'menu', label: 'View Menu', icon: LayoutGrid, color: '#0284C7' },
+                  { id: 'expenses', label: 'Expenses', icon: Receipt, color: '#16A34A' },
+                  { id: 'recipes', label: 'Recipes', icon: ChefHat, color: '#DB2777' },
+                ].map(action => {
+                  const Icon = action.icon;
+                  return (
+                    <div key={action.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '14px 16px', borderRadius: 16, border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 10, background: action.color + '1A', color: action.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Icon size={16} strokeWidth={2.5} />
+                        </div>
+                        <span style={{ fontWeight: 700, fontSize: 15, color: '#374151' }}>{action.label}</span>
+                      </div>
+                      <div onClick={() => { triggerHaptic('light'); toggleAction(action.id); }} style={{ width: 48, height: 26, borderRadius: 13, background: visibleActions.includes(action.id) ? '#10B981' : '#E5E7EB', position: 'relative', cursor: 'pointer', transition: 'background 0.25s' }}>
+                        <motion.div layout style={{ width: 22, height: 22, borderRadius: 11, background: '#fff', position: 'absolute', top: 2, left: visibleActions.includes(action.id) ? 24 : 2, boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 }

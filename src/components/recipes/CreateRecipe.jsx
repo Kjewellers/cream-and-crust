@@ -92,10 +92,22 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
   const save = async (publish = false) => {
     try {
       const final = { ...data, status: publish ? 'Published' : 'Draft', badge: isEditing ? data.badge : 'New' };
-      if (isEditing) { await updateRecipeInDB(existingRecipe.id, final); showToast('Recipe Updated!', 'success'); }
-      else { await addRecipeToDB(final); showToast('Recipe Created!', 'success'); }
-      onClose();
-    } catch (e) { showToast('Error saving recipe', 'error'); }
+      const isSampleRecipe = existingRecipe?.id?.startsWith('sample-');
+      if (isEditing && !isSampleRecipe) {
+        // Update existing DB recipe
+        await updateRecipeInDB(existingRecipe.id, final);
+        showToast('Recipe Updated!', 'success');
+        onClose({ ...final, id: existingRecipe.id });
+      } else {
+        // Create new DB record (also for sample recipe edits — they get a real DB ID)
+        const newId = await addRecipeToDB(final);
+        showToast(isEditing ? 'Recipe Saved!' : 'Recipe Created!', 'success');
+        onClose({ ...final, id: newId });
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('Error saving recipe', 'error');
+    }
   };
 
   const s = { fontSize: 13, fontWeight: 600, color: 'var(--rv-muted)', marginBottom: 8, display: 'block' };

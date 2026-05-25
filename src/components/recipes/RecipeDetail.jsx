@@ -78,7 +78,7 @@ export default function RecipeDetail({ recipe, onClose, onEdit, onDelete, onDupl
                       </button>
                     )}
                     <div style={{ height: 1, background: 'var(--rv-border)', margin: '4px 0' }} />
-                    <button onClick={() => { triggerHaptic('medium'); onDelete && onDelete(recipe.id); setMenuOpen(false); }}
+                    <button onClick={() => { triggerHaptic('medium'); setMenuOpen(false); onClose(); onDelete && onDelete(recipe.id); }}
                       style={{ width: '100%', padding: '11px 12px', textAlign: 'left', background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#EF4444', borderRadius: 8 }}>
                       <Trash2 size={16} /> Delete
                     </button>
@@ -278,27 +278,44 @@ export default function RecipeDetail({ recipe, onClose, onEdit, onDelete, onDupl
           onClick={async () => {
             if (exporting) return;
             setExporting(true);
-            showToast('Generating HD PDF...', 'info');
+            showToast('Generating PDF...', 'info');
             try {
               const { jsPDF } = await import('jspdf');
-              const canvas = await html2canvas(pdfRef.current, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-              const imgData = canvas.toDataURL('image/jpeg', 0.95);
-              const pdfWidth = 210; // A4 width in mm
-              const imgHeight = (canvas.height * pdfWidth) / canvas.width;
-              
-              // Use a custom page size matching the exact height of the rendered recipe
-              // This creates a single continuous, scrollable PDF page without text getting cut off!
-              const pdf = new jsPDF('p', 'mm', [pdfWidth, imgHeight]);
-              
-              pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, imgHeight);
+              const el = pdfRef.current;
+              if (!el) throw new Error('Template not found');
 
-              const safeName = recipe.name.replace(/[^a-zA-Z0-9]/g, '_');
+              const canvas = await html2canvas(el, {
+                scale: 2,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: '#ffffff',
+                logging: false,
+                imageTimeout: 8000,
+                // Force full render of the off-screen element
+                scrollX: 0,
+                scrollY: 0,
+                windowWidth: 900,
+                windowHeight: Math.max(el.scrollHeight + 200, 1400),
+                x: 0,
+                y: 0,
+                width: el.scrollWidth,
+                height: el.scrollHeight,
+              });
+
+              const imgData = canvas.toDataURL('image/png');
+              const pdfWidthMm = 210; // A4 width in mm
+              const imgHeightMm = (canvas.height * pdfWidthMm) / canvas.width;
+              // Single continuous page — no text cutoff
+              const pdf = new jsPDF('p', 'mm', [pdfWidthMm, imgHeightMm]);
+              pdf.addImage(imgData, 'PNG', 0, 0, pdfWidthMm, imgHeightMm);
+
+              const safeName = (recipe.name || 'Recipe').replace(/[^a-zA-Z0-9]/g, '_');
               pdf.save(`${safeName}_Recipe.pdf`);
-              showToast('PDF Exported Successfully! 🎉', 'success');
+              showToast('PDF Downloaded! 🎉', 'success');
               triggerHaptic('success');
             } catch (err) {
-              console.error(err);
-              showToast('Export failed', 'error');
+              console.error('PDF export error:', err);
+              showToast('Export failed — try again', 'error');
             } finally {
               setExporting(false);
             }

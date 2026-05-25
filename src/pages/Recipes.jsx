@@ -162,6 +162,9 @@ export default function Recipes() {
   const [showSidebar, setShowSidebar] = useState(false);
   const undoRef = useRef(null);
   const searchRef = useRef(null);
+  // Keep a ref to selectedRecipe to avoid stale closures in handleDelete
+  const selectedRecipeRef = useRef(null);
+  useEffect(() => { selectedRecipeRef.current = selectedRecipe; }, [selectedRecipe]);
 
   // Debounce search
   useEffect(() => {
@@ -216,18 +219,20 @@ export default function Recipes() {
 
   const handleDelete = useCallback((id) => {
     setDeletedIds(prev => new Set([...prev, id]));
-    if (selectedRecipe?.id === id) setSelectedRecipe(null);
+    // Use ref to avoid stale closure — always close detail if this recipe is open
+    if (selectedRecipeRef.current?.id === id) setSelectedRecipe(null);
 
     // Undo toast
     if (undoRef.current) clearTimeout(undoRef.current);
     showToast('Recipe deleted — Undo?', 'error');
 
     undoRef.current = setTimeout(() => {
-      if (!id.startsWith('sample-')) {
+      // Delete from DB for any real (non-sample) recipe
+      if (!id.startsWith('sample-') && !id.startsWith('dup-')) {
         deleteRecipeFromDB(id).catch(() => {});
       }
     }, 4000);
-  }, [selectedRecipe]);
+  }, []);
 
   const handleDuplicate = (recipe) => {
     const dup = { ...recipe, id: 'dup-' + Date.now(), name: recipe.name + ' (Copy)', status: 'Draft', badge: null };
@@ -539,7 +544,13 @@ export default function Recipes() {
         {selectedRecipe && (
           <RecipeDetail key="detail" recipe={selectedRecipe}
             onClose={() => setSelectedRecipe(null)}
-            onEdit={(r) => { setSelectedRecipe(null); setEditRecipe(r); setShowCreate(true); }}
+            onEdit={(r) => {
+              // Keep selectedRecipeRef populated so onClose can restore the updated recipe
+              // We pass the recipe to edit but don't clear selectedRecipe from the ref
+              setEditRecipe(r);
+              setShowCreate(true);
+              setSelectedRecipe(null);
+            }}
             onDelete={handleDelete}
             onDuplicate={handleDuplicate}
             onShowInventory={() => setActiveModal('inventory')}
@@ -547,7 +558,18 @@ export default function Recipes() {
           />
         )}
         {showCreate && (
-          <CreateRecipe key="create" existingRecipe={editRecipe} onClose={() => { setShowCreate(false); setEditRecipe(null); }} />
+          <CreateRecipe
+            key="create"
+            existingRecipe={editRecipe}
+            onClose={(savedRecipe) => {
+              setShowCreate(false);
+              setEditRecipe(null);
+              // After save, show the updated recipe in the detail view
+              if (savedRecipe) {
+                setSelectedRecipe(savedRecipe);
+              }
+            }}
+          />
         )}
         {activeModal === 'inventory' && <RecipeInventoryLinkage key="inventory" onClose={() => setActiveModal(null)} />}
         {activeModal === 'integration' && <RecipeOrderIntegration key="integration" onClose={() => setActiveModal(null)} />}

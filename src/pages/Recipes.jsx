@@ -102,32 +102,6 @@ const SAMPLE_RECIPES = [
   },
 ];
 
-// Card with long-press to reveal delete button (no drag interception)
-function DeletableCard({ children, onDelete, onClick }) {
-  const [showDel, setShowDel] = useState(false);
-  const longPressTimer = useRef(null);
-
-  const handlePointerDown = () => { longPressTimer.current = setTimeout(() => setShowDel(true), 600); };
-  const clearTimer = () => clearTimeout(longPressTimer.current);
-
-  return (
-    <div style={{ position: 'relative' }} onPointerDown={handlePointerDown} onPointerUp={clearTimer} onPointerLeave={clearTimer}>
-      <div onClick={onClick} style={{ cursor: 'pointer' }}>{children}</div>
-      <AnimatePresence>
-        {showDel && (
-          <motion.button initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}
-            onClick={(e) => { e.stopPropagation(); setShowDel(false); onDelete(); }}
-            onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); setShowDel(false); onDelete(); }}
-            style={{ position: 'absolute', top: 8, right: 8, zIndex: 20, background: '#EF4444', color: '#fff', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(239,68,68,0.4)', fontSize: 16 }}>
-            ✕
-          </motion.button>
-        )}
-      </AnimatePresence>
-      {showDel && <div onClick={() => setShowDel(false)} style={{ position: 'fixed', inset: 0, zIndex: 19 }} />}
-    </div>
-  );
-}
-
 
 
 
@@ -367,15 +341,21 @@ export default function Recipes() {
             <span>{currentSeason.emoji} {currentSeason.name} Pick</span>
             <button className="rv-view-all">See more</button>
           </div>
-          <DeletableCard onDelete={() => handleDelete(seasonalPick.id)} onClick={() => setSelectedRecipe(seasonalPick)}>
-            <div className="rv-seasonal-card">
+          <div style={{ position: 'relative' }}>
+            <div className="rv-seasonal-card" onClick={() => setSelectedRecipe(seasonalPick)} style={{ cursor: 'pointer' }}>
               <img src={seasonalPick.imageUrl} alt={seasonalPick.name} className="rv-seasonal-img" />
               <div className="rv-seasonal-info">
                 <div className="rv-seasonal-title">{seasonalPick.name}</div>
                 <div className="rv-seasonal-meta">{seasonalPick.yield} • ₹{getIngCost(seasonalPick).toFixed(0)} cost</div>
               </div>
             </div>
-          </DeletableCard>
+            <button 
+              onClick={(e) => { e.stopPropagation(); handleDelete(seasonalPick.id); }}
+              onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); handleDelete(seasonalPick.id); }}
+              style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(4px)', color: '#EF4444', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+              <Trash2 size={16} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -454,8 +434,8 @@ export default function Recipes() {
         <AnimatePresence mode="popLayout">
           {filtered.map((recipe, idx) => (
             <motion.div key={recipe.id} layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, height: 0 }} transition={{ delay: Math.min(idx * 0.04, 0.2) }}>
-              <DeletableCard onDelete={() => handleDelete(recipe.id)} onClick={() => setSelectedRecipe(recipe)}>
-                <div className="rv-card">
+              <div style={{ position: 'relative' }}>
+                <div className="rv-card" onClick={() => setSelectedRecipe(recipe)} style={{ cursor: 'pointer' }}>
                   <img
                     src={recipe.imageUrl || 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=200'}
                     className="rv-card-thumb" alt={recipe.name}
@@ -482,9 +462,17 @@ export default function Recipes() {
                       )}
                     </div>
                   </div>
-                  <ChevronRight size={18} color="var(--rv-muted)" style={{ flexShrink: 0 }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flexShrink: 0, paddingRight: 4 }}>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleDelete(recipe.id); }}
+                      onTouchStart={(e) => { e.stopPropagation(); e.preventDefault(); handleDelete(recipe.id); }}
+                      style={{ background: 'rgba(239,68,68,0.1)', color: '#EF4444', border: 'none', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                      <Trash2 size={16} />
+                    </button>
+                    <ChevronRight size={18} color="var(--rv-muted)" />
+                  </div>
                 </div>
-              </DeletableCard>
+              </div>
             </motion.div>
           ))}
         </AnimatePresence>

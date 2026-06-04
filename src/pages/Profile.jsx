@@ -130,7 +130,7 @@ export default function Profile() {
   const { currentUser, userRole, logout } = useAuth();
   const navigate = useNavigate();
   const [orderCount, setOrderCount] = useState(0);
-  const [business, setBusiness] = useState({ name: 'Cream & Crust', logo: '🧁', id: null });
+  const [business, setBusiness] = useState({ name: '', logo: '', id: null });
   const [editingDetails, setEditingDetails] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const { isActive: subscriptionActive } = useSubscription();
@@ -662,14 +662,9 @@ export default function Profile() {
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
               ) : (
-                <img
-                  src="/logo.png"
-                  alt=""
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                  }}
-                />
+                <div style={{ opacity: 0.5 }}>
+                  <Camera size={24} />
+                </div>
               )}
             </div>
             <button

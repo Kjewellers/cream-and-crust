@@ -809,7 +809,7 @@ export const subscribeToBusiness = (callback, errorCallback, identifier = null) 
         if (docSnap.exists()) {
           callback({ id: docSnap.id, ...docSnap.data() });
         } else {
-          callback({ id: identifier, name: 'Cream & Crust', logo: '🧁' });
+          callback({ id: identifier, name: '', logo: '' });
         }
       },
       (error) => {
@@ -841,7 +841,7 @@ export const subscribeToBusiness = (callback, errorCallback, identifier = null) 
   // Global fallback
   return onSnapshot(businessCollection, (snapshot) => {
     const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    callback(data[0] || { name: 'Cream & Crust', logo: '🧁' });
+    callback(data[0] || { name: '', logo: '' });
   });
 };
 

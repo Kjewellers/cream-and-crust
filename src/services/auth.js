@@ -92,8 +92,8 @@ export const registerUser = async (email, password, name) => {
 
     // Create initial business document
     await setDoc(doc(db, 'business', user.uid), {
-      name: 'Cream & Crust',
-      logo: '🧁',
+      name: '',
+      logo: '',
       username:
         (name || email.split('@')[0]).replace(/[^a-zA-Z0-9]/g, '').toLowerCase() +
         Math.floor(100 + Math.random() * 900),
@@ -167,8 +167,8 @@ async function ensureGoogleUserDocs(user) {
     });
 
     await setDoc(doc(db, 'business', user.uid), {
-      name: 'Cream & Crust',
-      logo: '🧁',
+      name: '',
+      logo: '',
       username:
         (user.displayName || user.email.split('@')[0]).replace(/[^a-zA-Z0-9]/g, '').toLowerCase() +
         Math.floor(100 + Math.random() * 900),
@@ -196,8 +196,8 @@ export const signInWithApple = async () => {
       });
 
       await setDoc(doc(db, 'business', user.uid), {
-        name: 'Cream & Crust',
-        logo: '🧁',
+        name: '',
+        logo: '',
         username:
           (user.displayName || user.email.split('@')[0])
             .replace(/[^a-zA-Z0-9]/g, '')

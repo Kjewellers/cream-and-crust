@@ -111,7 +111,7 @@ export function AuthProvider({ children }) {
           if (bizDoc.exists()) {
             setBusiness({ id: bizDoc.id, ...bizDoc.data() });
           } else {
-            setBusiness({ id: user.uid, name: 'Cream & Crust', logo: '🧁' });
+            setBusiness({ id: user.uid, name: '', logo: '' });
           }
 
           setOnboardingCompleted(onboardingResult);
@@ -159,6 +159,28 @@ export function AuthProvider({ children }) {
 
     return unsubscribe;
   }, []);
+
+  // ── Real-time Business Sync ──────────────────────────────────────────────
+  // Keep the business state perfectly in sync across all tabs and components
+  // (Dashboard, Invoice, WhatsApp, Profile) instantly when updated.
+  useEffect(() => {
+    if (!currentUser || userRole === 'customer') return;
+    
+    let unsubBiz = () => {};
+    import('firebase/firestore').then(({ doc, onSnapshot }) => {
+      import('../services/firebase').then(({ db }) => {
+        unsubBiz = onSnapshot(doc(db, 'business', currentUser.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            setBusiness({ id: docSnap.id, ...docSnap.data() });
+          } else {
+            setBusiness({ id: currentUser.uid, name: '', logo: '' });
+          }
+        });
+      });
+    });
+
+    return () => unsubBiz();
+  }, [currentUser, userRole]);
 
   const refreshRole = async () => {
     if (currentUser) {

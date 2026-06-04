@@ -68,21 +68,21 @@ export const formatCurrency = (amount) => {
   return `₹${num.toLocaleString('en-IN')}`;
 };
 
+const sortedOrdersCache = new WeakMap();
+
 export const formatOrderNumber = (order, allOrders = []) => {
   if (!order) return '#000';
   
-  // If we don't have all orders, we can't reliably generate a sequential number.
-  // In a real app, this should be an incrementing field in Firestore.
-  // For this audit, we'll try to find its index if allOrders is provided,
-  // or use a hash of the ID to generate a consistent 3-digit number.
-  
   if (allOrders && allOrders.length > 0) {
-    // Sort all orders by createdAt
-    const sorted = [...allOrders].sort((a, b) => {
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return dateA - dateB;
-    });
+    let sorted = sortedOrdersCache.get(allOrders);
+    if (!sorted) {
+      sorted = [...allOrders].sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return dateA - dateB;
+      });
+      sortedOrdersCache.set(allOrders, sorted);
+    }
     
     const index = sorted.findIndex(o => o.id === order.id);
     if (index !== -1) {

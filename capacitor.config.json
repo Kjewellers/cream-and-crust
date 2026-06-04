@@ -1,0 +1,14 @@
+{
+  "appId": "com.creamandcrust.app",
+  "appName": "Cream and Crust",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Filesystem": {
+      "iosSchemeName": "ionic"
+    }
+  },
+  "backgroundColor": "#faf7f5"
+}

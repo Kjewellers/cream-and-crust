@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { printInvoice } from '../utils/invoice';
+import { useAuth } from '../context/AuthContext';
 
 export default function Admin() {
+  const { business } = useAuth();
   const [tab, setTab] = useState('dashboard'); // dashboard, orders, products
   const [data, setData] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -145,7 +147,7 @@ export default function Admin() {
                         {order.paymentStatus || 'pending'}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'right' }}><button className="btn btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }} onClick={() => printInvoice(order)}>Print Bill</button></td>
+                    <td style={{ textAlign: 'right' }}><button className="btn btn-secondary" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }} onClick={() => printInvoice(order, business)}>Print Bill</button></td>
                   </tr>
                 ))}
               </tbody>

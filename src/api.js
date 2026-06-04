@@ -1,11 +1,25 @@
-// API client — all calls to Express backend
+// API client — all calls to Express backend (server-side operations)
+// For direct Firestore access, use src/services/db.js instead.
+import { getAuth } from 'firebase/auth';
+
 const BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+
+async function getAuthToken() {
+  const auth = getAuth();
+  const user = auth.currentUser;
+  if (!user) throw new Error('Not authenticated');
+  return user.getIdToken();
+}
 
 async function req(method, path, body) {
   const url = path.startsWith('http') ? path : `${BASE}${path}`;
+  const token = await getAuthToken();
   const res = await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   
@@ -36,9 +50,9 @@ export const api = {
   updateCustomer: (id, data) => req('PUT', `/customers/${id}`, data),
   deleteCustomer: (id) => req('DELETE', `/customers/${id}`),
 
-  // Auth
-  login: (password) => req('POST', '/auth/login', { password }),
-
   // Analytics
   getAnalytics: () => req('GET', '/analytics'),
+
+  // Recipe scraper
+  scrapeRecipe: (url) => req('POST', '/scrape-recipe', { url }),
 };

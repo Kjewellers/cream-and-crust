@@ -7,8 +7,8 @@ export default function PublicOrderForm() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Redirect to the merged portfolio page with a flag to open the order form
-    navigate(`/portfolio/${username}`, { replace: true });
+    // Redirect to the published menu page
+    navigate(`/menu/${username}`, { replace: true });
   }, [username, navigate]);
 
   return (

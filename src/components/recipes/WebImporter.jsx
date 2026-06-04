@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DownloadCloud, Link as LinkIcon, Loader2, ArrowRight } from 'lucide-react';
 import { showToast, triggerHaptic } from '../iOS';
+import { api } from '../../api';
 
 export default function WebImporter({ onImport }) {
   const [url, setUrl] = useState('');
@@ -14,18 +15,12 @@ export default function WebImporter({ onImport }) {
     triggerHaptic('light');
 
     try {
-      const res = await fetch('/api/scrape-recipe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-
-      const data = await res.json();
+      const data = await api.scrapeRecipe(url);
       
-      if (res.ok && data.success) {
+      if (data.success) {
         showToast('Recipe Extracted Successfully!', 'success');
         triggerHaptic('success');
-        onImport(data.data); // Pass parsed recipe back to Recipes.jsx to open Create modal
+        onImport(data.data);
         setUrl('');
       } else {
         throw new Error(data.error || 'Failed to extract recipe.');

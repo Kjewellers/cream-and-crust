@@ -5,7 +5,6 @@ const KEYS = {
   ORDERS: 'cc_orders',
   CUSTOMERS: 'cc_customers',
   CART: 'cc_cart',
-  ADMIN_AUTH: 'cc_admin_auth',
   SETTINGS: 'cc_settings',
 };
 
@@ -103,14 +102,6 @@ export const storage = {
   },
   clearCart() {
     this.remove(KEYS.CART);
-  },
-
-  // Admin Auth
-  isAdminLoggedIn() {
-    return this.get(KEYS.ADMIN_AUTH) === true;
-  },
-  setAdminAuth(isAuth) {
-    this.set(KEYS.ADMIN_AUTH, isAuth);
   },
 
   // Generate Order ID

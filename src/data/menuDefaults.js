@@ -6,7 +6,7 @@ export const MENU_TEMPLATE_ASSETS = {
   cheesecake: '/assets/templates/product_cheesecake_1778776370456.png',
   custom: '/assets/templates/wedding_premium_hero_1778776255942.png',
   darkHero: '/assets/templates/modern_dark_hero_1778776217862.png',
-  luxuryHero: '/assets/templates/luxury_minimal_hero_1778776200555.png'
+  luxuryHero: '/assets/templates/luxury_minimal_hero_1778776200555.png',
 };
 
 export const DEFAULT_MENU_CATEGORIES = [
@@ -15,7 +15,7 @@ export const DEFAULT_MENU_CATEGORIES = [
   { id: 'brownies', name: 'Brownies', image: MENU_TEMPLATE_ASSETS.darkHero, visible: true },
   { id: 'cupcakes', name: 'Cupcakes', image: MENU_TEMPLATE_ASSETS.redVelvet, visible: true },
   { id: 'desserts', name: 'Desserts', image: MENU_TEMPLATE_ASSETS.cheesecake, visible: true },
-  { id: 'custom-cakes', name: 'Custom Cakes', image: MENU_TEMPLATE_ASSETS.custom, visible: true }
+  { id: 'custom-cakes', name: 'Custom Cakes', image: MENU_TEMPLATE_ASSETS.custom, visible: true },
 ];
 
 export const DEFAULT_MENU_SETTINGS = {
@@ -32,6 +32,7 @@ export const DEFAULT_MENU_SETTINGS = {
   heroImage: MENU_TEMPLATE_ASSETS.luxuryHero,
   categories: DEFAULT_MENU_CATEGORIES,
   theme: {
+    template: 'classic',
     primaryColor: '#8f4229',
     secondaryColor: '#dc704b',
     font: 'Playfair Display',
@@ -39,19 +40,18 @@ export const DEFAULT_MENU_SETTINGS = {
     buttonStyle: 'pill',
     spacingDensity: 'comfortable',
     animationIntensity: 'subtle',
-    sectionOrder: ['hero', 'categories', 'bestsellers', 'products', 'custom', 'trust', 'footer']
+    sectionOrder: ['hero', 'categories', 'bestsellers', 'products', 'custom', 'trust', 'footer'],
   },
   published: false,
-  updatedAt: null
+  updatedAt: null,
 };
 
-export const normalizeSlug = (value) => (
+export const normalizeSlug = (value) =>
   String(value || '')
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '')
-);
+    .replace(/(^-|-$)/g, '');
 
 const dedupeRepeatedName = (value) => {
   const name = String(value || '').trim();
@@ -61,43 +61,86 @@ const dedupeRepeatedName = (value) => {
     : name;
 };
 
+const isRenderableLogo = (val) =>
+  typeof val === 'string' &&
+  (val.startsWith('data:image') || val.startsWith('http://') || val.startsWith('https://'));
+
+const businessLogo = (b = {}) => {
+  if (isRenderableLogo(b.logoUrl)) return b.logoUrl;
+  if (isRenderableLogo(b.logo)) return b.logo;
+  return '';
+};
+
 export const mergeMenuSettings = (business = {}, settings = {}) => {
   const safeBusiness = business || {};
   const safeSettings = settings || {};
-  const bakeryName = dedupeRepeatedName(safeSettings.bakeryName || safeBusiness.name || DEFAULT_MENU_SETTINGS.bakeryName);
+
+  // ── Profile is the single source of truth for IDENTITY + CONTACT ──
+  // The menu builder no longer asks for these; it reads them from the
+  // business profile so the user never types them twice. Legacy menu
+  // settings (typed before this change) are kept as a fallback only.
+  const rawName = safeBusiness.name || safeSettings.bakeryName || DEFAULT_MENU_SETTINGS.bakeryName;
+  const bakeryName = dedupeRepeatedName(rawName);
+  const deliveryAreasFromProfile = Array.isArray(safeBusiness.deliveryAreas)
+    ? safeBusiness.deliveryAreas.join(', ')
+    : safeBusiness.deliveryAreas || '';
 
   return {
     ...DEFAULT_MENU_SETTINGS,
     ...safeSettings,
+    // Synced from profile (business-first):
     bakeryName,
-    whatsapp: safeSettings.whatsapp || safeBusiness.whatsapp || safeBusiness.phone || DEFAULT_MENU_SETTINGS.whatsapp,
-    instagram: safeSettings.instagram || safeBusiness.instagram || DEFAULT_MENU_SETTINGS.instagram,
-    city: safeSettings.city || safeBusiness.city || DEFAULT_MENU_SETTINGS.city,
-    logoUrl: safeSettings.logoUrl || safeBusiness.logoUrl || DEFAULT_MENU_SETTINGS.logoUrl,
+    tagline: safeBusiness.tagline || safeSettings.tagline || DEFAULT_MENU_SETTINGS.tagline,
+    whatsapp:
+      safeBusiness.whatsapp ||
+      safeBusiness.phone ||
+      safeSettings.whatsapp ||
+      DEFAULT_MENU_SETTINGS.whatsapp,
+    phone: safeBusiness.phone || safeBusiness.whatsapp || safeSettings.phone || '',
+    instagram: safeBusiness.instagram || safeSettings.instagram || DEFAULT_MENU_SETTINGS.instagram,
+    website: safeBusiness.website || safeBusiness.portfolioLink || safeSettings.website || '',
+    email: safeBusiness.email || safeSettings.email || '',
+    city: safeBusiness.city || safeSettings.city || DEFAULT_MENU_SETTINGS.city,
+    logoUrl: businessLogo(safeBusiness) || safeSettings.logoUrl || DEFAULT_MENU_SETTINGS.logoUrl,
+    // Menu-only fields keep settings-first (these are NOT in the profile):
+    deliveryLocations:
+      safeSettings.deliveryLocations ||
+      deliveryAreasFromProfile ||
+      DEFAULT_MENU_SETTINGS.deliveryLocations,
     categories: safeSettings.categories?.length ? safeSettings.categories : DEFAULT_MENU_CATEGORIES,
     theme: {
       ...DEFAULT_MENU_SETTINGS.theme,
-      ...(safeSettings.theme || {})
-    }
+      ...(safeSettings.theme || {}),
+    },
   };
 };
 
-export const menuImageForProduct = (product, index = 0) => (
-  product?.imageUrl || product?.img || [
+export const menuImageForProduct = (product, index = 0) =>
+  product?.imageUrl ||
+  product?.img ||
+  [
     MENU_TEMPLATE_ASSETS.truffle,
     MENU_TEMPLATE_ASSETS.redVelvet,
     MENU_TEMPLATE_ASSETS.butterscotch,
-    MENU_TEMPLATE_ASSETS.cheesecake
-  ][index % 4]
-);
+    MENU_TEMPLATE_ASSETS.cheesecake,
+  ][index % 4];
 
-export const normalizeMenuProducts = (products = []) => (
+export const normalizeMenuProducts = (products = []) =>
   products
-    .filter(product => product?.name && product.menuHidden !== true && product.visible !== false)
-    .map((product, index) => ({
+    .filter((product) => product?.name && product.menuHidden !== true && product.visible !== false)
+    // Respect the baker's drag-sorted menu order; products without an
+    // explicit menuOrder fall to the end in their natural order.
+    .map((product, naturalIndex) => ({ product, naturalIndex }))
+    .sort((a, b) => {
+      const oa = Number.isFinite(a.product.menuOrder) ? a.product.menuOrder : a.naturalIndex + 1000;
+      const ob = Number.isFinite(b.product.menuOrder) ? b.product.menuOrder : b.naturalIndex + 1000;
+      return oa - ob;
+    })
+    .map(({ product }, index) => ({
       id: product.id || `${product.name}-${index}`,
       name: product.name,
-      description: product.description || product.flavors || 'Freshly baked with premium ingredients',
+      description:
+        product.description || product.flavors || 'Freshly baked with premium ingredients',
       price: Number(product.basePrice || product.price || 0),
       startingPrice: product.startingPrice !== false,
       image: menuImageForProduct(product, index),
@@ -105,6 +148,5 @@ export const normalizeMenuProducts = (products = []) => (
       bestseller: Boolean(product.bestseller || product.isBestseller),
       eggless: Boolean(product.eggless),
       weight: product.weight || product.variants || '',
-      featured: product.featured !== false
-    }))
-);
+      featured: product.featured !== false,
+    }));

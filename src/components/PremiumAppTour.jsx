@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { 
-  LayoutDashboard, ShoppingBag, Package, Receipt, BarChart3, 
-  ChevronRight, ChevronLeft, X, Sparkles, CheckCircle2,
-  Zap, Heart, Star, Coffee, Wand2, ShieldCheck,
-  ArrowRight, MousePointer2, Smartphone, Monitor
+import {
+  LayoutDashboard, ShoppingBag, Package, BarChart3,
+  ChevronRight, Sparkles, CheckCircle2, Wand2, ShieldCheck, Users,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { triggerConfetti } from './DopamineKit';
@@ -12,137 +10,126 @@ import { triggerConfetti } from './DopamineKit';
 const steps = [
   {
     id: 'welcome',
-    title: "Welcome to Cream & Crust",
-    description: "Your bakery's new high-performance engine. Let's take a quick tour of your workspace.",
+    emoji: '\u{1F9C1}',
+    title: 'Welcome, Baker',
+    description: "Your bakery just got a digital upgrade. Let us show you around \u2014 it only takes a minute.",
     icon: Sparkles,
-    color: "#6366F1",
-    image: "https://images.unsplash.com/photo-1555507036-ab1f4038808a?auto=format&fit=crop&q=80&w=800",
-    bgGradient: "linear-gradient(135deg, #6366F1 0%, #818CF8 100%)",
+    color: '#A14F61',
+    gradient: 'linear-gradient(135deg, #A14F61 0%, #D4838E 100%)',
   },
   {
     id: 'dashboard',
-    title: "Live Command Center",
-    description: "Monitor your business pulse. Track daily revenue, delivery schedules, and critical alerts in real-time.",
+    emoji: '\u{1F4CA}',
+    title: 'Your Command Center',
+    description: "See today\u2019s revenue, pending orders, low-stock alerts, and delivery schedule \u2014 all in one glance.",
     icon: LayoutDashboard,
-    color: "#0EA5E9",
-    image: "https://images.unsplash.com/photo-1551288049-bbdac8a28a80?auto=format&fit=crop&q=80&w=800",
-    bgGradient: "linear-gradient(135deg, #0EA5E9 0%, #38BDF8 100%)",
+    color: '#C8A46A',
+    gradient: 'linear-gradient(135deg, #C8A46A 0%, #E2CC9A 100%)',
   },
   {
     id: 'orders',
-    title: "Smart Order Flow",
-    description: "Manage orders from inquiry to delivery. Automated WhatsApp sharing and Rapido booking built right in.",
+    emoji: '\u{1F6D2}',
+    title: 'Smart Order Flow',
+    description: "From inquiry to delivery in one tap. Auto-generate invoices, share on WhatsApp, and book Rapido \u2014 all built in.",
     icon: ShoppingBag,
-    color: "#F43F5E",
-    image: "https://images.unsplash.com/photo-1513201099705-a9746e1e201f?auto=format&fit=crop&q=80&w=800",
-    bgGradient: "linear-gradient(135deg, #F43F5E 0%, #FB7185 100%)",
+    color: '#A14F61',
+    gradient: 'linear-gradient(135deg, #A14F61 0%, #D4838E 100%)',
   },
   {
-    id: 'portfolio',
-    title: "Portfolio Studio",
-    description: "Create a stunning 24/7 digital storefront. Pick a theme, add products, and take orders while you sleep.",
+    id: 'menu',
+    emoji: '\u2728',
+    title: 'Public Menu Builder',
+    description: "Create a stunning 24/7 online menu. Pick a theme, add products, share the link \u2014 take orders while you sleep.",
     icon: Wand2,
-    color: "#8B5CF6",
-    image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&q=80&w=800",
-    bgGradient: "linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)",
+    color: '#8B5CF6',
+    gradient: 'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)',
   },
   {
-    id: 'vault',
-    title: "Secure Recipe Vault",
-    description: "Your secret formulas, protected by biometric security. Access your recipes anywhere, safely.",
+    id: 'recipes',
+    emoji: '\u{1F510}',
+    title: 'Secret Recipe Vault',
+    description: "Your formulas, protected. Store recipes with costing, batch scaling, and biometric lock for sensitive ones.",
     icon: ShieldCheck,
-    color: "#10B981",
-    image: "https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&q=80&w=800",
-    bgGradient: "linear-gradient(135deg, #10B981 0%, #34D399 100%)",
+    color: '#2F7A5A',
+    gradient: 'linear-gradient(135deg, #2F7A5A 0%, #4ADE80 100%)',
   },
   {
     id: 'inventory',
-    title: "Inventory Mastery",
-    description: "Never run out of flour again. Smart low-stock alerts and automatic ingredient cost tracking.",
+    emoji: '\u{1F4E6}',
+    title: 'Inventory Mastery',
+    description: "Never run out of flour again. Smart low-stock alerts, auto-deduction when orders are fulfilled, and cost tracking.",
     icon: Package,
-    color: "#F59E0B",
-    image: "https://images.unsplash.com/photo-1586717791821-3f44a563eb4c?auto=format&fit=crop&q=80&w=800",
-    bgGradient: "linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)",
+    color: '#C8A46A',
+    gradient: 'linear-gradient(135deg, #C8A46A 0%, #E2CC9A 100%)',
+  },
+  {
+    id: 'customers',
+    emoji: '\u{1F49B}',
+    title: 'Customer Relationships',
+    description: "Remember every customer\u2019s preferences, order history, and special dates. Build loyalty that lasts.",
+    icon: Users,
+    color: '#F59E0B',
+    gradient: 'linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%)',
   },
   {
     id: 'analytics',
-    title: "Growth Analytics",
-    description: "Turn data into profit. Visualize margins and trends with beautiful, actionable charts.",
+    emoji: '\u{1F4C8}',
+    title: 'Growth Analytics',
+    description: "Turn data into profit. Visualize margins, best-sellers, and monthly trends with beautiful charts.",
     icon: BarChart3,
-    color: "#6366F1",
-    image: "https://images.unsplash.com/photo-1551288049-bbdac8a28a80?auto=format&fit=crop&q=80&w=800",
-    bgGradient: "linear-gradient(135deg, #6366F1 0%, #818CF8 100%)",
+    color: '#6366F1',
+    gradient: 'linear-gradient(135deg, #6366F1 0%, #818CF8 100%)',
   },
   {
     id: 'ready',
+    emoji: '\u{1F389}',
     title: "You're All Set!",
-    description: "Your digital bakery is now online. Join 100+ professional bakers scaling with Cream & Crust.",
+    description: "Your digital bakery is live. Join 100+ professional bakers growing with Cream & Crust.",
     icon: CheckCircle2,
-    color: "#10B981",
-    image: "https://images.unsplash.com/photo-1556742044-3c52d6e88c62?auto=format&fit=crop&q=80&w=800",
-    bgGradient: "linear-gradient(135deg, #10B981 0%, #34D399 100%)",
-  }
+    color: '#2F7A5A',
+    gradient: 'linear-gradient(135deg, #2F7A5A 0%, #4ADE80 100%)',
+  },
 ];
 
-const PerspectiveCard = ({ children, color }) => {
+function PerspectiveCard({ children }) {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
+  const rotateX = useSpring(useTransform(mouseY, [-300, 300], [6, -6]), { stiffness: 120, damping: 30 });
+  const rotateY = useSpring(useTransform(mouseX, [-300, 300], [-6, 6]), { stiffness: 120, damping: 30 });
 
-  const rotateX = useSpring(useTransform(mouseY, [-300, 300], [10, -10]), { stiffness: 100, damping: 30 });
-  const rotateY = useSpring(useTransform(mouseX, [-300, 300], [-10, 10]), { stiffness: 100, damping: 30 });
-
-  function handleMouseMove(event) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left - rect.width / 2;
-    const y = event.clientY - rect.top - rect.height / 2;
-    mouseX.set(x);
-    mouseY.set(y);
+  function handleMouseMove(e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    mouseX.set(e.clientX - rect.left - rect.width / 2);
+    mouseY.set(e.clientY - rect.top - rect.height / 2);
   }
-
-  function handleMouseLeave() {
-    mouseX.set(0);
-    mouseY.set(0);
-  }
+  function handleMouseLeave() { mouseX.set(0); mouseY.set(0); }
 
   return (
     <motion.div
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      style={{
-        rotateX,
-        rotateY,
-        transformStyle: "preserve-3d",
-      }}
-      className="relative w-full max-w-xl"
+      style={{ rotateX, rotateY, transformStyle: 'preserve-3d', width: '100%', maxWidth: 480 }}
     >
       {children}
     </motion.div>
   );
-};
+}
 
 export default function PremiumAppTour({ onComplete }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isExiting, setIsExiting] = useState(false);
   const { finishTour } = useAuth();
-  
+
   const step = steps[currentStep];
   const isLast = currentStep === steps.length - 1;
 
-  const handleNext = () => {
-    if (isLast) {
-      handleFinish();
-    } else {
-      setCurrentStep(prev => prev + 1);
-    }
-  };
+  const handleNext = () => { if (isLast) handleFinish(); else setCurrentStep(p => p + 1); };
+  const handleBack = () => { if (currentStep > 0) setCurrentStep(p => p - 1); };
 
   const handleFinish = async () => {
     triggerConfetti(window.innerWidth / 2, window.innerHeight / 2);
     setIsExiting(true);
-    setTimeout(() => {
-      if (finishTour) finishTour();
-      if (onComplete) onComplete();
-    }, 800);
+    setTimeout(() => { if (finishTour) finishTour(); if (onComplete) onComplete(); }, 800);
   };
 
   return (
@@ -151,143 +138,126 @@ export default function PremiumAppTour({ onComplete }) {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.5 }}
           style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(15, 23, 42, 0.9)',
-            backdropFilter: 'blur(20px)',
-            padding: 20
+            position: 'fixed', inset: 0, zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(250, 247, 245, 0.85)',
+            backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)',
+            padding: 20,
           }}
         >
-          {/* Animated Background Shapes */}
+          {/* Ambient blobs */}
           <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-            <motion.div 
-              animate={{ 
-                scale: [1, 1.2, 1],
-                rotate: [0, 90, 0],
-                x: [0, 100, 0]
-              }}
-              transition={{ duration: 20, repeat: Infinity }}
-              style={{ position: 'absolute', top: '-10%', right: '-10%', width: 600, height: 600, borderRadius: '50%', background: `${step.color}15`, filter: 'blur(100px)' }} 
+            <motion.div
+              animate={{ scale: [1, 1.3, 1], x: [0, 80, 0], y: [0, -40, 0] }}
+              transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ position: 'absolute', top: '-15%', right: '-10%', width: 500, height: 500, borderRadius: '50%', background: step.color + '18', filter: 'blur(100px)' }}
             />
-            <motion.div 
-              animate={{ 
-                scale: [1, 1.3, 1],
-                rotate: [0, -90, 0],
-                x: [0, -100, 0]
-              }}
-              transition={{ duration: 25, repeat: Infinity }}
-              style={{ position: 'absolute', bottom: '-10%', left: '-10%', width: 600, height: 600, borderRadius: '50%', background: `${step.color}10`, filter: 'blur(100px)' }} 
+            <motion.div
+              animate={{ scale: [1, 1.2, 1], x: [0, -60, 0], y: [0, 60, 0] }}
+              transition={{ duration: 22, repeat: Infinity, ease: 'easeInOut' }}
+              style={{ position: 'absolute', bottom: '-15%', left: '-10%', width: 500, height: 500, borderRadius: '50%', background: step.color + '12', filter: 'blur(100px)' }}
             />
           </div>
 
-          <PerspectiveCard color={step.color}>
-            <motion.div
-              layoutId="tour-card"
-              style={{
-                background: 'rgba(255, 255, 255, 0.95)',
-                borderRadius: 48,
-                overflow: 'hidden',
-                boxShadow: '0 50px 100px rgba(0,0,0,0.3)',
-                border: '1px solid rgba(255,255,255,0.2)',
-                position: 'relative'
-              }}
-            >
-              {/* Image Header */}
-              <div style={{ height: 240, position: 'relative', overflow: 'hidden' }}>
-                <AnimatePresence mode="wait">
-                  <motion.img 
-                    key={currentStep}
-                    src={step.image} 
-                    initial={{ scale: 1.2, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 1.1, opacity: 0 }}
-                    transition={{ duration: 0.8, ease: "easeOut" }}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                  />
-                </AnimatePresence>
-                <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to bottom, transparent, rgba(0,0,0,0.4))` }} />
-                
-                {/* Step Icon Overlay */}
-                <motion.div 
-                  initial={{ y: 20, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  transition={{ delay: 0.3 }}
-                  style={{ 
-                    position: 'absolute', bottom: 24, left: 32, 
-                    width: 64, height: 64, borderRadius: 20, 
-                    background: 'white', color: step.color,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 10px 25px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  <step.icon size={32} />
-                </motion.div>
+          <PerspectiveCard>
+            <motion.div layout style={{
+              background: '#FFFDFA', borderRadius: 36, overflow: 'hidden',
+              boxShadow: '0 40px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08)',
+              position: 'relative',
+            }}>
+              {/* Top gradient band */}
+              <div style={{ height: 6, background: step.gradient }} />
 
-                {/* Skip Button */}
-                <button 
-                  onClick={handleFinish}
-                  style={{ position: 'absolute', top: 24, right: 24, background: 'rgba(0,0,0,0.2)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: 100, fontSize: '0.8rem', fontWeight: 700, backdropFilter: 'blur(10px)', cursor: 'pointer' }}
-                >
-                  Skip Tour
-                </button>
-              </div>
-
-              {/* Content Body */}
-              <div style={{ padding: '40px 32px 32px' }}>
+              {/* Emoji hero */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 32px 24px' }}>
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={currentStep}
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    exit={{ y: -20, opacity: 0 }}
-                    transition={{ duration: 0.4 }}
+                    initial={{ scale: 0.5, opacity: 0, rotate: -20 }}
+                    animate={{ scale: 1, opacity: 1, rotate: 0 }}
+                    exit={{ scale: 0.5, opacity: 0, rotate: 20 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    style={{
+                      width: 100, height: 100, borderRadius: 28,
+                      background: step.color + '12', border: '2px solid ' + step.color + '30',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 52, boxShadow: '0 16px 40px ' + step.color + '20',
+                    }}
                   >
-                    <h2 style={{ fontSize: '2.2rem', fontWeight: 950, color: '#0F172A', letterSpacing: '-0.04em', lineHeight: 1.1, marginBottom: 16 }}>
+                    {step.emoji}
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* Content */}
+              <div style={{ padding: '0 36px 40px', textAlign: 'center' }}>
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentStep}
+                    initial={{ y: 24, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -24, opacity: 0 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                  >
+                    <h2 style={{
+                      fontFamily: '"Playfair Display", Georgia, serif',
+                      fontSize: '1.9rem', fontWeight: 700, color: '#2A1E1B',
+                      letterSpacing: '-0.03em', lineHeight: 1.15, marginBottom: 14,
+                    }}>
                       {step.title}
                     </h2>
-                    <p style={{ fontSize: '1.1rem', color: '#64748B', lineHeight: 1.6, fontWeight: 500, marginBottom: 40 }}>
+                    <p style={{
+                      fontSize: '1rem', color: '#7F7069', lineHeight: 1.65,
+                      fontWeight: 500, maxWidth: 360, margin: '0 auto',
+                    }}>
                       {step.description}
                     </p>
                   </motion.div>
                 </AnimatePresence>
 
-                {/* Footer Actions */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {steps.map((_, i) => (
-                      <div 
-                        key={i} 
-                        style={{ 
-                          width: i === currentStep ? 32 : 8, 
-                          height: 8, 
-                          borderRadius: 4, 
-                          background: i === currentStep ? step.color : '#E2E8F0',
-                          transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-                        }} 
-                      />
-                    ))}
-                  </div>
+                {/* Progress dots */}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 32, marginBottom: 28 }}>
+                  {steps.map((_, i) => (
+                    <motion.div
+                      key={i}
+                      animate={{ width: i === currentStep ? 28 : 8, background: i === currentStep ? step.color : '#E8DDD8' }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                      style={{ height: 8, borderRadius: 4 }}
+                    />
+                  ))}
+                </div>
 
-                  <motion.button
-                    whileHover={{ scale: 1.05, x: 5 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={handleNext}
-                    style={{ 
-                      height: 64, padding: '0 32px', borderRadius: 24, 
-                      background: step.bgGradient, color: 'white', 
-                      border: 'none', fontWeight: 800, fontSize: '1.1rem',
-                      display: 'flex', alignItems: 'center', gap: 12,
-                      cursor: 'pointer', boxShadow: `0 20px 40px ${step.color}30`
+                {/* Actions */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                  <button
+                    onClick={currentStep > 0 ? handleBack : handleFinish}
+                    style={{
+                      height: 52, padding: '0 20px', borderRadius: 16,
+                      background: 'transparent', border: '1.5px solid #E8DDD8',
+                      color: '#7F7069', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer',
                     }}
                   >
-                    {isLast ? 'Start Baking' : 'Continue'}
-                    <ChevronRight size={22} />
+                    {currentStep > 0 ? 'Back' : 'Skip'}
+                  </button>
+
+                  <motion.button
+                    whileHover={{ scale: 1.03, y: -1 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={handleNext}
+                    style={{
+                      height: 56, padding: '0 28px', borderRadius: 18,
+                      background: step.gradient, color: '#FFFFFF', border: 'none',
+                      fontWeight: 800, fontSize: '1rem',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      cursor: 'pointer', boxShadow: '0 12px 32px ' + step.color + '35',
+                      letterSpacing: '-0.01em',
+                    }}
+                  >
+                    {isLast ? 'Start Baking \u{1F382}' : 'Continue'}
+                    {!isLast && <ChevronRight size={20} />}
                   </motion.button>
                 </div>
               </div>

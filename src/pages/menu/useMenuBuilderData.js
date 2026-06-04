@@ -6,7 +6,7 @@ import {
   subscribeToMenuSettings,
   subscribeToProducts,
   updateMenuSettings,
-  updateProductInDB
+  updateProductInDB,
 } from '../../services/db';
 import { mergeMenuSettings } from '../../data/menuDefaults';
 
@@ -24,7 +24,11 @@ export function useMenuBuilderData() {
       setSettings(data || {});
       setLoading(false);
     });
-    const unsubProducts = subscribeToProducts((items) => setProducts(items || []), null, currentUser.uid);
+    const unsubProducts = subscribeToProducts(
+      (items) => setProducts(items || []),
+      null,
+      currentUser.uid
+    );
 
     return () => {
       unsubBiz();
@@ -33,8 +37,24 @@ export function useMenuBuilderData() {
     };
   }, [currentUser?.uid]);
 
-  const menu = useMemo(() => mergeMenuSettings(business || {}, settings || {}), [business, settings]);
+  const menu = useMemo(
+    () => mergeMenuSettings(business || {}, settings || {}),
+    [business, settings]
+  );
   const username = business?.username || currentUser?.email?.split('@')[0] || 'menu';
+
+  // Products sorted by their saved menu order (menuOrder). Products without
+  // an explicit order fall back to their natural position so legacy data
+  // still renders sensibly.
+  const orderedProducts = useMemo(() => {
+    const withIndex = (products || []).map((p, i) => ({ p, i }));
+    withIndex.sort((a, b) => {
+      const oa = Number.isFinite(a.p.menuOrder) ? a.p.menuOrder : a.i + 1000;
+      const ob = Number.isFinite(b.p.menuOrder) ? b.p.menuOrder : b.i + 1000;
+      return oa - ob;
+    });
+    return withIndex.map(({ p }) => p);
+  }, [products]);
 
   const saveMenu = async (patch) => {
     const next = { ...menu, ...patch, theme: { ...menu.theme, ...(patch.theme || {}) } };
@@ -49,15 +69,28 @@ export function useMenuBuilderData() {
     await updateProductInDB(productId, patch);
   };
 
+  // Persist a new ordering. `orderedList` is the full array of products in
+  // the desired visual order; we write a 0-based `menuOrder` to each.
+  const saveProductOrder = async (orderedList) => {
+    await Promise.all(
+      orderedList.map((product, index) =>
+        Number.isFinite(product.menuOrder) && product.menuOrder === index
+          ? Promise.resolve()
+          : updateProductInDB(product.id, { menuOrder: index })
+      )
+    );
+  };
+
   return {
     currentUser,
     business,
     username,
     menu,
-    products,
+    products: orderedProducts,
     loading,
     saveMenu,
     publishMenu,
-    saveProduct
+    saveProduct,
+    saveProductOrder,
   };
 }

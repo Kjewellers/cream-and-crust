@@ -4,16 +4,16 @@
 
 export const calculateOrderBalance = (order) => {
   if (!order) return 0;
-  
+
   const total = Number(order.total || order.totalAmount || 0);
   const advance = Number(order.advance || order.advanceAmount || order.amountPaid || 0);
   const balance = Math.max(0, total - advance);
-  
+
   // If explicitly marked as paid, balance is 0
   if (order.isPaid === true || String(order.paymentStatus).toLowerCase() === 'paid') {
     return 0;
   }
-  
+
   return balance;
 };
 
@@ -23,24 +23,41 @@ export const isOrderPendingPayment = (order) => {
   return balance > 0;
 };
 
+/**
+ * The amount actually collected for a single order.
+ * When an order is explicitly marked paid, the full total is collected
+ * (even if no advance was recorded). Otherwise it's the advance taken.
+ * This keeps the Payments module in sync with the Orders payment toggle.
+ */
+export const calculateCollectedForOrder = (order) => {
+  if (!order) return 0;
+  const total = Number(order.total || order.totalAmount || 0);
+  const advance = Number(order.advance || order.advanceAmount || order.amountPaid || 0);
+  if (order.isPaid === true || String(order.paymentStatus).toLowerCase() === 'paid') {
+    // Fully paid — collected is the whole total (never less than the advance).
+    return Math.max(total, advance);
+  }
+  return advance;
+};
+
 export const calculatePendingPayments = (orders) => {
   if (!orders || !Array.isArray(orders)) return { amount: 0, count: 0 };
-  
+
   const pendingOrders = orders.filter(isOrderPendingPayment);
   const amount = pendingOrders.reduce((sum, o) => sum + calculateOrderBalance(o), 0);
-  
+
   return {
     amount,
     count: pendingOrders.length,
-    orders: pendingOrders
+    orders: pendingOrders,
   };
 };
 
 export const calculateTotalRevenue = (orders) => {
   if (!orders || !Array.isArray(orders)) return 0;
-  
+
   return orders
-    .filter(o => {
+    .filter((o) => {
       const status = String(o.status || '').toLowerCase();
       return status !== 'inquiry' && status !== 'cancelled';
     })
@@ -49,11 +66,11 @@ export const calculateTotalRevenue = (orders) => {
 
 export const calculateCollectedRevenue = (orders) => {
   if (!orders || !Array.isArray(orders)) return 0;
-  
+
   return orders
-    .filter(o => {
+    .filter((o) => {
       const status = String(o.status || '').toLowerCase();
       return status !== 'inquiry' && status !== 'cancelled';
     })
-    .reduce((sum, o) => sum + (Number(o.advance) || 0), 0);
+    .reduce((sum, o) => sum + calculateCollectedForOrder(o), 0);
 };

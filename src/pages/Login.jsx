@@ -1,282 +1,2126 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { loginUser, registerUser, signInWithGoogle } from '../services/auth';
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowUpRight,
+  Check,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Lock,
+  Mail,
+  Phone,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  User,
+} from 'lucide-react';
+import {
+  loginUser,
+  registerUser,
+  signInWithGoogle,
+  resetPasswordByEmail,
+  lookupEmailByPhone,
+  loginWithPhone,
+} from '../services/auth';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { auth } from '../services/firebase';
 import { triggerHaptic, showToast } from '../components/iOS';
 
-/* ─── SVG Social Icons ─── */
+/* ─── Palette ──────────────────────────────────────────────────────
+   Warm bakery atelier palette consistent with the rest of the app.
+   ────────────────────────────────────────────────────────────────── */
+const C = {
+  cream: '#FAF6F0',
+  ivory: '#F4ECDD',
+  paper: '#FFFFFF',
+  ink: '#1F1611',
+  mute: '#7C6B5E',
+  hairline: '#E5DDD0',
+  rose: '#B5606A',
+  roseDeep: '#8B4951',
+  roseSoft: '#F4DDD6',
+  gold: '#B89968',
+  goldHi: '#D8B97E',
+};
+
+const FONT_DISPLAY = '"Playfair Display", Georgia, serif';
+const FONT_BODY = '"Inter", system-ui, -apple-system, sans-serif';
+
+/* ─── Brand monogram seal (inline SVG, no asset deps) ─────────────── */
+const Monogram = ({ size = 56 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+    <defs>
+      <linearGradient id="cc-seal" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor={C.rose} />
+        <stop offset="100%" stopColor={C.goldHi} />
+      </linearGradient>
+    </defs>
+    <circle cx="32" cy="32" r="29" fill="url(#cc-seal)" />
+    <circle
+      cx="32"
+      cy="32"
+      r="26"
+      fill="none"
+      stroke={C.cream}
+      strokeOpacity="0.55"
+      strokeWidth="0.6"
+    />
+    <text
+      x="32"
+      y="42"
+      textAnchor="middle"
+      fontFamily="Playfair Display, Georgia, serif"
+      fontSize="28"
+      fontStyle="italic"
+      fontWeight="600"
+      fill={C.cream}
+      letterSpacing="-0.05em"
+    >
+      C&amp;C
+    </text>
+  </svg>
+);
+
+/* ─── Brand corner ornament (used as accent flourish) ────────────── */
+const Flourish = ({ width = 80, color = C.gold, style }) => (
+  <svg width={width} height={14} viewBox="0 0 80 14" style={style} aria-hidden="true">
+    <path
+      d="M2 7 H30 M50 7 H78 M40 7 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0"
+      stroke={color}
+      strokeWidth="0.8"
+      strokeLinecap="round"
+      fill="none"
+    />
+    <circle cx="40" cy="7" r="1.4" fill={color} />
+  </svg>
+);
+
 const GoogleIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.07 5.07 0 01-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09a7.12 7.12 0 010-4.18V7.07H2.18A11.99 11.99 0 001 12c0 1.78.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-);
-const AppleIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="#000"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-);
-const FacebookIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+  <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      fill="#4285F4"
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.07 5.07 0 01-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M5.84 14.09a7.12 7.12 0 010-4.18V7.07H2.18A11.99 11.99 0 001 12c0 1.78.43 3.45 1.18 4.93l3.66-2.84z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+    />
+  </svg>
 );
 
-/* ─── Shared Styles ─── */
-const fieldWrap = {
-  display: 'flex', alignItems: 'center', gap: 10,
-  background: '#FFFFFF', border: '1.5px solid #FFE0E6',
-  borderRadius: 16, padding: '10px 12px',
-  boxShadow: '0 2px 8px rgba(255,107,139,0.05)',
-  transition: 'border-color 0.2s, box-shadow 0.2s',
-};
-const iconBox = {
-  width: 32, height: 32, borderRadius: 10,
-  background: 'linear-gradient(135deg, #FFF0F3, #FFE0E6)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  fontSize: 14, flexShrink: 0,
-};
-const inputStyle = {
-  flex: 1, background: 'none', border: 'none', outline: 'none',
-  fontSize: '13.5px', color: '#3D1C2E', fontWeight: 600,
-  fontFamily: "'Outfit', sans-serif",
-};
+/* ─── Rotating taglines for the hero (auto-cycle) ────────────────── */
+const TAGLINES = [
+  'A studio for your sweetest work.',
+  'Where every cake has a story.',
+  'Your atelier, made simple.',
+  'Built quietly, baked beautifully.',
+];
 
-/* ─── Main Login Component ─── */
+/* ─── Field component (shared input shell) ───────────────────────── */
+function Field({
+  icon: Icon,
+  label,
+  type = 'text',
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+  onIconClick,
+  iconAction,
+  validIndicator,
+  required,
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <label
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '12px 14px',
+        borderRadius: 14,
+        background: C.cream,
+        border: `1.5px solid ${focused ? C.rose : C.hairline}`,
+        transition: 'all 0.18s ease',
+        boxShadow: focused ? `0 0 0 4px ${C.rose}1A` : 'inset 0 1px 2px rgba(0,0,0,0.02)',
+      }}
+    >
+      <span
+        style={{
+          flexShrink: 0,
+          width: 22,
+          height: 22,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: focused ? C.rose : C.mute,
+          transition: 'color 0.18s ease',
+        }}
+      >
+        <Icon size={18} strokeWidth={1.8} />
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 9.5,
+            fontWeight: 700,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: focused ? C.roseDeep : C.mute,
+            marginBottom: 2,
+            transition: 'color 0.18s ease',
+          }}
+        >
+          {label}
+        </div>
+        <input
+          type={type}
+          required={required}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{
+            width: '100%',
+            padding: 0,
+            border: 'none',
+            background: 'transparent',
+            color: C.ink,
+            fontFamily: FONT_BODY,
+            fontSize: 15,
+            fontWeight: 500,
+            letterSpacing: '0.005em',
+            outline: 'none',
+          }}
+        />
+      </div>
+      {validIndicator && (
+        <span
+          style={{
+            flexShrink: 0,
+            width: 24,
+            height: 24,
+            borderRadius: '50%',
+            background: '#10B981',
+            color: '#fff',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Check size={13} strokeWidth={3} />
+        </span>
+      )}
+      {iconAction && (
+        <button
+          type="button"
+          onClick={onIconClick}
+          aria-label={iconAction.label}
+          style={{
+            flexShrink: 0,
+            width: 30,
+            height: 30,
+            border: 'none',
+            background: 'transparent',
+            cursor: 'pointer',
+            color: C.mute,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {iconAction.icon}
+        </button>
+      )}
+    </label>
+  );
+}
+
+/* ─── Password rule indicator ────────────────────────────────────── */
+function PwRule({ ok, label }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        fontSize: 11,
+        fontWeight: 600,
+        color: ok ? '#10B981' : C.mute,
+        transition: 'color 0.2s',
+      }}
+    >
+      <span
+        style={{
+          width: 14,
+          height: 14,
+          borderRadius: '50%',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: ok ? '#10B981' : 'rgba(0,0,0,0.06)',
+          color: ok ? '#fff' : C.mute,
+          fontSize: 9,
+          fontWeight: 900,
+          transition: 'all 0.2s',
+        }}
+      >
+        {ok ? '✓' : '·'}
+      </span>
+      {label}
+    </div>
+  );
+}
+
+/* ─── Phone OTP Flow overlay ─────────────────────────────────────── */
+function PhoneOtpFlow({
+  onClose,
+  phoneNumber,
+  setPhoneNumber,
+  otpCode,
+  setOtpCode,
+  otpSent,
+  loading,
+  onSendOtp,
+  onVerifyOtp,
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        background: 'rgba(28, 20, 16, 0.4)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <motion.div
+        initial={{ y: 30, opacity: 0, scale: 0.96 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 20, opacity: 0, scale: 0.96 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 380,
+          background: '#fff',
+          borderRadius: 24,
+          padding: '28px 24px',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
+        }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 16,
+              background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 14px',
+              color: '#fff',
+            }}
+          >
+            <Phone size={22} strokeWidth={2} />
+          </div>
+          <h3
+            style={{
+              fontFamily: FONT_DISPLAY,
+              fontSize: 22,
+              fontWeight: 700,
+              margin: '0 0 4px',
+              letterSpacing: '-0.02em',
+              color: C.ink,
+            }}
+          >
+            {otpSent ? 'Enter OTP' : 'Phone Sign In'}
+          </h3>
+          <p style={{ fontSize: 13, color: C.mute, margin: 0 }}>
+            {otpSent
+              ? 'We sent a 6-digit code to your phone'
+              : "We'll send a one-time code to verify"}
+          </p>
+        </div>
+
+        {!otpSent ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '12px 14px',
+                borderRadius: 14,
+                background: C.cream,
+                border: `1.5px solid ${C.hairline}`,
+              }}
+            >
+              <span style={{ fontSize: 18 }}>🇮🇳</span>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="+91 98765 43210"
+                style={{
+                  flex: 1,
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  fontFamily: FONT_BODY,
+                  color: C.ink,
+                  outline: 'none',
+                  letterSpacing: '0.02em',
+                }}
+                autoFocus
+              />
+            </label>
+            <button
+              type="button"
+              onClick={onSendOtp}
+              disabled={loading || phoneNumber.replace(/\D/g, '').length < 10}
+              style={{
+                width: '100%',
+                height: 48,
+                borderRadius: 14,
+                border: 'none',
+                background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
+                color: '#fff',
+                fontFamily: FONT_BODY,
+                fontSize: 14,
+                fontWeight: 800,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                opacity: loading || phoneNumber.replace(/\D/g, '').length < 10 ? 0.5 : 1,
+                boxShadow: `0 8px 20px ${C.rose}40`,
+              }}
+            >
+              {loading ? 'Sending...' : 'Send OTP'}
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '14px',
+                borderRadius: 14,
+                background: C.cream,
+                border: `1.5px solid ${C.hairline}`,
+              }}
+            >
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="------"
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  fontSize: 24,
+                  fontWeight: 800,
+                  fontFamily: 'ui-monospace, monospace',
+                  color: C.ink,
+                  outline: 'none',
+                  textAlign: 'center',
+                  letterSpacing: '0.3em',
+                  width: '100%',
+                }}
+                autoFocus
+              />
+            </label>
+            <button
+              type="button"
+              onClick={onVerifyOtp}
+              disabled={loading || otpCode.length !== 6}
+              style={{
+                width: '100%',
+                height: 48,
+                borderRadius: 14,
+                border: 'none',
+                background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
+                color: '#fff',
+                fontFamily: FONT_BODY,
+                fontSize: 14,
+                fontWeight: 800,
+                letterSpacing: '0.12em',
+                textTransform: 'uppercase',
+                cursor: 'pointer',
+                opacity: loading || otpCode.length !== 6 ? 0.5 : 1,
+                boxShadow: `0 8px 20px ${C.rose}40`,
+              }}
+            >
+              {loading ? 'Verifying...' : 'Verify & Sign In'}
+            </button>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onClose}
+          style={{
+            width: '100%',
+            marginTop: 12,
+            padding: '10px',
+            border: 'none',
+            background: 'transparent',
+            color: C.mute,
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            fontFamily: FONT_BODY,
+          }}
+        >
+          Cancel
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ─── Forgot Password Flow overlay ───────────────────────────────── */
+function ForgotPasswordFlow({ onClose }) {
+  const [method, setMethod] = useState('email'); // 'email' | 'phone'
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetPhone, setResetPhone] = useState('');
+  const [step, setStep] = useState('input'); // 'input' | 'sending' | 'sent'
+  const [maskedEmail, setMaskedEmail] = useState('');
+  const [error, setError] = useState('');
+
+  const handleResetViaEmail = async () => {
+    const trimmed = resetEmail.trim();
+    if (!trimmed || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(trimmed)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+    setError('');
+    setStep('sending');
+    try {
+      await resetPasswordByEmail(trimmed);
+      const [local, domain] = trimmed.split('@');
+      const masked =
+        local.length <= 2
+          ? `${local[0]}***@${domain}`
+          : `${local[0]}${'*'.repeat(Math.min(local.length - 2, 5))}${local.slice(-1)}@${domain}`;
+      setMaskedEmail(masked);
+      setStep('sent');
+      triggerHaptic('success');
+    } catch (err) {
+      console.error('Reset email error:', err);
+      setStep('input');
+      const msgs = {
+        'auth/invalid-email': 'That doesn\'t look like a valid email.',
+        'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
+      };
+      setError(msgs[err?.code] || 'Reset link sent if an account exists with that email.');
+      // Show success anyway to prevent user enumeration
+      if (!msgs[err?.code]) {
+        setMaskedEmail(resetEmail.trim());
+        setStep('sent');
+      }
+    }
+  };
+
+  const handleResetViaPhone = async () => {
+    const digits = resetPhone.replace(/\D/g, '');
+    if (digits.length < 10) {
+      setError('Enter a valid phone number (at least 10 digits).');
+      return;
+    }
+    setError('');
+    setStep('sending');
+    try {
+      const result = await lookupEmailByPhone(resetPhone);
+      await resetPasswordByEmail(result.email);
+      setMaskedEmail(result.maskedEmail);
+      setStep('sent');
+      triggerHaptic('success');
+    } catch (err) {
+      console.error('Phone reset error:', err);
+      setStep('input');
+      setError(err?.message || 'Could not find an account with that phone number.');
+    }
+  };
+
+  const tabStyle = (active) => ({
+    flex: 1,
+    padding: '10px 0',
+    border: 'none',
+    borderBottom: `2.5px solid ${active ? C.rose : 'transparent'}`,
+    background: 'transparent',
+    color: active ? C.roseDeep : C.mute,
+    fontFamily: FONT_BODY,
+    fontSize: 13,
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  });
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        background: 'rgba(28, 20, 16, 0.4)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}
+    >
+      <motion.div
+        initial={{ y: 30, opacity: 0, scale: 0.96 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 20, opacity: 0, scale: 0.96 }}
+        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 400,
+          background: '#fff',
+          borderRadius: 24,
+          padding: '28px 24px',
+          boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 16,
+              background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 14px',
+              color: '#fff',
+            }}
+          >
+            <KeyRound size={22} strokeWidth={2} />
+          </div>
+          <h3
+            style={{
+              fontFamily: FONT_DISPLAY,
+              fontSize: 22,
+              fontWeight: 700,
+              margin: '0 0 4px',
+              letterSpacing: '-0.02em',
+              color: C.ink,
+            }}
+          >
+            {step === 'sent' ? 'Check Your Inbox' : 'Reset Password'}
+          </h3>
+          <p style={{ fontSize: 13, color: C.mute, margin: 0, lineHeight: 1.5 }}>
+            {step === 'sent'
+              ? 'We\'ve sent a password reset link'
+              : 'Enter your email or phone number to receive a reset link'}
+          </p>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {step === 'sent' ? (
+            /* ── Success state ───────────────────── */
+            <motion.div
+              key="sent"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}
+            >
+              <div
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  background: '#ECFDF5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '4px 0',
+                }}
+              >
+                <CheckCircle2 size={30} color="#10B981" strokeWidth={2} />
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p
+                  style={{
+                    margin: '0 0 4px',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: C.ink,
+                  }}
+                >
+                  Reset link sent to
+                </p>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: C.rose,
+                    fontFamily: 'ui-monospace, monospace',
+                    letterSpacing: '0.02em',
+                  }}
+                >
+                  {maskedEmail}
+                </p>
+              </div>
+              <p
+                style={{
+                  fontSize: 12,
+                  color: C.mute,
+                  textAlign: 'center',
+                  lineHeight: 1.6,
+                  margin: 0,
+                }}
+              >
+                Check your inbox and spam folder. The link expires in 1 hour.
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  width: '100%',
+                  height: 48,
+                  borderRadius: 14,
+                  border: 'none',
+                  background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
+                  color: '#fff',
+                  fontFamily: FONT_BODY,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  cursor: 'pointer',
+                  boxShadow: `0 8px 20px ${C.rose}40`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
+              >
+                <ArrowLeft size={16} strokeWidth={2.4} />
+                Back to Login
+              </button>
+            </motion.div>
+          ) : (
+            /* ── Input state ───────────────────── */
+            <motion.div
+              key="input"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+            >
+              {/* Tabs */}
+              <div
+                style={{
+                  display: 'flex',
+                  borderBottom: `1.5px solid ${C.hairline}`,
+                  marginBottom: 2,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => { setMethod('email'); setError(''); }}
+                  style={tabStyle(method === 'email')}
+                >
+                  <Mail size={14} /> Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMethod('phone'); setError(''); }}
+                  style={tabStyle(method === 'phone')}
+                >
+                  <Phone size={14} /> Phone
+                </button>
+              </div>
+
+              {/* Input field */}
+              <AnimatePresence mode="wait">
+                {method === 'email' ? (
+                  <motion.label
+                    key="email-input"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    transition={{ duration: 0.18 }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '12px 14px',
+                      borderRadius: 14,
+                      background: C.cream,
+                      border: `1.5px solid ${error ? '#EF4444' : C.hairline}`,
+                      transition: 'border-color 0.2s',
+                    }}
+                  >
+                    <Mail size={18} color={C.mute} strokeWidth={1.8} />
+                    <input
+                      type="email"
+                      value={resetEmail}
+                      onChange={(e) => { setResetEmail(e.target.value); setError(''); }}
+                      placeholder="your@email.com"
+                      autoFocus
+                      style={{
+                        flex: 1,
+                        border: 'none',
+                        background: 'transparent',
+                        fontSize: 15,
+                        fontWeight: 500,
+                        fontFamily: FONT_BODY,
+                        color: C.ink,
+                        outline: 'none',
+                      }}
+                    />
+                  </motion.label>
+                ) : (
+                  <motion.label
+                    key="phone-input"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.18 }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '12px 14px',
+                      borderRadius: 14,
+                      background: C.cream,
+                      border: `1.5px solid ${error ? '#EF4444' : C.hairline}`,
+                      transition: 'border-color 0.2s',
+                    }}
+                  >
+                    <span style={{ fontSize: 18 }}>🇮🇳</span>
+                    <input
+                      type="tel"
+                      value={resetPhone}
+                      onChange={(e) => { setResetPhone(e.target.value); setError(''); }}
+                      placeholder="+91 98765 43210"
+                      autoFocus
+                      style={{
+                        flex: 1,
+                        border: 'none',
+                        background: 'transparent',
+                        fontSize: 16,
+                        fontWeight: 600,
+                        fontFamily: FONT_BODY,
+                        color: C.ink,
+                        outline: 'none',
+                        letterSpacing: '0.02em',
+                      }}
+                    />
+                  </motion.label>
+                )}
+              </AnimatePresence>
+
+              {/* Error message */}
+              {error && (
+                <motion.p
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  style={{
+                    margin: 0,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#EF4444',
+                    padding: '0 4px',
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {error}
+                </motion.p>
+              )}
+
+              {/* Submit button */}
+              <button
+                type="button"
+                onClick={method === 'email' ? handleResetViaEmail : handleResetViaPhone}
+                disabled={step === 'sending'}
+                style={{
+                  width: '100%',
+                  height: 48,
+                  borderRadius: 14,
+                  border: 'none',
+                  background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
+                  color: '#fff',
+                  fontFamily: FONT_BODY,
+                  fontSize: 14,
+                  fontWeight: 800,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  cursor: step === 'sending' ? 'wait' : 'pointer',
+                  opacity: step === 'sending' ? 0.6 : 1,
+                  boxShadow: `0 8px 20px ${C.rose}40`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  transition: 'opacity 0.2s',
+                }}
+              >
+                {step === 'sending' ? (
+                  <>
+                    <span
+                      style={{
+                        width: 14,
+                        height: 14,
+                        borderRadius: '50%',
+                        border: '2px solid rgba(255,255,255,0.4)',
+                        borderTopColor: '#fff',
+                        animation: 'cc-spin 0.8s linear infinite',
+                        display: 'inline-block',
+                      }}
+                    />
+                    {method === 'phone' ? 'Looking up...' : 'Sending...'}
+                  </>
+                ) : (
+                  'Send Reset Link'
+                )}
+              </button>
+
+              {/* Hint */}
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 11.5,
+                  color: C.mute,
+                  textAlign: 'center',
+                  lineHeight: 1.5,
+                }}
+              >
+                {method === 'phone'
+                  ? 'We\'ll find the email linked to your phone and send a reset link there.'
+                  : 'We\'ll send a secure link to reset your password.'}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Cancel / close */}
+        {step !== 'sent' && (
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: '100%',
+              marginTop: 12,
+              padding: '10px',
+              border: 'none',
+              background: 'transparent',
+              color: C.mute,
+              fontSize: 13,
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontFamily: FONT_BODY,
+            }}
+          >
+            Cancel
+          </button>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* ─── Main Login component ───────────────────────────────────────── */
 export default function Login() {
   const [mode, setMode] = useState('login');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [remember, setRemember] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [capsOn, setCapsOn] = useState(false);
+  const [taglineIdx, setTaglineIdx] = useState(0);
+  const [showPhoneLogin, setShowPhoneLogin] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  // When user types a phone number in the email field, we look up their email
+  // and store it here. A non-empty value means we're in "phone login" mode.
+  const [resolvedEmail, setResolvedEmail] = useState(''); // email matched from phone
+  const [phoneInputValue, setPhoneInputValue] = useState(''); // raw phone the user typed
+  const [phoneLookupHint, setPhoneLookupHint] = useState(''); // display hint text
+  const [phoneLookupStatus, setPhoneLookupStatus] = useState(''); // 'searching'|'found'|'notfound'|''
+  const heroRef = useRef(null);
+  const recaptchaRef = useRef(null);
+
+  // Rotate taglines every 5.5s
+  useEffect(() => {
+    const id = setInterval(() => setTaglineIdx((i) => (i + 1) % TAGLINES.length), 5500);
+    return () => clearInterval(id);
+  }, []);
+
+  // Subtle parallax on the hero panel (desktop only) when mouse moves
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 920px)');
+    if (!mq.matches) return undefined;
+    const onMove = (e) => {
+      const el = heroRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const px = (e.clientX - rect.left) / rect.width - 0.5;
+      const py = (e.clientY - rect.top) / rect.height - 0.5;
+      el.style.setProperty('--orb-x', `${px * 14}px`);
+      el.style.setProperty('--orb-y', `${py * 14}px`);
+    };
+    window.addEventListener('mousemove', onMove);
+    return () => window.removeEventListener('mousemove', onMove);
+  }, []);
+
+  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim()), [email]);
+
+  // canSubmit: allow either a valid email OR a resolved phone (phone → email lookup succeeded)
+  const hasValidIdentifier = emailValid || (resolvedEmail.length > 0 && phoneInputValue.length > 0);
+
+  // ── Strict password rules ──────────────────────────────────────
+  // Min 8 chars, at least 1 uppercase, 1 lowercase, 1 digit, 1 special
+  const pwHasUpper = /[A-Z]/.test(password);
+  const pwHasLower = /[a-z]/.test(password);
+  const pwHasDigit = /\d/.test(password);
+  const pwHasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/.test(password);
+  const pwLongEnough = password.length >= 8;
+  const passwordOk = pwLongEnough && pwHasUpper && pwHasLower && pwHasDigit && pwHasSpecial;
+
+  // ── Strict name rules (register only) ──────────────────────────
+  // 2-50 chars, letters and spaces only
+  const nameClean = name.trim();
+  const nameValid =
+    nameClean.length >= 2 &&
+    nameClean.length <= 50 &&
+    /^[a-zA-Z\u00C0-\u024F\u0900-\u097F\u0980-\u09FF\u0A00-\u0A7F\u4E00-\u9FFF\s]+$/.test(
+      nameClean
+    );
+
+  const canSubmit = hasValidIdentifier && passwordOk && (mode === 'login' || nameValid);
+
+  const detectCaps = (e) => {
+    if (typeof e.getModifierState === 'function') {
+      setCapsOn(e.getModifierState('CapsLock'));
+    }
+  };
 
   const act = async (fn) => {
+    if (loading) return;
     setLoading(true);
-    try { triggerHaptic('light'); } catch {}
-    try { await fn(); }
-    catch (err) {
-      showToast(err.message || 'Authentication failed.', 'error');
-      try { triggerHaptic('error'); } catch {}
+    try {
+      triggerHaptic('light');
+    } catch (_) {}
+    try {
+      await fn();
+    } catch (err) {
+      const message = err?.message || 'Authentication failed.';
+      // Friendlier copy for known firebase auth codes
+      const codeMap = {
+        'auth/invalid-credential': 'Email or password incorrect. Try again.',
+        'auth/wrong-password': "That password doesn't match the account.",
+        'auth/user-not-found': 'No account with that email yet. Try registering.',
+        'auth/email-already-in-use': 'An account already exists with that email.',
+        'auth/weak-password':
+          'Password must be at least 8 characters with uppercase, lowercase, number, and special character.',
+        'auth/network-request-failed': 'Network hiccup. Check your connection.',
+        'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
+        'auth/popup-closed-by-user': 'Sign-in was cancelled.',
+      };
+      const friendly = err?.code && codeMap[err.code] ? codeMap[err.code] : message;
+      showToast(friendly, 'error');
+      try {
+        triggerHaptic('error');
+      } catch (_) {}
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!canSubmit) {
+      // Specific error messages for each validation rule
+      if (mode === 'register' && !nameClean) {
+        showToast('Please enter your name', 'error');
+      } else if (mode === 'register' && nameClean.length < 2) {
+        showToast('Name must be at least 2 characters', 'error');
+      } else if (mode === 'register' && nameClean.length > 50) {
+        showToast('Name must be under 50 characters', 'error');
+      } else if (mode === 'register' && !nameValid) {
+        showToast('Name can only contain letters and spaces', 'error');
+      } else if (!emailValid) {
+        showToast('Enter a valid email address', 'error');
+      } else if (!pwLongEnough) {
+        showToast('Password must be at least 8 characters', 'error');
+      } else if (!pwHasUpper) {
+        showToast('Password needs at least one uppercase letter (A-Z)', 'error');
+      } else if (!pwHasLower) {
+        showToast('Password needs at least one lowercase letter (a-z)', 'error');
+      } else if (!pwHasDigit) {
+        showToast('Password needs at least one number (0-9)', 'error');
+      } else if (!pwHasSpecial) {
+        showToast('Password needs at least one special character (!@#$...)', 'error');
+      }
+      return;
+    }
+    if (mode === 'login') {
+      // Phone login: use the looked-up email internally
+      if (resolvedEmail && phoneInputValue) {
+        act(() => loginWithPhone(phoneInputValue, password));
+      } else {
+        act(() => loginUser(email.trim(), password));
+      }
+    } else {
+      act(() => registerUser(email.trim(), password, nameClean));
+    }
+  };
+
+  const handleForgot = () => {
+    setShowForgotPassword(true);
+  };
+
+  // ── Phone-as-login: detect phone input in the email field ───────
+  // When the user types a phone number instead of an email, we detect
+  // it, run a Firestore lookup, and store the resolved email separately.
+  // The email field itself is NOT modified — we keep what the user typed.
+  const phoneLookupTimerRef = useRef(null);
+  const handleEmailChange = useCallback(
+    (e) => {
+      const val = e.target.value;
+      setEmail(val);
+      setPhoneLookupHint('');
+      setResolvedEmail('');
+      setPhoneInputValue('');
+      setPhoneLookupStatus('');
+
+      // Cancel any pending debounce
+      if (phoneLookupTimerRef.current) {
+        clearTimeout(phoneLookupTimerRef.current);
+        phoneLookupTimerRef.current = null;
+      }
+
+      // Detect phone number: purely digits (10+) or starts with +
+      const stripped = val.replace(/[\s\-()]/g, '');
+      const isPhoneInput =
+        (stripped.startsWith('+') && stripped.replace(/\D/g, '').length >= 10) ||
+        (/^\d+$/.test(stripped) && stripped.length >= 10);
+
+      if (isPhoneInput && mode === 'login') {
+        setPhoneLookupStatus('searching');
+        setPhoneLookupHint('Looking up your account...');
+        // Debounce by 700ms
+        phoneLookupTimerRef.current = setTimeout(async () => {
+          try {
+            const result = await lookupEmailByPhone(stripped);
+            setResolvedEmail(result.email);
+            setPhoneInputValue(stripped);
+            setPhoneLookupHint(`✓ Account found — enter your password to sign in`);
+            setPhoneLookupStatus('found');
+            triggerHaptic('light');
+          } catch {
+            setPhoneLookupHint('No account linked to this number. Try your email instead.');
+            setPhoneLookupStatus('notfound');
+          }
+        }, 700);
+      }
+    },
+    [mode]
+  );
+
+  // ── Phone OTP handlers ──────────────────────────────────────────
+  const handleSendOtp = async () => {
+    const digits = phoneNumber.replace(/\D/g, '');
+    if (digits.length < 10) {
+      showToast('Enter a valid phone number with country code', 'error');
+      return;
+    }
+    const fullPhone = digits.length === 10 ? `+91${digits}` : `+${digits}`;
+
+    setLoading(true);
+    try {
+      // Create invisible reCAPTCHA verifier
+      if (!recaptchaRef.current) {
+        recaptchaRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          size: 'invisible',
+        });
+      }
+      const result = await signInWithPhoneNumber(auth, fullPhone, recaptchaRef.current);
+      setConfirmationResult(result);
+      setOtpSent(true);
+      triggerHaptic('success');
+      showToast('OTP sent! Check your messages', 'success');
+    } catch (err) {
+      console.error('OTP send error:', err);
+      const msgs = {
+        'auth/invalid-phone-number': 'Invalid phone number. Include country code (e.g. +91...)',
+        'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
+        'auth/captcha-check-failed': 'reCAPTCHA verification failed. Refresh and try again.',
+      };
+      showToast(msgs[err?.code] || err?.message || 'Failed to send OTP', 'error');
+      // Reset reCAPTCHA on failure
+      if (recaptchaRef.current) {
+        try {
+          recaptchaRef.current.clear();
+        } catch {}
+        recaptchaRef.current = null;
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!confirmationResult) {
+      showToast('Please request OTP first', 'error');
+      return;
+    }
+    if (otpCode.length !== 6) {
+      showToast('Enter the 6-digit OTP', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await confirmationResult.confirm(otpCode);
+      const user = result.user;
+      triggerHaptic('success');
+
+      // Create user doc if first time
+      const { doc, getDoc, setDoc, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('../services/firebase');
+      const userRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userRef);
+      if (!userDoc.exists()) {
+        await setDoc(userRef, {
+          name: user.displayName || user.phoneNumber || 'Baker',
+          phone: user.phoneNumber,
+          role: 'admin',
+          createdAt: serverTimestamp(),
+        });
+        await setDoc(doc(db, 'business', user.uid), {
+          name: 'Cream & Crust',
+          logo: '🧁',
+          phone: user.phoneNumber,
+          username: 'baker' + Math.floor(100 + Math.random() * 900),
+          uid: user.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
+      showToast('Welcome! 🎉', 'success');
+    } catch (err) {
+      console.error('OTP verify error:', err);
+      const msgs = {
+        'auth/invalid-verification-code': 'Wrong OTP. Check and try again.',
+        'auth/code-expired': 'OTP expired. Request a new one.',
+      };
+      showToast(msgs[err?.code] || 'Verification failed', 'error');
+      triggerHaptic('error');
+    } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{
-      minHeight: '100dvh', display: 'flex', flexDirection: 'column',
-      background: 'linear-gradient(180deg, #FFF0F3 0%, #FFE0E8 40%, #FFD4DE 70%, #FFE0E8 100%)',
-      fontFamily: "'Outfit', sans-serif", position: 'relative',
-      overflowX: 'hidden', overflowY: 'auto',
-    }}>
-      {/* Fonts */}
-      <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Playfair+Display:ital,wght@0,700;1,700&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <div className="cc-login-shell">
+      {/* Inline fonts only (project convention) */}
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@400;500;600;700;800&display=swap"
+      />
 
-      {/* Soft blobs */}
-      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
-        <div style={{ position: 'absolute', top: -50, right: -50, width: 220, height: 220, borderRadius: '50%', background: 'rgba(255,180,195,0.35)', filter: 'blur(50px)' }} />
-        <div style={{ position: 'absolute', top: 200, left: -60, width: 180, height: 180, borderRadius: '50%', background: 'rgba(255,200,210,0.4)', filter: 'blur(40px)' }} />
-        <div style={{ position: 'absolute', bottom: 80, right: -30, width: 160, height: 160, borderRadius: '50%', background: 'rgba(255,160,180,0.25)', filter: 'blur(35px)' }} />
-      </div>
+      {/* ── Hero panel (left on desktop, slim header on mobile) ──── */}
+      <aside className="cc-login-hero" ref={heroRef}>
+        {/* Decorative orbs that follow cursor on desktop */}
+        <div className="cc-orb cc-orb-1" />
+        <div className="cc-orb cc-orb-2" />
+        <div className="cc-orb cc-orb-3" />
 
-      {/* ═══════ HEADER ═══════ */}
-      <div style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px 0' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 10px rgba(255,107,139,0.15)', fontSize: 18 }}>🧁</div>
+        {/* SVG paper grain */}
+        <div className="cc-grain" aria-hidden="true" />
+
+        {/* Top brand strip */}
+        <div className="cc-brand-strip">
+          <Monogram size={48} />
           <div>
-            <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#D63F6A', letterSpacing: '-0.02em' }}>Cream &amp; Crust</div>
-            <div style={{ fontSize: '0.52rem', fontWeight: 700, color: '#B5606A', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Bakery Studio</div>
+            <div className="cc-brand-name">Cream &amp; Crust</div>
+            <div className="cc-brand-kicker">Bakery Atelier</div>
           </div>
         </div>
-        <button style={{ background: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,107,139,0.15)', borderRadius: 99, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.72rem', fontWeight: 600, color: '#6B4C52', cursor: 'pointer', backdropFilter: 'blur(8px)' }}>
-          🌐 English <span style={{ fontSize: '0.6rem' }}>▾</span>
-        </button>
-      </div>
 
-      {/* ═══════ HERO SECTION ═══════ */}
-      <div style={{ position: 'relative', zIndex: 5, padding: '14px 18px 0', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
-        {/* Left copy */}
-        <div style={{ flex: 1, paddingTop: 4, minWidth: 0 }}>
-          <h1 style={{ margin: 0, lineHeight: 1.08 }}>
-            <span style={{ display: 'block', fontWeight: 900, fontSize: '2rem', color: '#3D1C2E', letterSpacing: '-0.03em' }}>Bake</span>
-            <span style={{ display: 'block', fontFamily: "'Playfair Display', serif", fontStyle: 'italic', fontWeight: 700, fontSize: '1.85rem', color: '#E8456A', lineHeight: 1.15 }}>beautifully,</span>
-            <span style={{ display: 'block', fontFamily: "'Dancing Script', cursive", fontWeight: 700, fontSize: '1.6rem', color: '#3D1C2E', marginTop: 2 }}>Run effortlessly.</span>
+        {/* Hero copy */}
+        <div className="cc-hero-copy">
+          <div className="cc-hero-eyebrow">
+            <Flourish width={36} color={C.gold} />
+            <span>Welcome to your studio</span>
+            <Flourish width={36} color={C.gold} />
+          </div>
+
+          <h1 className="cc-hero-title">
+            Bake <em>beautifully</em>,
+            <br />
+            run effortlessly.
           </h1>
-          <p style={{ fontSize: '0.72rem', color: '#7A5060', lineHeight: 1.45, marginTop: 8, maxWidth: 160, fontWeight: 500 }}>
-            Your all-in-one bakery management studio to create, manage &amp; grow.
-          </p>
-          {/* Trust badge */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(8px)', borderRadius: 14, padding: '6px 12px', marginTop: 10, border: '1px solid rgba(255,107,139,0.12)', boxShadow: '0 3px 10px rgba(255,107,139,0.08)' }}>
-            <span style={{ fontSize: '1rem' }}>🏆</span>
+
+          <div className="cc-hero-tag-wrap">
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={taglineIdx}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.5 }}
+                className="cc-hero-tag"
+              >
+                {TAGLINES[taglineIdx]}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+
+          {/* Quiet stats line */}
+          <div className="cc-hero-stats">
             <div>
-              <div style={{ fontWeight: 800, fontSize: '0.8rem', color: '#D63F6A' }}>10,000+</div>
-              <div style={{ fontSize: '0.55rem', color: '#8C6B74', fontWeight: 600, lineHeight: 1.15 }}>Home Bakers</div>
+              <strong>10,000+</strong>
+              <span>home bakers</span>
+            </div>
+            <div className="cc-hero-divider" />
+            <div>
+              <strong>200K+</strong>
+              <span>orders shipped</span>
+            </div>
+            <div className="cc-hero-divider" />
+            <div>
+              <strong>4.9 ★</strong>
+              <span>average rating</span>
             </div>
           </div>
         </div>
 
-        {/* Mascot */}
-        <motion.div
-          animate={{ y: [0, -8, 0], rotate: [-0.5, 1, -0.5] }}
-          transition={{ duration: 4.5, repeat: Infinity, ease: 'easeInOut' }}
-          style={{ width: 185, flexShrink: 0, marginTop: -8 }}
+        {/* Footer line on hero */}
+        <div className="cc-hero-foot">
+          <ShieldCheck size={13} color={C.gold} strokeWidth={1.8} />
+          <span>End-to-end encrypted &middot; Made in India</span>
+        </div>
+      </aside>
+
+      {/* ── Form panel (right on desktop, below hero on mobile) ──── */}
+      <main className="cc-login-form-panel">
+        <motion.section
+          className="cc-login-card"
+          initial={{ y: 24, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 220, damping: 26 }}
         >
-          <img src="/mascot.png" alt="BakeFlow mascot" style={{ width: '100%', filter: 'drop-shadow(0 10px 20px rgba(255,107,139,0.2))' }} />
-        </motion.div>
-      </div>
-
-      {/* ═══════ FORM CARD ═══════ */}
-      <motion.div
-        initial={{ y: 40, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 28, delay: 0.08 }}
-        style={{
-          position: 'relative', zIndex: 20,
-          margin: '8px 14px 0',
-          background: 'rgba(255,255,255,0.92)',
-          backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
-          borderRadius: 28, padding: '22px 18px 18px',
-          boxShadow: '0 16px 48px rgba(214,63,106,0.12), 0 2px 12px rgba(0,0,0,0.04)',
-          border: '1px solid rgba(255,255,255,0.85)',
-        }}
-      >
-        {/* Heading */}
-        <div style={{ textAlign: 'center', marginBottom: 16 }}>
-          <h2 style={{ margin: 0, fontFamily: "'Dancing Script', cursive", fontSize: '1.7rem', fontWeight: 700, color: '#D63F6A' }}>
-            {mode === 'login' ? 'Welcome back!' : 'Join the family!'}
-          </h2>
-          <p style={{ margin: '3px 0 0', fontSize: '0.76rem', color: '#8C6B74', fontWeight: 500 }}>
-            {mode === 'login' ? "Let's continue your baking journey 🧁" : "Start your sweet adventure today 🎀"}
-          </p>
-        </div>
-
-        <AnimatePresence mode="wait">
-          <motion.form
-            key={mode}
-            initial={{ opacity: 0, x: mode === 'login' ? -12 : 12 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: mode === 'login' ? 12 : -12 }}
-            transition={{ duration: 0.2 }}
-            onSubmit={e => { e.preventDefault(); mode === 'login' ? act(() => loginUser(email, password)) : act(() => registerUser(email, password, name)); }}
-            style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
-          >
-            {/* Name (register only) */}
-            {mode === 'register' && (
-              <div style={fieldWrap}>
-                <div style={iconBox}>👤</div>
-                <input type="text" required placeholder="Your name" value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
-              </div>
-            )}
-
-            {/* Email */}
-            <div>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#8C6B74', marginBottom: 4, paddingLeft: 4 }}>Email address</div>
-              <div style={fieldWrap}>
-                <div style={iconBox}>✉️</div>
-                <input type="email" required placeholder="priya.baker@email.com" value={email} onChange={e => setEmail(e.target.value)} style={inputStyle} />
-                {email.includes('@') && <div style={{ width: 22, height: 22, borderRadius: '50%', background: '#10B981', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, flexShrink: 0 }}>✓</div>}
-              </div>
+          <div className="cc-card-head">
+            <div className="cc-card-eyebrow">
+              <Sparkles size={11} />
+              {mode === 'login' ? 'Sign in' : 'Create account'}
             </div>
-
-            {/* Password */}
-            <div>
-              <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#8C6B74', marginBottom: 4, paddingLeft: 4 }}>Password</div>
-              <div style={fieldWrap}>
-                <div style={iconBox}>🔒</div>
-                <input type={showPw ? 'text' : 'password'} required placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} style={{ ...inputStyle, letterSpacing: password && !showPw ? '0.18em' : 'normal' }} />
-                <button type="button" onClick={() => setShowPw(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#B5606A', fontSize: 15, padding: '0 2px', display: 'flex' }}>
-                  {showPw ? '👁️' : '🙈'}
-                </button>
-              </div>
-            </div>
-
-            {/* Remember + Forgot */}
-            {mode === 'login' && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: '0.75rem', color: '#5A3D44', fontWeight: 600 }}>
-                  <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} style={{ accentColor: '#E8456A', width: 15, height: 15 }} />
-                  Remember me
-                </label>
-                <button type="button" style={{ background: 'none', border: 'none', color: '#E8456A', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Forgot Password?</button>
-              </div>
-            )}
-
-            {/* Submit Button */}
-            <motion.button type="submit" whileTap={{ scale: 0.97 }} disabled={loading} style={{
-              background: 'linear-gradient(135deg, #E8456A 0%, #FF7096 50%, #E8456A 100%)',
-              backgroundSize: '200% 100%',
-              color: 'white', border: 'none', borderRadius: 99, padding: '15px 20px',
-              fontSize: '0.95rem', fontWeight: 800, cursor: loading ? 'not-allowed' : 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              marginTop: 2,
-              boxShadow: '0 8px 24px rgba(232,69,106,0.4)',
-              position: 'relative', overflow: 'hidden',
-              opacity: loading ? 0.8 : 1,
-            }}>
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 50%, transparent 100%)', animation: 'shimmerLogin 2.5s infinite' }} />
-              {loading ? '⏳ Please wait...' : (
-                <>
-                  {mode === 'login' ? 'Login to Bake' : 'Create Studio'} <span>♥</span>
-                  <span style={{ marginLeft: 'auto', background: 'rgba(255,255,255,0.2)', borderRadius: '50%', width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0 }}>→</span>
-                </>
-              )}
-            </motion.button>
-
-            {/* Divider */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0' }}>
-              <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, transparent, #FFCDD6)' }} />
-              <span style={{ fontSize: '0.68rem', color: '#D63F6A', fontWeight: 700, whiteSpace: 'nowrap' }}>or continue with ♥</span>
-              <div style={{ flex: 1, height: 1, background: 'linear-gradient(90deg, #FFCDD6, transparent)' }} />
-            </div>
-
-            {/* Social Buttons */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[
-                { icon: <GoogleIcon />, label: 'Google', fn: () => act(() => signInWithGoogle()) },
-                { icon: <AppleIcon />, label: 'Apple', fn: () => showToast('Apple Sign-In coming soon!', 'info') },
-                { icon: <FacebookIcon />, label: 'Facebook', fn: () => showToast('Facebook Sign-In coming soon!', 'info') },
-              ].map(b => (
-                <motion.button key={b.label} type="button" whileTap={{ scale: 0.95 }} onClick={b.fn} style={{
-                  flex: 1, background: 'white', border: '1.5px solid #FFE0E6',
-                  borderRadius: 14, padding: '10px 6px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  fontSize: '0.72rem', fontWeight: 700, color: '#4A3B32', cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(255,107,139,0.06)',
-                }}>
-                  {b.icon} {b.label}
-                </motion.button>
-              ))}
-            </div>
-          </motion.form>
-        </AnimatePresence>
-      </motion.div>
-
-      {/* ═══════ SIGNUP / TOGGLE CTA ═══════ */}
-      <div style={{ position: 'relative', zIndex: 10, display: 'flex', alignItems: 'center', padding: '16px 20px 8px', gap: 12 }}>
-        <motion.div animate={{ rotate: [-3, 3, -3], y: [0, -4, 0] }} transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }} style={{ fontSize: 48, flexShrink: 0, filter: 'drop-shadow(0 6px 12px rgba(255,107,139,0.15))' }}>🧁</motion.div>
-        <div>
-          <div style={{ fontSize: '0.78rem', color: '#6B4C52', fontWeight: 600 }}>{mode === 'login' ? 'New to Cream & Crust?' : 'Already have an account?'}</div>
-          <button onClick={() => setMode(m => m === 'login' ? 'register' : 'login')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: "'Dancing Script', cursive", fontSize: '1.25rem', fontWeight: 700, color: '#E8456A', padding: 0, marginTop: 1 }}>
-            {mode === 'login' ? 'Create your account' : 'Sign in instead'}
-            <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#E8456A', color: 'white', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 900, flexShrink: 0 }}>→</span>
-          </button>
-        </div>
-      </div>
-
-      {/* ═══════ FOOTER FEATURES ═══════ */}
-      <div style={{ position: 'relative', zIndex: 10, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, padding: '6px 12px 24px' }}>
-        {[
-          { icon: '🛡️', t: 'Secure', d: 'Your data is 100% safe' },
-          { icon: '☁️', t: 'Cloud Sync', d: 'Access anywhere, anytime' },
-          { icon: '♥', t: 'Made for Bakers', d: 'Designed with love for home bakers' },
-          { icon: '⏱️', t: 'Save Time', d: 'Automate & grow effortlessly' },
-        ].map(f => (
-          <div key={f.t} style={{ textAlign: 'center', padding: '6px 2px' }}>
-            <div style={{ fontSize: 18, marginBottom: 2 }}>{f.icon}</div>
-            <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#4A3B32', marginBottom: 1 }}>{f.t}</div>
-            <div style={{ fontSize: '0.5rem', color: '#8C7A6B', lineHeight: 1.3, fontWeight: 500 }}>{f.d}</div>
+            <h2>{mode === 'login' ? 'Welcome back.' : 'Start your studio.'}</h2>
+            <p>
+              {mode === 'login'
+                ? 'Continue where you left off.'
+                : 'A few details and your atelier is ready.'}
+            </p>
           </div>
-        ))}
-      </div>
+
+          <AnimatePresence mode="wait">
+            <motion.form
+              key={mode}
+              initial={{ opacity: 0, x: mode === 'login' ? -10 : 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: mode === 'login' ? 10 : -10 }}
+              transition={{ duration: 0.22 }}
+              onSubmit={handleSubmit}
+              className="cc-form"
+            >
+              {mode === 'register' && (
+                <Field
+                  icon={User}
+                  label="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Riya Sharma"
+                  autoComplete="name"
+                  required
+                />
+              )}
+
+              <div>
+                <Field
+                  icon={Mail}
+                  label={mode === 'login' ? 'Email or Phone' : 'Email'}
+                  type={mode === 'login' ? 'text' : 'email'}
+                  value={email}
+                  onChange={mode === 'login' ? handleEmailChange : (e) => setEmail(e.target.value)}
+                  placeholder={mode === 'login' ? 'Email or phone number' : 'riya@yourbakery.com'}
+                  autoComplete={mode === 'login' ? 'username' : 'email'}
+                  validIndicator={emailValid}
+                  required
+                />
+                {phoneLookupHint && mode === 'login' && (
+                  <div
+                    style={{
+                      margin: '6px 4px 0',
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      letterSpacing: '0.02em',
+                      color:
+                        phoneLookupStatus === 'found'
+                          ? '#10B981'
+                          : phoneLookupStatus === 'notfound'
+                          ? '#EF4444'
+                          : C.gold,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                    }}
+                  >
+                    {phoneLookupStatus === 'found' && <Check size={12} strokeWidth={3} />}
+                    {phoneLookupStatus === 'notfound' && <Search size={12} strokeWidth={2} />}
+                    {phoneLookupStatus === 'searching' && (
+                      <span
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: '50%',
+                          border: `1.5px solid ${C.gold}`,
+                          borderTopColor: 'transparent',
+                          display: 'inline-block',
+                          animation: 'cc-spin 0.7s linear infinite',
+                        }}
+                      />
+                    )}
+                    {phoneLookupHint}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Field
+                  icon={Lock}
+                  label="Password"
+                  type={showPw ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onIconClick={() => setShowPw((v) => !v)}
+                  iconAction={{
+                    icon: showPw ? <Eye size={17} /> : <EyeOff size={17} />,
+                    label: showPw ? 'Hide password' : 'Show password',
+                  }}
+                  placeholder="Min 8 chars, A-z, 0-9, !@#"
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  required
+                />
+                {capsOn && (
+                  <div className="cc-caps-warn">
+                    <span className="cc-caps-dot" /> Caps Lock is on
+                  </div>
+                )}
+                {mode === 'register' && password.length > 0 && (
+                  <div className="cc-pw-rules">
+                    <PwRule ok={pwLongEnough} label="8+ characters" />
+                    <PwRule ok={pwHasUpper} label="Uppercase (A-Z)" />
+                    <PwRule ok={pwHasLower} label="Lowercase (a-z)" />
+                    <PwRule ok={pwHasDigit} label="Number (0-9)" />
+                    <PwRule ok={pwHasSpecial} label="Special (!@#$...)" />
+                  </div>
+                )}
+              </div>
+
+              {/* Hidden listener for caps lock detection */}
+              <input
+                type="text"
+                aria-hidden="true"
+                tabIndex={-1}
+                onKeyUp={detectCaps}
+                onKeyDown={detectCaps}
+                style={{
+                  position: 'absolute',
+                  width: 1,
+                  height: 1,
+                  opacity: 0,
+                  pointerEvents: 'none',
+                  top: -100,
+                }}
+              />
+
+              {mode === 'login' && (
+                <div className="cc-options">
+                  <label className="cc-remember">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(e) => setRemember(e.target.checked)}
+                    />
+                    <span>Remember me</span>
+                  </label>
+                  <button type="button" onClick={handleForgot} className="cc-link">
+                    Forgot password?
+                  </button>
+                </div>
+              )}
+
+              <motion.button
+                type="submit"
+                disabled={loading || !canSubmit}
+                whileTap={{ scale: 0.98 }}
+                className="cc-submit"
+              >
+                {loading ? (
+                  <span className="cc-loading">
+                    <span className="cc-spinner" />
+                    <span>Signing you in</span>
+                  </span>
+                ) : (
+                  <>
+                    <span>{mode === 'login' ? 'Sign In' : 'Create Studio'}</span>
+                    <ArrowRight size={16} strokeWidth={2.4} />
+                  </>
+                )}
+              </motion.button>
+
+              {/* Or divider */}
+              <div className="cc-or">
+                <Flourish width={50} color={C.gold} />
+                <span>or</span>
+                <Flourish width={50} color={C.gold} />
+              </div>
+
+              {/* Single Google sign-in (Apple/Facebook removed — they were
+                  showing "coming soon" toasts and felt like dead weight) */}
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.98 }}
+                className="cc-google"
+                onClick={() => act(() => signInWithGoogle())}
+                disabled={loading}
+              >
+                <GoogleIcon />
+                <span>Continue with Google</span>
+              </motion.button>
+
+              {/* Phone OTP sign-in */}
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.98 }}
+                className="cc-phone-btn"
+                onClick={() => setShowPhoneLogin(true)}
+                disabled={loading}
+              >
+                <Phone size={18} strokeWidth={2} />
+                <span>Continue with Phone</span>
+              </motion.button>
+            </motion.form>
+          </AnimatePresence>
+
+          {/* Phone OTP modal */}
+          <AnimatePresence>
+            {showPhoneLogin && (
+              <PhoneOtpFlow
+                onClose={() => {
+                  setShowPhoneLogin(false);
+                  setPhoneNumber('');
+                  setOtpCode('');
+                  setConfirmationResult(null);
+                  setOtpSent(false);
+                }}
+                phoneNumber={phoneNumber}
+                setPhoneNumber={setPhoneNumber}
+                otpCode={otpCode}
+                setOtpCode={setOtpCode}
+                otpSent={otpSent}
+                loading={loading}
+                onSendOtp={handleSendOtp}
+                onVerifyOtp={handleVerifyOtp}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Forgot Password modal */}
+          <AnimatePresence>
+            {showForgotPassword && (
+              <ForgotPasswordFlow
+                onClose={() => setShowForgotPassword(false)}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Mode toggle */}
+          <div className="cc-mode-toggle">
+            <span>{mode === 'login' ? 'New to Cream & Crust?' : 'Already have an account?'}</span>
+            <button
+              type="button"
+              onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+              className="cc-mode-link"
+            >
+              {mode === 'login' ? 'Create one' : 'Sign in'}
+              <ArrowUpRight size={13} strokeWidth={2.4} />
+            </button>
+          </div>
+        </motion.section>
+
+        {/* Footer below the card */}
+        <footer className="cc-login-footer">
+          <span>&copy; {new Date().getFullYear()} Cream &amp; Crust</span>
+          <span aria-hidden="true">&middot;</span>
+          <span>Crafted in India</span>
+        </footer>
+        {/* Invisible reCAPTCHA container for phone auth */}
+        <div id="recaptcha-container" />
+      </main>
 
       <style>{`
-        @keyframes shimmerLogin {
-          0% { transform: translateX(-100%); }
-          50% { transform: translateX(100%); }
-          100% { transform: translateX(100%); }
+        .cc-login-shell {
+          min-height: 100dvh;
+          display: grid;
+          grid-template-columns: 1fr;
+          font-family: ${FONT_BODY};
+          color: ${C.ink};
+          background: ${C.cream};
+        }
+
+        @media (min-width: 920px) {
+          .cc-login-shell {
+            grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+          }
+        }
+
+        /* ── Hero panel ─────────────────────────────────────── */
+        .cc-login-hero {
+          position: relative;
+          overflow: hidden;
+          padding: 24px 22px 18px;
+          background:
+            radial-gradient(circle at 20% 20%, ${C.roseSoft}88 0%, transparent 55%),
+            radial-gradient(circle at 80% 75%, ${C.goldHi}3D 0%, transparent 50%),
+            linear-gradient(160deg, ${C.cream} 0%, ${C.ivory} 100%);
+          color: ${C.ink};
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          --orb-x: 0px;
+          --orb-y: 0px;
+        }
+
+        @media (min-width: 920px) {
+          .cc-login-hero {
+            min-height: 100dvh;
+            padding: 56px 56px 40px;
+            gap: 36px;
+          }
+        }
+
+        /* Hide stats and hero foot on mobile to save space */
+        @media (max-width: 919px) {
+          .cc-hero-stats { display: none !important; }
+          .cc-hero-foot { display: none !important; }
+          .cc-hero-title { font-size: 28px !important; }
+          .cc-hero-tag-wrap { height: 22px; }
+          .cc-hero-tag { font-size: 13px !important; }
+        }
+
+        .cc-grain {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          opacity: 0.55;
+          background-image:
+            url("data:image/svg+xml;utf8,${encodeURIComponent(
+              `<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.18  0 0 0 0 0.13  0 0 0 0 0.10  0 0 0 0.025 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>`
+            )}");
+          mix-blend-mode: multiply;
+        }
+
+        .cc-orb {
+          position: absolute;
+          border-radius: 50%;
+          filter: blur(40px);
+          pointer-events: none;
+          transition: transform 0.4s ease-out;
+        }
+        .cc-orb-1 {
+          width: 280px; height: 280px;
+          top: -60px; left: -40px;
+          background: radial-gradient(circle, ${C.rose}33, transparent 70%);
+          transform: translate(var(--orb-x), var(--orb-y));
+        }
+        .cc-orb-2 {
+          width: 240px; height: 240px;
+          bottom: -50px; right: -30px;
+          background: radial-gradient(circle, ${C.goldHi}3D, transparent 70%);
+          transform: translate(calc(var(--orb-x) * -1), calc(var(--orb-y) * -1));
+        }
+        .cc-orb-3 {
+          width: 180px; height: 180px;
+          top: 50%; left: 60%;
+          background: radial-gradient(circle, ${C.roseSoft}88, transparent 70%);
+          transform: translate(calc(var(--orb-x) * 0.6), calc(var(--orb-y) * 0.6));
+        }
+
+        .cc-brand-strip {
+          position: relative;
+          z-index: 2;
+          display: inline-flex;
+          align-items: center;
+          gap: 14px;
+        }
+
+        .cc-brand-name {
+          font-family: ${FONT_DISPLAY};
+          font-size: 22px;
+          font-weight: 700;
+          line-height: 1;
+          letter-spacing: -0.015em;
+          color: ${C.ink};
+        }
+
+        .cc-brand-kicker {
+          margin-top: 4px;
+          font-size: 9.5px;
+          font-weight: 700;
+          letter-spacing: 0.36em;
+          text-transform: uppercase;
+          color: ${C.mute};
+        }
+
+        @media (min-width: 920px) {
+          .cc-brand-name { font-size: 26px; }
+        }
+
+        .cc-hero-copy {
+          position: relative;
+          z-index: 2;
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+        }
+
+        @media (min-width: 920px) {
+          .cc-hero-copy {
+            justify-content: center;
+            margin: 24px 0;
+          }
+        }
+
+        .cc-hero-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 12px;
+          font-family: ${FONT_BODY};
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.36em;
+          text-transform: uppercase;
+          color: ${C.gold};
+        }
+
+        .cc-hero-title {
+          margin: 0;
+          font-family: ${FONT_DISPLAY};
+          font-weight: 500;
+          font-size: clamp(34px, 7vw, 64px);
+          line-height: 1.02;
+          letter-spacing: -0.025em;
+          color: ${C.ink};
+        }
+
+        .cc-hero-title em {
+          font-style: italic;
+          color: ${C.rose};
+          font-weight: 500;
+        }
+
+        .cc-hero-tag-wrap {
+          height: 28px;
+          position: relative;
+        }
+
+        .cc-hero-tag {
+          position: absolute;
+          inset: 0;
+          margin: 0;
+          font-family: ${FONT_DISPLAY};
+          font-style: italic;
+          font-size: clamp(15px, 1.6vw, 18px);
+          color: ${C.mute};
+          line-height: 1.5;
+        }
+
+        .cc-hero-stats {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          margin-top: 4px;
+          flex-wrap: wrap;
+        }
+
+        .cc-hero-stats > div:not(.cc-hero-divider) {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .cc-hero-stats strong {
+          font-family: ${FONT_DISPLAY};
+          font-size: clamp(18px, 1.8vw, 22px);
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          color: ${C.ink};
+        }
+
+        .cc-hero-stats span {
+          font-size: 10px;
+          font-weight: 600;
+          letter-spacing: 0.2em;
+          text-transform: uppercase;
+          color: ${C.mute};
+        }
+
+        .cc-hero-divider {
+          width: 1px;
+          height: 28px;
+          background: ${C.hairline};
+        }
+
+        .cc-hero-foot {
+          position: relative;
+          z-index: 2;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 11px;
+          font-weight: 600;
+          color: ${C.mute};
+          letter-spacing: 0.04em;
+        }
+
+        /* ── Form panel ─────────────────────────────────────── */
+        .cc-login-form-panel {
+          position: relative;
+          padding: 20px 18px 28px;
+          background: ${C.paper};
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          border-top: 1px solid ${C.hairline};
+        }
+
+        @media (min-width: 920px) {
+          .cc-login-form-panel {
+            padding: 56px 64px 40px;
+            border-top: none;
+            border-left: 1px solid ${C.hairline};
+            justify-content: center;
+            gap: 32px;
+          }
+        }
+
+        .cc-login-card {
+          width: 100%;
+          max-width: 420px;
+          margin: 0 auto;
+          display: flex;
+          flex-direction: column;
+          gap: 22px;
+        }
+
+        .cc-card-head {
+          text-align: left;
+        }
+
+        .cc-card-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 5px 10px;
+          border-radius: 99px;
+          background: ${C.roseSoft};
+          color: ${C.roseDeep};
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: 0.24em;
+          text-transform: uppercase;
+          margin-bottom: 12px;
+        }
+
+        .cc-card-head h2 {
+          margin: 0;
+          font-family: ${FONT_DISPLAY};
+          font-size: clamp(28px, 4vw, 36px);
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          line-height: 1.1;
+          color: ${C.ink};
+        }
+
+        .cc-card-head p {
+          margin: 6px 0 0;
+          font-family: ${FONT_DISPLAY};
+          font-style: italic;
+          font-size: 15px;
+          color: ${C.mute};
+          line-height: 1.5;
+        }
+
+        .cc-form {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          position: relative;
+        }
+
+        .cc-caps-warn {
+          margin: 6px 4px 0;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          color: ${C.gold};
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .cc-pw-rules {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px 14px;
+          margin: 8px 4px 0;
+        }
+
+        .cc-caps-dot {
+          width: 6px; height: 6px;
+          border-radius: 50%;
+          background: ${C.gold};
+          box-shadow: 0 0 0 4px ${C.goldHi}33;
+        }
+
+        .cc-options {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin: 2px 0 4px;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .cc-remember {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          font-weight: 600;
+          color: ${C.mute};
+          cursor: pointer;
+          user-select: none;
+        }
+
+        .cc-remember input {
+          width: 16px; height: 16px;
+          margin: 0;
+          accent-color: ${C.rose};
+          cursor: pointer;
+        }
+
+        .cc-link {
+          background: none;
+          border: none;
+          padding: 0;
+          font: inherit;
+          color: ${C.rose};
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          letter-spacing: 0.005em;
+        }
+        .cc-link:hover { color: ${C.roseDeep}; }
+
+        .cc-submit {
+          width: 100%;
+          height: 50px;
+          border: none;
+          border-radius: 14px;
+          background: linear-gradient(135deg, ${C.rose} 0%, ${C.gold} 100%);
+          color: #fff;
+          font-family: ${FONT_BODY};
+          font-size: 14px;
+          font-weight: 800;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          box-shadow: 0 10px 24px ${C.rose}40;
+          transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+        }
+        .cc-submit:hover:not(:disabled) {
+          box-shadow: 0 14px 30px ${C.rose}55;
+          transform: translateY(-1px);
+        }
+        .cc-submit:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+          box-shadow: none;
+        }
+
+        .cc-loading {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+        }
+        .cc-spinner {
+          width: 14px; height: 14px;
+          border-radius: 50%;
+          border: 2px solid rgba(255,255,255,0.4);
+          border-top-color: #fff;
+          animation: cc-spin 0.8s linear infinite;
+        }
+        @keyframes cc-spin { to { transform: rotate(360deg); } }
+
+        .cc-or {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 12px;
+          margin: 6px 0;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.36em;
+          text-transform: uppercase;
+          color: ${C.mute};
+        }
+
+        .cc-google {
+          width: 100%;
+          height: 48px;
+          border-radius: 14px;
+          border: 1.5px solid ${C.hairline};
+          background: ${C.paper};
+          color: ${C.ink};
+          font-family: ${FONT_BODY};
+          font-size: 14px;
+          font-weight: 700;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          transition: border-color 0.18s ease, background 0.18s ease;
+        }
+        .cc-google:hover:not(:disabled) {
+          border-color: ${C.rose};
+          background: ${C.cream};
+        }
+        .cc-google:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .cc-phone-btn {
+          width: 100%;
+          height: 48px;
+          border-radius: 14px;
+          border: 1.5px solid ${C.hairline};
+          background: ${C.paper};
+          color: ${C.ink};
+          font-family: ${FONT_BODY};
+          font-size: 14px;
+          font-weight: 700;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          transition: border-color 0.18s ease, background 0.18s ease;
+        }
+        .cc-phone-btn:hover:not(:disabled) {
+          border-color: ${C.rose};
+          background: ${C.cream};
+        }
+        .cc-phone-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .cc-mode-toggle {
+          margin-top: 14px;
+          padding-top: 18px;
+          border-top: 1px solid ${C.hairline};
+          text-align: center;
+          font-size: 13px;
+          color: ${C.mute};
+          font-weight: 500;
+        }
+
+        .cc-mode-link {
+          margin-left: 6px;
+          background: none;
+          border: none;
+          font: inherit;
+          color: ${C.rose};
+          font-weight: 800;
+          letter-spacing: 0.005em;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+        }
+        .cc-mode-link:hover { color: ${C.roseDeep}; }
+
+        .cc-login-footer {
+          width: 100%;
+          max-width: 420px;
+          margin: 0 auto;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding-top: 12px;
+          font-size: 11px;
+          color: ${C.mute};
+          letter-spacing: 0.06em;
         }
       `}</style>
     </div>

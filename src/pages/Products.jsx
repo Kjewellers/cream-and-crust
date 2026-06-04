@@ -1,13 +1,39 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, X, Camera, Loader2, ExternalLink, Share, UtensilsCrossed, Eye, EyeOff } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  Edit2,
+  Trash2,
+  X,
+  Camera,
+  Loader2,
+  ExternalLink,
+  Share,
+  UtensilsCrossed,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToProducts, addProductToDB, updateProductInDB, deleteProductFromDB, subscribeToRecipes, subscribeToBusiness } from '../services/db';
+import {
+  subscribeToProducts,
+  addProductToDB,
+  updateProductInDB,
+  deleteProductFromDB,
+  subscribeToRecipes,
+  subscribeToBusiness,
+} from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { Skeleton, showToast } from '../components/iOS';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { formatCurrency } from '../utils/date';
 import { uploadToCloudinary } from '../services/cloudinary';
+import { toWebP } from '../utils/imagePipeline';
+import ModuleTour from '../components/ModuleTour';
+import { productsTourSteps } from '../components/tours/productsTour';
+import AnimatedDemo from '../components/AnimatedDemo';
+import { productsDemoScenes } from '../components/demos/productsDemo';
 
 const DEFAULT_CATEGORIES = ['All', 'Cakes', 'Cupcakes', 'Brownies', 'Cookies', 'Dessert Boxes'];
 
@@ -22,7 +48,21 @@ export default function Products() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false, featureInPortfolio: true });
+  const [form, setForm] = useState({
+    name: '',
+    category: 'Cakes',
+    basePrice: '',
+    costPrice: '',
+    recipeId: '',
+    flavors: '',
+    prepTime: '',
+    emoji: '🎂',
+    variants: '',
+    bestseller: false,
+    featureInPortfolio: true,
+    season: 'All Year',
+    weight: '',
+  });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -33,33 +73,43 @@ export default function Products() {
   const newCatRef = useRef();
 
   useEffect(() => {
-    const unsubscribe = subscribeToProducts((newProducts) => {
-      setProducts(newProducts);
-      setLoading(false);
-      
-      // Auto-extract custom categories from Firestore products
-      if (newProducts && newProducts.length > 0) {
-        const extraCats = newProducts
-          .map(p => p.category)
-          .filter(cat => cat && !DEFAULT_CATEGORIES.includes(cat));
-        if (extraCats.length > 0) {
-          setCustomCategories(prev => Array.from(new Set([...prev, ...extraCats])));
+    const unsubscribe = subscribeToProducts(
+      (newProducts) => {
+        setProducts(newProducts);
+        setLoading(false);
+
+        // Auto-extract custom categories from Firestore products
+        if (newProducts && newProducts.length > 0) {
+          const extraCats = newProducts
+            .map((p) => p.category)
+            .filter((cat) => cat && !DEFAULT_CATEGORIES.includes(cat));
+          if (extraCats.length > 0) {
+            setCustomCategories((prev) => Array.from(new Set([...prev, ...extraCats])));
+          }
         }
-      }
-    }, (error) => {
-      console.error("Products subscription error:", error);
-      setLoading(false);
-    }, currentUser?.uid);
+      },
+      (error) => {
+        console.error('Products subscription error:', error);
+        setLoading(false);
+      },
+      currentUser?.uid
+    );
 
     const recipesUnsub = subscribeToRecipes(
-      (newRecipes) => { setRecipes(newRecipes || []); },
+      (newRecipes) => {
+        setRecipes(newRecipes || []);
+      },
       null,
       currentUser?.uid
     );
 
-    const bizUnsub = subscribeToBusiness((biz) => {
-      setBusiness(biz);
-    }, null, currentUser?.uid);
+    const bizUnsub = subscribeToBusiness(
+      (biz) => {
+        setBusiness(biz);
+      },
+      null,
+      currentUser?.uid
+    );
 
     return () => {
       unsubscribe();
@@ -82,26 +132,40 @@ export default function Products() {
   const handleToggleMenu = async (product) => {
     const next = !product.menuHidden;
     // Optimistic update
-    setProducts(prev => prev.map(p => p.id === product.id ? { ...p, menuHidden: next } : p));
+    setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, menuHidden: next } : p)));
     try {
       await updateProductInDB(product.id, { menuHidden: next });
       showToast(next ? 'Hidden from menu' : 'Visible on menu 🍽️', next ? 'info' : 'success');
     } catch {
       // revert on error
-      setProducts(prev => prev.map(p => p.id === product.id ? { ...p, menuHidden: product.menuHidden } : p));
+      setProducts((prev) =>
+        prev.map((p) => (p.id === product.id ? { ...p, menuHidden: product.menuHidden } : p))
+      );
       showToast('Failed to update', 'error');
     }
   };
 
-  const categories = Array.from(new Set([...DEFAULT_CATEGORIES, ...products.map(p => p.category)]));
+  const categories = Array.from(
+    new Set([...DEFAULT_CATEGORIES, ...products.map((p) => p.category)])
+  );
 
-  const filtered = products.filter(p => {
-    const matchesSearch = p.name?.toLowerCase().includes(search.toLowerCase()) || p.category?.toLowerCase().includes(search.toLowerCase());
+  const filtered = products.filter((p) => {
+    const matchesSearch =
+      p.name?.toLowerCase().includes(search.toLowerCase()) ||
+      p.category?.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = activeCategory === 'All' || p.category === activeCategory;
     return matchesSearch && matchesCategory;
   });
 
-  const compressImage = (file) => {
+  const compressImage = async (file) => {
+    // Prefer WebP (smaller, faster) with a downscale to <= 2048px longest edge
+    // so oversized photos never crash Safari. Falls back to the legacy JPEG
+    // canvas path if WebP conversion is unavailable on the device.
+    try {
+      return await toWebP(file, { maxEdge: 1280, quality: 0.8 });
+    } catch {
+      // Fall through to JPEG.
+    }
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
@@ -116,18 +180,28 @@ export default function Products() {
           let height = img.height;
 
           if (width > height) {
-            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
           } else {
-            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
           }
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob((blob) => {
-            if (blob) resolve(blob);
-            else reject(new Error('Failed to create blob from canvas'));
-          }, 'image/jpeg', 0.7);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error('Failed to create blob from canvas'));
+            },
+            'image/jpeg',
+            0.7
+          );
         };
         img.onerror = () => reject(new Error('Failed to load image for compression'));
       };
@@ -148,8 +222,8 @@ export default function Products() {
     setUploading(true);
 
     const tempId = editingId || `temp-${Date.now()}`;
-    const currentImageUrl = editingId ? products.find(p => p.id === editingId)?.imageUrl : null;
-    
+    const currentImageUrl = editingId ? products.find((p) => p.id === editingId)?.imageUrl : null;
+
     // 1. Prepare Optimistic Data
     const optimisticData = {
       id: tempId,
@@ -164,18 +238,22 @@ export default function Products() {
       emoji: form.emoji,
       bestseller: form.bestseller,
       featureInPortfolio: form.featureInPortfolio,
+      season: form.season || 'All Year',
+      weight: form.weight || '',
       imageUrl: imagePreview || currentImageUrl, // Use local preview optimistically
       userId: currentUser?.uid || null,
       updatedAt: new Date().toISOString(),
-      createdAt: editingId ? (products.find(p => p.id === editingId)?.createdAt) : new Date().toISOString(),
-      isOptimistic: true // Marker to handle cleanup if needed
+      createdAt: editingId
+        ? products.find((p) => p.id === editingId)?.createdAt
+        : new Date().toISOString(),
+      isOptimistic: true, // Marker to handle cleanup if needed
     };
 
     // 2. Update Local State Immediately
     if (editingId) {
-      setProducts(prev => prev.map(p => p.id === editingId ? optimisticData : p));
+      setProducts((prev) => prev.map((p) => (p.id === editingId ? optimisticData : p)));
     } else {
-      setProducts(prev => [optimisticData, ...prev]);
+      setProducts((prev) => [optimisticData, ...prev]);
     }
 
     // 3. Close Modal Immediately
@@ -190,7 +268,7 @@ export default function Products() {
           try {
             finalImageUrl = await uploadToCloudinary(imageFile);
           } catch (error) {
-            console.error("❌ Upload error details:", error);
+            console.error('❌ Upload error details:', error);
             showToast(`Photo upload failed. Saving without photo.`, 'error');
           }
         }
@@ -216,7 +294,7 @@ export default function Products() {
           // Hard to revert perfectly without a deep copy, but the subscription will eventually fix it
           // For now, just let the subscription fix it on next sync
         } else {
-          setProducts(prev => prev.filter(p => p.id !== tempId));
+          setProducts((prev) => prev.filter((p) => p.id !== tempId));
         }
       } finally {
         setUploading(false);
@@ -251,7 +329,9 @@ export default function Products() {
       variants: product.variants,
       emoji: product.emoji,
       bestseller: product.bestseller,
-      featureInPortfolio: product.featureInPortfolio ?? true
+      featureInPortfolio: product.featureInPortfolio ?? true,
+      season: product.season || 'All Year',
+      weight: product.weight || '',
     });
     setImagePreview(product.imageUrl);
     setShowModal(true);
@@ -261,36 +341,188 @@ export default function Products() {
     setShowModal(false);
     setEditingId(null);
     setShowAdvanced(false);
-    setForm({ name: '', category: 'Cakes', basePrice: '', costPrice: '', recipeId: '', flavors: '', prepTime: '', emoji: '🎂', variants: '', bestseller: false, featureInPortfolio: true });
+    setForm({
+      name: '',
+      category: 'Cakes',
+      basePrice: '',
+      costPrice: '',
+      recipeId: '',
+      flavors: '',
+      prepTime: '',
+      emoji: '🎂',
+      variants: '',
+      bestseller: false,
+      featureInPortfolio: true,
+      season: 'All Year',
+      weight: '',
+    });
     setImageFile(null);
     setImagePreview(null);
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fade-in">
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
-        <div><h1>Product Catalog</h1><p>Visual showcase of your bakery menu</p></div>
+      <div
+        className="page-header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <div>
+          <h1>Product Catalog</h1>
+          <p>Visual showcase of your bakery menu</p>
+        </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-outline" onClick={() => navigate('/menu-builder')} style={{ gap: 8 }}>
+          <button
+            className="btn btn-outline"
+            onClick={() => navigate('/menu-builder')}
+            style={{ gap: 8 }}
+          >
             <UtensilsCrossed size={16} /> <span className="desktop-only">Menu Builder</span>
           </button>
           <button className="btn btn-outline" onClick={handleShareMenu} style={{ gap: 8 }}>
             <Share size={16} /> <span className="desktop-only">Share Menu</span>
           </button>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}><Plus size={18} /> Add Product</button>
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={18} /> Add Product
+          </button>
         </div>
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' }}>
         <div style={{ flex: 1, position: 'relative' }}>
-          <Search size={18} style={{ position: 'absolute', left: 14, top: 13, color: 'var(--text3)' }} />
-          <input placeholder="Search catalog..." value={search} onChange={e => setSearch(e.target.value)} style={{ width: '100%', paddingLeft: 40 }} />
+          <Search
+            size={18}
+            style={{ position: 'absolute', left: 14, top: 13, color: 'var(--text3)' }}
+          />
+          <input
+            placeholder="Search catalog..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: '100%', paddingLeft: 40 }}
+          />
         </div>
       </div>
 
+      {/* ── Auto-Season Detection Logic ── */}
+      {(() => {
+        const getSeason = () => {
+          const month = new Date().getMonth();
+          if (month >= 2 && month <= 4) return { name: 'Spring', emoji: '🌸' };
+          if (month >= 5 && month <= 7) return { name: 'Summer', emoji: '☀️' };
+          if (month >= 8 && month <= 9) return { name: 'Monsoon', emoji: '🌧️' };
+          if (month === 10) return { name: 'Autumn', emoji: '🍁' };
+          if (month === 11) return { name: 'Festive', emoji: '🎁' };
+          return { name: 'Winter', emoji: '❄️' };
+        };
+        const currentSeason = getSeason();
+        const seasonalProducts = products.filter((p) => p.season === currentSeason.name);
+
+        if (seasonalProducts.length > 0 && !search && activeCategory === 'All') {
+          return (
+            <div style={{ padding: '0 0 20px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '0 4px',
+                  marginBottom: 12,
+                }}
+              >
+                <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)' }}>
+                  {currentSeason.emoji} Current Season: {currentSeason.name}
+                </div>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 12,
+                  padding: '0 4px',
+                  overflowX: 'auto',
+                  scrollbarWidth: 'none',
+                }}
+                className="no-scrollbar"
+              >
+                {seasonalProducts.map((sp) => (
+                  <div
+                    key={sp.id}
+                    onClick={() => openEdit(sp)}
+                    style={{
+                      width: 140,
+                      flexShrink: 0,
+                      cursor: 'pointer',
+                      position: 'relative',
+                      borderRadius: 16,
+                      overflow: 'hidden',
+                      background: 'var(--bg)',
+                      boxShadow: 'var(--shadow)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: 100,
+                        background: 'var(--bg2)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '3rem',
+                      }}
+                    >
+                      {sp.imageUrl ? (
+                        <img
+                          src={sp.imageUrl}
+                          alt={sp.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        sp.emoji
+                      )}
+                    </div>
+                    <div style={{ padding: '10px 12px' }}>
+                      <div
+                        style={{
+                          fontWeight: 800,
+                          fontSize: 13,
+                          color: 'var(--text)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          marginBottom: 2,
+                        }}
+                      >
+                        {sp.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600 }}>
+                        {formatCurrency(sp.basePrice)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        return null;
+      })()}
+
       {/* Category Filter */}
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 16, marginBottom: 8, scrollbarWidth: 'none' }}>
-        {categories.map(cat => (
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          overflowX: 'auto',
+          paddingBottom: 16,
+          marginBottom: 8,
+          scrollbarWidth: 'none',
+        }}
+      >
+        {categories.map((cat) => (
           <motion.button
             key={cat}
             whileTap={{ scale: 0.95 }}
@@ -306,7 +538,7 @@ export default function Products() {
               background: activeCategory === cat ? 'var(--accent)' : 'var(--bg2)',
               color: activeCategory === cat ? 'white' : 'var(--text2)',
               boxShadow: activeCategory === cat ? '0 4px 12px rgba(181,96,106,0.3)' : 'none',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
             }}
           >
             {cat}
@@ -316,65 +548,175 @@ export default function Products() {
 
       {loading ? (
         <div className="product-grid">
-          {[...Array(6)].map((_, i) => <Skeleton key={i} height={320} radius={16} />)}
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} height={320} radius={16} />
+          ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', background: 'var(--bg2)', borderRadius: 16 }}>
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '60px 20px',
+            background: 'var(--bg2)',
+            borderRadius: 16,
+          }}
+        >
           <div style={{ fontSize: '3rem', marginBottom: 16 }}>🍩</div>
           <h3>No products found</h3>
-          <p style={{ color: 'var(--text3)' }}>Try searching for something else or add a new product.</p>
+          <p style={{ color: 'var(--text3)' }}>
+            Try searching for something else or add a new product.
+          </p>
         </div>
       ) : (
         <div className="product-grid">
           <AnimatePresence>
-            {filtered.map(p => (
-              <motion.div key={p.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }} layout className="product-card" style={{ opacity: p.menuHidden ? 0.75 : 1 }}>
-                <div className="product-img" style={{ backgroundImage: p.imageUrl ? `url("${p.imageUrl}")` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: 'var(--bg)', height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '4rem', position: 'relative' }}>
+            {filtered.map((p) => (
+              <motion.div
+                key={p.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                layout
+                className="product-card"
+                style={{ opacity: p.menuHidden ? 0.75 : 1 }}
+              >
+                <div
+                  className="product-img"
+                  style={{
+                    backgroundImage: p.imageUrl ? `url("${p.imageUrl}")` : 'none',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundColor: 'var(--bg)',
+                    height: 180,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '4rem',
+                    position: 'relative',
+                  }}
+                >
                   {!p.imageUrl && p.emoji}
-                  {p.bestseller && <span className="product-bestseller" style={{ top: 12, left: 12 }}>Bestseller</span>}
+                  {p.bestseller && (
+                    <span className="product-bestseller" style={{ top: 12, left: 12 }}>
+                      Bestseller
+                    </span>
+                  )}
                   {/* Menu visibility badge on image */}
                   <motion.button
                     whileTap={{ scale: 0.92 }}
                     onClick={() => handleToggleMenu(p)}
-                    title={p.menuHidden ? 'Hidden from menu — tap to show' : 'Visible on menu — tap to hide'}
+                    title={
+                      p.menuHidden
+                        ? 'Hidden from menu — tap to show'
+                        : 'Visible on menu — tap to hide'
+                    }
                     style={{
-                      position: 'absolute', top: 10, right: 10,
-                      display: 'flex', alignItems: 'center', gap: 4,
-                      padding: '4px 9px', borderRadius: 99, border: 'none', cursor: 'pointer',
+                      position: 'absolute',
+                      top: 10,
+                      right: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 9px',
+                      borderRadius: 99,
+                      border: 'none',
+                      cursor: 'pointer',
                       background: p.menuHidden ? 'rgba(0,0,0,0.55)' : 'rgba(16,185,129,0.9)',
-                      color: 'white', fontWeight: 800, fontSize: '0.62rem',
+                      color: 'white',
+                      fontWeight: 800,
+                      fontSize: '0.62rem',
                       backdropFilter: 'blur(4px)',
                       boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                       transition: 'background 0.2s',
                     }}
                   >
-                    {p.menuHidden
-                      ? <><EyeOff size={11} /> Hidden</>
-                      : <><Eye size={11} /> On Menu</>}
+                    {p.menuHidden ? (
+                      <>
+                        <EyeOff size={11} /> Hidden
+                      </>
+                    ) : (
+                      <>
+                        <Eye size={11} /> On Menu
+                      </>
+                    )}
                   </motion.button>
                 </div>
                 <div className="product-body" style={{ padding: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: 4,
+                    }}
+                  >
                     <h4 style={{ margin: 0, fontSize: '1.1rem' }}>{p.name}</h4>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn-icon" style={{ width: 32, height: 32 }} onClick={() => openEdit(p)}><Edit2 size={14} /></button>
-                      <button className="btn-icon" style={{ width: 32, height: 32, color: 'var(--accent2)' }} onClick={() => handleDelete(p.id)}><Trash2 size={14} /></button>
+                      <button
+                        className="btn-icon"
+                        style={{ width: 32, height: 32 }}
+                        onClick={() => openEdit(p)}
+                      >
+                        <Edit2 size={14} />
+                      </button>
+                      <button
+                        className="btn-icon"
+                        style={{ width: 32, height: 32, color: 'var(--accent2)' }}
+                        onClick={() => handleDelete(p.id)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text3)', marginBottom: 12 }}>{p.category}</div>
-                  
-                  <div className="product-footer" style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text3)', marginBottom: 12 }}>
+                    {p.category}
+                  </div>
+
+                  <div
+                    className="product-footer"
+                    style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}
+                  >
                     <div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>Starting from</div>
-                      <div className="product-price" style={{ fontSize: '1.2rem' }}>{formatCurrency(p.basePrice)}</div>
+                      <div
+                        style={{
+                          fontSize: '0.65rem',
+                          color: 'var(--text3)',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          fontWeight: 700,
+                        }}
+                      >
+                        Starting from
+                      </div>
+                      <div className="product-price" style={{ fontSize: '1.2rem' }}>
+                        {formatCurrency(p.basePrice)}
+                      </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       {p.costPrice > 0 && (
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#2E7A5A', marginBottom: 2 }}>
+                        <div
+                          style={{
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            color: '#2E7A5A',
+                            marginBottom: 2,
+                          }}
+                        >
                           {Math.round(((p.basePrice - p.costPrice) / p.basePrice) * 100)}% Margin
                         </div>
                       )}
-                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent)', background: 'rgba(181,96,106,0.1)', padding: '4px 10px', borderRadius: 8 }}>{p.variants || 'Standard'}</div>
+                      <div
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          color: 'var(--accent)',
+                          background: 'rgba(181,96,106,0.1)',
+                          padding: '4px 10px',
+                          borderRadius: 8,
+                        }}
+                      >
+                        {p.weight || p.variants || 'Standard'}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -384,156 +726,351 @@ export default function Products() {
         </div>
       )}
 
-      {showModal && (
+      {showModal && createPortal(
         <div className="modal-overlay" onClick={closeModal}>
-          <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, maxHeight: '95vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: '1.5rem' }}>{editingId ? 'Edit Product' : 'Add New Product'}</h2>
-              <button className="btn-icon" onClick={closeModal}><X size={18} /></button>
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 500, maxHeight: '95vh', overflowY: 'auto' }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: 20,
+              }}
+            >
+              <h2 style={{ fontSize: '1.5rem' }}>
+                {editingId ? 'Edit Product' : 'Add New Product'}
+              </h2>
+              <button className="btn-icon" onClick={closeModal}>
+                <X size={18} />
+              </button>
             </div>
 
-            <form onSubmit={handleSaveProduct} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <form
+              onSubmit={handleSaveProduct}
+              style={{ display: 'flex', flexDirection: 'column', gap: 20 }}
+            >
               {/* PHOTO SECTION - BIG & BOLD */}
               <div style={{ position: 'relative' }}>
-                <div 
+                <div
                   onClick={() => fileInputRef.current.click()}
-                  style={{ 
-                    width: '100%', height: 200, borderRadius: 20, background: 'var(--bg)', border: '2px dashed var(--border)', 
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', overflow: 'hidden', transition: '0.2s',
-                    borderColor: imagePreview ? 'var(--accent)' : 'var(--border)'
+                  style={{
+                    width: '100%',
+                    height: 200,
+                    borderRadius: 20,
+                    background: 'var(--bg)',
+                    border: '2px dashed var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    overflow: 'hidden',
+                    transition: '0.2s',
+                    borderColor: imagePreview ? 'var(--accent)' : 'var(--border)',
                   }}
                 >
                   {uploading ? (
                     <Loader2 className="animate-spin" size={32} color="var(--accent)" />
                   ) : imagePreview ? (
-                    <img src={imagePreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img
+                      src={imagePreview}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   ) : (
                     <>
                       <Camera size={40} color="var(--text3)" />
-                      <span style={{ fontSize: '0.9rem', color: 'var(--text3)', fontWeight: 600, marginTop: 10 }}>Tap to upload photo</span>
+                      <span
+                        style={{
+                          fontSize: '0.9rem',
+                          color: 'var(--text3)',
+                          fontWeight: 600,
+                          marginTop: 10,
+                        }}
+                      >
+                        Tap to upload photo
+                      </span>
                     </>
                   )}
                 </div>
                 {imagePreview && !uploading && (
-                  <button type="button" onClick={(e) => { e.stopPropagation(); setImagePreview(null); setImageFile(null); }} 
-                    style={{ position: 'absolute', top: 10, right: 10, background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImagePreview(null);
+                      setImageFile(null);
+                    }}
+                    style={{
+                      position: 'absolute',
+                      top: 10,
+                      right: 10,
+                      background: 'rgba(0,0,0,0.5)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '50%',
+                      width: 30,
+                      height: 30,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
                     <X size={14} />
                   </button>
                 )}
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: 'none' }} />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  style={{ display: 'none' }}
+                />
               </div>
 
               {/* CORE FIELDS */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}>PRODUCT NAME</label>
-                  <input required value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="e.g. Belgian Chocolate Cake" style={{ fontSize: '1.1rem', padding: '12px 16px' }} />
+                  <label
+                    className="form-label"
+                    style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}
+                  >
+                    PRODUCT NAME
+                  </label>
+                  <input
+                    required
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="e.g. Belgian Chocolate Cake"
+                    style={{ fontSize: '1.1rem', padding: '12px 16px' }}
+                  />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 12 }}>
                   <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}>CATEGORY</label>
+                    <label
+                      className="form-label"
+                      style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}
+                    >
+                      CATEGORY
+                    </label>
 
-                  {/* All available categories as pill buttons */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                    {[...DEFAULT_CATEGORIES.slice(1), ...customCategories].map(cat => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setForm({ ...form, category: cat })}
-                        style={{
-                          padding: '6px 12px', borderRadius: 99, border: 'none', cursor: 'pointer',
-                          fontWeight: 700, fontSize: '0.78rem',
-                          background: form.category === cat ? 'var(--accent)' : 'var(--bg2)',
-                          color: form.category === cat ? 'white' : 'var(--text2)',
-                          boxShadow: form.category === cat ? '0 2px 8px rgba(181,96,106,0.3)' : 'none',
-                          transition: 'all 0.15s',
-                        }}
-                      >{cat}</button>
-                    ))}
-                  </div>
+                    {/* All available categories as pill buttons */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                      {[...DEFAULT_CATEGORIES.slice(1), ...customCategories].map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setForm({ ...form, category: cat })}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: 99,
+                            border: 'none',
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.78rem',
+                            background: form.category === cat ? 'var(--accent)' : 'var(--bg2)',
+                            color: form.category === cat ? 'white' : 'var(--text2)',
+                            boxShadow:
+                              form.category === cat ? '0 2px 8px rgba(181,96,106,0.3)' : 'none',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
 
-                  {/* Add custom category inline */}
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <input
-                      ref={newCatRef}
-                      value={newCatInput}
-                      onChange={e => setNewCatInput(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          const trimmed = newCatInput.trim();
-                          if (!trimmed) return;
-                          if ([...DEFAULT_CATEGORIES, ...customCategories].some(c => c.toLowerCase() === trimmed.toLowerCase())) {
-                            setForm({ ...form, category: trimmed });
-                          } else {
-                            setCustomCategories(prev => [...prev, trimmed]);
-                            setForm({ ...form, category: trimmed });
+                    {/* Add custom category inline */}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <input
+                        ref={newCatRef}
+                        value={newCatInput}
+                        onChange={(e) => setNewCatInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const trimmed = newCatInput.trim();
+                            if (!trimmed) return;
+                            if (
+                              [...DEFAULT_CATEGORIES, ...customCategories].some(
+                                (c) => c.toLowerCase() === trimmed.toLowerCase()
+                              )
+                            ) {
+                              setForm({ ...form, category: trimmed });
+                            } else {
+                              setCustomCategories((prev) => [...prev, trimmed]);
+                              setForm({ ...form, category: trimmed });
+                            }
+                            setNewCatInput('');
                           }
+                        }}
+                        placeholder="Add missing category… (press Enter)"
+                        style={{ flex: 1, height: 38, fontSize: '0.82rem' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const trimmed = newCatInput.trim();
+                          if (!trimmed) {
+                            newCatRef.current?.focus();
+                            return;
+                          }
+                          if (
+                            ![...DEFAULT_CATEGORIES, ...customCategories].some(
+                              (c) => c.toLowerCase() === trimmed.toLowerCase()
+                            )
+                          ) {
+                            setCustomCategories((prev) => [...prev, trimmed]);
+                          }
+                          setForm({ ...form, category: trimmed });
                           setNewCatInput('');
-                        }
-                      }}
-                      placeholder="Add missing category… (press Enter)"
-                      style={{ flex: 1, height: 38, fontSize: '0.82rem' }}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const trimmed = newCatInput.trim();
-                        if (!trimmed) { newCatRef.current?.focus(); return; }
-                        if (![...DEFAULT_CATEGORIES, ...customCategories].some(c => c.toLowerCase() === trimmed.toLowerCase())) {
-                          setCustomCategories(prev => [...prev, trimmed]);
-                        }
-                        setForm({ ...form, category: trimmed });
-                        setNewCatInput('');
-                      }}
-                      style={{
-                        flexShrink: 0, height: 38, padding: '0 14px', borderRadius: 10, border: 'none',
-                        background: 'var(--accent)', color: 'white', fontWeight: 800, fontSize: '0.8rem', cursor: 'pointer'
-                      }}
-                    >+ Add</button>
+                        }}
+                        style={{
+                          flexShrink: 0,
+                          height: 38,
+                          padding: '0 14px',
+                          borderRadius: 10,
+                          border: 'none',
+                          background: 'var(--accent)',
+                          color: 'white',
+                          fontWeight: 800,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        + Add
+                      </button>
+                    </div>
                   </div>
-                </div>
 
-                <div className="form-group">
-                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}>PRICE (₹)</label>
-                    <input type="number" inputMode="decimal" required value={form.basePrice} onChange={e => setForm({...form, basePrice: e.target.value})} placeholder="0" style={{ height: 48, fontSize: '1.1rem', fontWeight: 700 }} />
+                  <div className="form-group">
+                    <label
+                      className="form-label"
+                      style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}
+                    >
+                      PRICE (₹)
+                    </label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      required
+                      value={form.basePrice}
+                      onChange={(e) => setForm({ ...form, basePrice: e.target.value })}
+                      placeholder="0"
+                      style={{ height: 48, fontSize: '1.1rem', fontWeight: 700 }}
+                    />
+                  </div>
+
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label
+                      className="form-label"
+                      style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--text3)' }}
+                    >
+                      WEIGHT (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={form.weight}
+                      onChange={(e) => setForm({ ...form, weight: e.target.value })}
+                      placeholder="e.g. 500g, 1kg"
+                      style={{ height: 48, fontSize: '1.1rem', fontWeight: 700 }}
+                    />
                   </div>
                 </div>
               </div>
 
               {/* ADVANCED TOGGLE */}
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                style={{ background: 'var(--bg2)', border: 'none', padding: '12px', borderRadius: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                style={{
+                  background: 'var(--bg2)',
+                  border: 'none',
+                  padding: '12px',
+                  borderRadius: 12,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  cursor: 'pointer',
+                }}
               >
                 <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text2)' }}>
-                  {showAdvanced ? 'Hide Optional Details' : 'Show More Details (Recipe, Cost, etc.)'}
+                  {showAdvanced
+                    ? 'Hide Optional Details'
+                    : 'Show More Details (Recipe, Cost, etc.)'}
                 </span>
-                <Plus size={16} style={{ transform: showAdvanced ? 'rotate(45deg)' : 'none', transition: '0.2s' }} />
+                <Plus
+                  size={16}
+                  style={{ transform: showAdvanced ? 'rotate(45deg)' : 'none', transition: '0.2s' }}
+                />
               </button>
 
               <AnimatePresence>
                 {showAdvanced && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    style={{
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 12,
+                    }}
+                  >
                     <div className="form-group">
                       <label className="form-label">Linked Recipe</label>
-                      <select value={form.recipeId} onChange={e => setForm({...form, recipeId: e.target.value})}>
+                      <select
+                        value={form.recipeId}
+                        onChange={(e) => setForm({ ...form, recipeId: e.target.value })}
+                      >
                         <option value="">No Recipe Linked</option>
-                        {recipes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                        {recipes.map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div className="form-group">
                         <label className="form-label">Cost Price (₹)</label>
-                        <input type="number" value={form.costPrice} onChange={e => setForm({...form, costPrice: e.target.value})} placeholder="0" />
+                        <input
+                          type="number"
+                          value={form.costPrice}
+                          onChange={(e) => setForm({ ...form, costPrice: e.target.value })}
+                          placeholder="0"
+                        />
                       </div>
                       <div className="form-group">
                         <label className="form-label">Weight/Variants</label>
-                        <input value={form.variants} onChange={e => setForm({...form, variants: e.target.value})} placeholder="0.5kg" />
+                        <input
+                          value={form.variants}
+                          onChange={(e) => setForm({ ...form, variants: e.target.value })}
+                          placeholder="0.5kg"
+                        />
                       </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Season (Optional)</label>
+                      <select
+                        value={form.season}
+                        onChange={(e) => setForm({ ...form, season: e.target.value })}
+                      >
+                        <option value="All Year">All Year</option>
+                        <option value="Spring">Spring 🌸</option>
+                        <option value="Summer">Summer ☀️</option>
+                        <option value="Monsoon">Monsoon 🌧️</option>
+                        <option value="Autumn">Autumn 🍁</option>
+                        <option value="Winter">Winter ❄️</option>
+                        <option value="Festive">Festive 🎁</option>
+                      </select>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {/* Bestseller toggle */}
@@ -541,68 +1078,138 @@ export default function Products() {
                         type="button"
                         onClick={() => setForm({ ...form, bestseller: !form.bestseller })}
                         style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '13px 16px', borderRadius: 14, border: 'none', cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '13px 16px',
+                          borderRadius: 14,
+                          border: 'none',
+                          cursor: 'pointer',
                           background: form.bestseller ? 'rgba(245,158,11,0.1)' : 'var(--bg2)',
-                          outline: form.bestseller ? '1.5px solid rgba(245,158,11,0.4)' : '1.5px solid var(--border)',
-                          transition: 'all 0.18s', textAlign: 'left', width: '100%',
+                          outline: form.bestseller
+                            ? '1.5px solid rgba(245,158,11,0.4)'
+                            : '1.5px solid var(--border)',
+                          transition: 'all 0.18s',
+                          textAlign: 'left',
+                          width: '100%',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: '1.2rem' }}>⭐</span>
                           <div>
-                            <div style={{ fontWeight: 800, fontSize: '0.88rem', color: form.bestseller ? '#B45309' : 'var(--text)' }}>Mark as Bestseller</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 1 }}>Highlighted badge on menu & catalog</div>
+                            <div
+                              style={{
+                                fontWeight: 800,
+                                fontSize: '0.88rem',
+                                color: form.bestseller ? '#B45309' : 'var(--text)',
+                              }}
+                            >
+                              Mark as Bestseller
+                            </div>
+                            <div
+                              style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 1 }}
+                            >
+                              Highlighted badge on menu & catalog
+                            </div>
                           </div>
                         </div>
                         {/* Toggle pill */}
-                        <div style={{
-                          width: 42, height: 24, borderRadius: 99, flexShrink: 0,
-                          background: form.bestseller ? '#F59E0B' : 'var(--border)',
-                          position: 'relative', transition: 'background 0.2s',
-                        }}>
-                          <div style={{
-                            position: 'absolute', top: 3, borderRadius: '50%',
-                            width: 18, height: 18, background: 'white',
-                            boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                            left: form.bestseller ? 21 : 3,
-                            transition: 'left 0.2s',
-                          }} />
+                        <div
+                          style={{
+                            width: 42,
+                            height: 24,
+                            borderRadius: 99,
+                            flexShrink: 0,
+                            background: form.bestseller ? '#F59E0B' : 'var(--border)',
+                            position: 'relative',
+                            transition: 'background 0.2s',
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: 3,
+                              borderRadius: '50%',
+                              width: 18,
+                              height: 18,
+                              background: 'white',
+                              boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                              left: form.bestseller ? 21 : 3,
+                              transition: 'left 0.2s',
+                            }}
+                          />
                         </div>
                       </button>
 
                       {/* Show on Menu toggle */}
                       <button
                         type="button"
-                        onClick={() => setForm({ ...form, featureInPortfolio: !form.featureInPortfolio })}
+                        onClick={() =>
+                          setForm({ ...form, featureInPortfolio: !form.featureInPortfolio })
+                        }
                         style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                          padding: '13px 16px', borderRadius: 14, border: 'none', cursor: 'pointer',
-                          background: form.featureInPortfolio ? 'rgba(181,96,106,0.08)' : 'var(--bg2)',
-                          outline: form.featureInPortfolio ? '1.5px solid rgba(181,96,106,0.3)' : '1.5px solid var(--border)',
-                          transition: 'all 0.18s', textAlign: 'left', width: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '13px 16px',
+                          borderRadius: 14,
+                          border: 'none',
+                          cursor: 'pointer',
+                          background: form.featureInPortfolio
+                            ? 'rgba(181,96,106,0.08)'
+                            : 'var(--bg2)',
+                          outline: form.featureInPortfolio
+                            ? '1.5px solid rgba(181,96,106,0.3)'
+                            : '1.5px solid var(--border)',
+                          transition: 'all 0.18s',
+                          textAlign: 'left',
+                          width: '100%',
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: '1.2rem' }}>🍽️</span>
                           <div>
-                            <div style={{ fontWeight: 800, fontSize: '0.88rem', color: form.featureInPortfolio ? 'var(--accent)' : 'var(--text)' }}>Show on Public Menu</div>
-                            <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 1 }}>Include this product in your public menu</div>
+                            <div
+                              style={{
+                                fontWeight: 800,
+                                fontSize: '0.88rem',
+                                color: form.featureInPortfolio ? 'var(--accent)' : 'var(--text)',
+                              }}
+                            >
+                              Show on Public Menu
+                            </div>
+                            <div
+                              style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 1 }}
+                            >
+                              Include this product in your public menu
+                            </div>
                           </div>
                         </div>
                         {/* Toggle pill */}
-                        <div style={{
-                          width: 42, height: 24, borderRadius: 99, flexShrink: 0,
-                          background: form.featureInPortfolio ? 'var(--accent)' : 'var(--border)',
-                          position: 'relative', transition: 'background 0.2s',
-                        }}>
-                          <div style={{
-                            position: 'absolute', top: 3, borderRadius: '50%',
-                            width: 18, height: 18, background: 'white',
-                            boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
-                            left: form.featureInPortfolio ? 21 : 3,
-                            transition: 'left 0.2s',
-                          }} />
+                        <div
+                          style={{
+                            width: 42,
+                            height: 24,
+                            borderRadius: 99,
+                            flexShrink: 0,
+                            background: form.featureInPortfolio ? 'var(--accent)' : 'var(--border)',
+                            position: 'relative',
+                            transition: 'background 0.2s',
+                          }}
+                        >
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: 3,
+                              borderRadius: '50%',
+                              width: 18,
+                              height: 18,
+                              background: 'white',
+                              boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                              left: form.featureInPortfolio ? 21 : 3,
+                              transition: 'left 0.2s',
+                            }}
+                          />
                         </div>
                       </button>
                     </div>
@@ -611,15 +1218,35 @@ export default function Products() {
               </AnimatePresence>
 
               <div style={{ display: 'flex', gap: 12, marginTop: 10 }}>
-                <button type="submit" disabled={uploading} className="btn btn-primary" style={{ flex: 2, height: 55, fontSize: '1.1rem' }}>
-                  {uploading ? <Loader2 className="animate-spin" /> : editingId ? 'Update Product' : 'Add to Catalog'}
+                <button
+                  type="submit"
+                  disabled={uploading}
+                  className="btn btn-primary"
+                  style={{ flex: 2, height: 55, fontSize: '1.1rem' }}
+                >
+                  {uploading ? (
+                    <Loader2 className="animate-spin" />
+                  ) : editingId ? (
+                    'Update Product'
+                  ) : (
+                    'Add to Catalog'
+                  )}
                 </button>
-                <button type="button" className="btn btn-outline" onClick={closeModal} style={{ flex: 1 }}>Cancel</button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={closeModal}
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
               </div>
             </form>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
+      <AnimatedDemo moduleId="products" title="How to Add Products" scenes={productsDemoScenes} />
     </motion.div>
   );
 }

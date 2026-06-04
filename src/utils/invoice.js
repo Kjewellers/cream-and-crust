@@ -1,4 +1,9 @@
-export function printInvoice(order) {
+/**
+ * Print an invoice for an order.
+ * @param {object} order - The order data.
+ * @param {object} [business] - Business profile (name, phone, address). Falls back to defaults.
+ */
+export function printInvoice(order, business = {}) {
   const printWindow = window.open('', '_blank');
   
   const html = `
@@ -33,12 +38,12 @@ export function printInvoice(order) {
     <body>
       <div class="header">
         <div class="brand">
-          <h1>🧁 Cream & Crust</h1>
-          <p>Artisan Home Bakery<br>Contact: +91 9876543210</p>
+          <h1>${esc(business.name || 'Cream & Crust')}</h1>
+          <p>${esc(business.tagline || 'Artisan Home Bakery')}<br>Contact: ${esc(business.phone || business.whatsapp || '+91 9876543210')}</p>
         </div>
         <div class="invoice-details">
           <h2>INVOICE</h2>
-          <p><strong>Order #:</strong> ${order.id}<br>
+          <p><strong>Order #:</strong> ${esc(order.id)}<br>
           <strong>Date:</strong> ${new Date(order.createdAt || Date.now()).toLocaleDateString()}</p>
         </div>
       </div>
@@ -47,14 +52,14 @@ export function printInvoice(order) {
         <div>
           <h3>Bill To:</h3>
           <p>
-            <strong>${order.customer.name}</strong><br>
-            Phone: ${order.customer.phone}<br>
-            ${order.customer.address ? `Address: ${order.customer.address}` : ''}
+            <strong>${esc(order.customer?.name)}</strong><br>
+            Phone: ${esc(order.customer?.phone)}<br>
+            ${order.customer?.address ? `Address: ${esc(order.customer.address)}` : ''}
           </p>
         </div>
         <div style="text-align: right">
           <h3>Payment Status:</h3>
-          <p style="text-transform: uppercase; font-weight: bold; color: ${order.paymentStatus === 'paid' ? 'green' : 'red'};">${order.paymentStatus || 'Pending'}</p>
+          <p style="text-transform: uppercase; font-weight: bold; color: ${order.paymentStatus === 'paid' ? 'green' : 'red'};">${esc(order.paymentStatus) || 'Pending'}</p>
         </div>
       </div>
 
@@ -69,13 +74,13 @@ export function printInvoice(order) {
           </tr>
         </thead>
         <tbody>
-          ${order.items.map(item => `
+          ${(order.items || []).map(item => `
             <tr>
-              <td>${item.name}</td>
-              <td>${item.size}</td>
-              <td>${item.qty}</td>
-              <td style="text-align: right">₹${item.price}</td>
-              <td style="text-align: right">₹${item.price * item.qty}</td>
+              <td>${esc(item.name)}</td>
+              <td>${esc(item.size)}</td>
+              <td>${esc(item.qty)}</td>
+              <td style="text-align: right">₹${esc(item.price)}</td>
+              <td style="text-align: right">₹${esc(item.price * item.qty)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -84,12 +89,12 @@ export function printInvoice(order) {
       <div class="totals">
         <div class="totals-row">
           <span>Subtotal:</span>
-          <span>₹${order.total}</span>
+          <span>₹${esc(order.total)}</span>
         </div>
         <!-- GST can be added here if needed -->
         <div class="totals-row grand-total">
           <span>Grand Total:</span>
-          <span>₹${order.total}</span>
+          <span>₹${esc(order.total)}</span>
         </div>
       </div>
 
@@ -101,11 +106,22 @@ export function printInvoice(order) {
         window.onload = function() {
           window.print();
         }
-      </script>
+      <\/script>
     </body>
     </html>
   `;
   
   printWindow.document.write(html);
   printWindow.document.close();
+}
+
+/** Escapes a value for safe HTML interpolation — prevents XSS via user-controlled data. */
+function esc(value) {
+  if (value == null) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
 }

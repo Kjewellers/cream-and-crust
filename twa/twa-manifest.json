@@ -1,0 +1,34 @@
+{
+  "packageId": "com.creamandcrust.app",
+  "host": "www.creamandcrust.online",
+  "name": "Cream & Crust",
+  "launcherName": "Cream & Crust",
+  "display": "standalone",
+  "themeColor": "#B5606A",
+  "navigationColor": "#FAF7F5",
+  "navigationColorDark": "#1a1411",
+  "navigationDividerColor": "#00000000",
+  "navigationDividerColorDark": "#00000000",
+  "backgroundColor": "#FAF7F5",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://www.creamandcrust.online/logo.png",
+  "maskableIconUrl": "https://www.creamandcrust.online/logo.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./cream-and-crust.keystore",
+    "alias": "creamandcrust"
+  },
+  "appVersionCode": 1,
+  "appVersionName": "1.0.0",
+  "shortcuts": [
+    {
+      "name": "New Order",
+      "short_name": "Order",
+      "url": "/orders",
+      "icons": [{ "src": "https://www.creamandcrust.online/logo.png", "sizes": "96x96" }]
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://www.creamandcrust.online/manifest.webmanifest"
+}

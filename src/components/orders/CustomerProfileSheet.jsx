@@ -227,11 +227,13 @@ export default function CustomerProfileSheet({
                 {customer?.phone && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       triggerHaptic('light');
-                      const digits = String(customer.phone).replace(/\D/g, '');
-                      const fullPhone = digits.length === 10 ? '91' + digits : digits;
-                      window.open(`https://wa.me/${fullPhone}`, '_blank', 'noopener,noreferrer');
+                      const { openWhatsAppChat } = await import('../../utils/openLink');
+                      await openWhatsAppChat(
+                        customer.phone,
+                        `Hi ${customer?.name || ''}! 🧁`
+                      );
                     }}
                     style={{ ...tileStyle('rgba(37, 211, 102, 0.18)'), fontFamily: 'inherit' }}
                     aria-label="Open WhatsApp"
@@ -245,13 +247,15 @@ export default function CustomerProfileSheet({
                 {customer?.address && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={async () => {
                       triggerHaptic('light');
-                      window.open(
-                        `https://maps.google.com/maps?q=${encodeURIComponent(customer.address)}`,
-                        '_blank',
-                        'noopener,noreferrer'
-                      );
+                      const url = `https://maps.google.com/maps?q=${encodeURIComponent(customer.address)}`;
+                      try {
+                        const { openLink } = await import('../../utils/openLink');
+                        await openLink(url);
+                      } catch {
+                        window.open(url, '_blank', 'noopener,noreferrer');
+                      }
                     }}
                     style={{ ...tileStyle('rgba(59, 130, 246, 0.18)'), fontFamily: 'inherit' }}
                     aria-label="Navigate to address"

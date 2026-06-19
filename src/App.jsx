@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -29,19 +29,26 @@ import {
   GripVertical,
   User as UserIcon,
   MapPin,
+  Trash2,
+  Sparkles,
 } from 'lucide-react';
 
 import SystemGuard from './components/SystemGuard';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { subscribeToOrders, subscribeToInventory } from './services/db';
+import { DataProvider, useData } from './context/DataContext';
 import { ToastContainer, Loader2, showToast } from './components/iOS';
 import { useTranslation } from 'react-i18next';
 import { ConfettiCanvas, SuccessBurstOverlay, FloatingRewardLayer } from './components/DopamineKit';
 import PremiumAppTour from './components/PremiumAppTour';
 import AppErrorBoundary from './components/AppErrorBoundary';
+import AppPermissionGate from './components/AppPermissionGate';
+import QuickCreateSheet from './components/QuickCreateSheet';
 import PwaUpdateToast from './components/PwaUpdateToast';
 import OfflineBanner from './components/OfflineBanner';
 import { useKeyboardInsets } from './hooks/useKeyboardInsets';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import { useAppRetention } from './hooks/useAppRetention';
+import { useAnalyticsAndCrashlytics } from './hooks/useAnalyticsAndCrashlytics';
 import { pageVariants } from './animations';
 import './index.css';
 
@@ -57,12 +64,15 @@ const Products = lazy(() => import('./pages/Products'));
 const Customers = lazy(() => import('./pages/Customers'));
 const Calendar = lazy(() => import('./pages/Calendar'));
 const Analytics = lazy(() => import('./pages/Analytics'));
+const MenuAnalytics = lazy(() => import('./pages/menu/MenuAnalytics'));
+const DebugAnalytics = lazy(() => import('./pages/menu/DebugAnalytics'));
 const Inventory = lazy(() => import('./pages/Inventory'));
 const Recipes = lazy(() => import('./pages/Recipes'));
 const Profile = lazy(() => import('./pages/Profile'));
 const SettingsPage = lazy(() => import('./pages/Settings'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const ShoppingList = lazy(() => import('./pages/ShoppingList'));
+const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 const SetupAdmin = lazy(() => import('./pages/SetupAdmin'));
 const PublicOrderForm = lazy(() => import('./pages/PublicOrderForm'));
 const PrivacyPolicy = lazy(() => import('./pages/legal/PrivacyPolicy'));
@@ -75,6 +85,8 @@ const MenuThemeCustomizer = lazy(() => import('./pages/MenuThemeCustomizer'));
 const MenuLivePreview = lazy(() => import('./pages/MenuLivePreview'));
 const PublishedMenu = lazy(() => import('./pages/PublishedMenu'));
 const OnboardingModal = lazy(() => import('./components/OnboardingModal'));
+const AICompanion = lazy(() => import('./pages/AICompanion'));
+const AIAssistantHub = lazy(() => import('./pages/AIAssistantHub'));
 
 // ─── Delayed Fallback to prevent buffering flash ────────
 function DelayedFallback({ fullScreen }) {
@@ -110,19 +122,18 @@ export const PageWrapper = ({ children, className = '' }) => (
 // hook; React deduplicates the subscription at the hook level so only
 // ONE onSnapshot is active regardless of how many components mount.
 function usePendingOrders() {
-  const { currentUser } = useAuth();
+  const { orders } = useData();
   const [pendingCount, setPendingCount] = useState(0);
+  
   useEffect(() => {
-    if (!currentUser) { setPendingCount(0); return; }
-    const unsubscribe = subscribeToOrders((orders) => {
-      const count = orders.filter((o) => {
-        const s = String(o.status || 'inquiry').toLowerCase();
-        return ['inquiry', 'confirmed', 'baking', 'ready', 'new'].includes(s);
-      }).length;
-      setPendingCount(count);
-    }, currentUser.uid);
-    return () => unsubscribe();
-  }, [currentUser]);
+    if (!orders) { setPendingCount(0); return; }
+    const count = orders.filter((o) => {
+      const s = String(o.status || 'inquiry').toLowerCase();
+      return ['inquiry', 'confirmed', 'baking', 'ready', 'new'].includes(s);
+    }).length;
+    setPendingCount(count);
+  }, [orders]);
+  
   return pendingCount;
 }
 
@@ -136,6 +147,12 @@ function Sidebar({ open, onClose, theme, toggleTheme }) {
       section: 'MAIN',
       items: [
         { to: '/', icon: LayoutDashboard, label: t('nav.home') },
+        { 
+          to: '/ai-assistant', 
+          icon: Sparkles, 
+          label: 'AI Assistant',
+          badge: <span style={{ background: 'rgba(236,72,153,0.1)', color: '#ec4899', padding: '2px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 'bold' }}>New</span>
+        },
         {
           to: '/orders',
           icon: ShoppingBag,
@@ -161,6 +178,7 @@ function Sidebar({ open, onClose, theme, toggleTheme }) {
         { to: '/recipes', icon: BookOpen, label: t('nav.recipes') },
         { to: '/expenses', icon: Receipt, label: t('nav.expenses') },
         { to: '/shopping-list', icon: ShoppingCart, label: t('nav.shoppingList') },
+        { to: '/recycle-bin', icon: Trash2, label: 'Recycle Bin' },
       ],
     },
     {
@@ -519,6 +537,7 @@ function MobileHeader({ onMenuClick, theme, toggleTheme }) {
 // on the same device keep separate layouts.
 const NAV_SHORTCUTS = [
   { id: 'home', to: '/', icon: LayoutDashboard, label: 'Home' },
+  { id: 'ai', to: '/ai-companion', icon: Sparkles, label: 'Cream AI' },
   { id: 'orders', to: '/orders', icon: ShoppingBag, label: 'Orders' },
   { id: 'products', to: '/products', icon: Package, label: 'Products' },
   { id: 'recipes', to: '/recipes', icon: BookOpen, label: 'Recipes' },
@@ -957,6 +976,22 @@ function BottomNavCustomiseSheet({ open, currentIds, onClose, onSave }) {
   );
 }
 
+const getFabConfig = (pathname) => {
+  if (pathname === '/' || pathname === '/dashboard') return 'quick-create';
+  if (pathname.startsWith('/orders')) return 'open-new-order-modal';
+  if (pathname.startsWith('/customers')) return 'open-new-customer-modal';
+  if (pathname.startsWith('/products')) return 'open-new-product-modal';
+  if (pathname.startsWith('/expenses')) return 'open-new-expense-modal';
+  if (pathname.startsWith('/inventory')) return 'open-new-inventory-modal';
+  if (pathname.startsWith('/shopping-list')) return 'open-new-shopping-modal';
+  
+  if (pathname.startsWith('/analytics') || pathname.startsWith('/settings') || pathname.startsWith('/profile') || pathname.startsWith('/menu-builder')) {
+    return 'quick-actions';
+  }
+  
+  return 'quick-create';
+};
+
 function BottomNav() {
   const { isAdmin, userRole, currentUser } = useAuth();
   const isBaker = userRole === 'baker';
@@ -976,6 +1011,8 @@ function BottomNav() {
   // render sees baker-shape, hook indices shift, blank screen).
   const [slotIds, setSlotIds] = useState(() => loadBottomNavSlots(uid));
   const [customiseOpen, setCustomiseOpen] = useState(false);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickCreateMode, setQuickCreateMode] = useState('quick-create');
   const longPressTimer = useRef(null);
 
   // Refresh from storage whenever the uid changes (logout→login,
@@ -1058,7 +1095,8 @@ function BottomNav() {
       try {
         window.dispatchEvent(new CustomEvent('trigger-haptic', { detail: 'medium' }));
       } catch (e) {}
-      setCustomiseOpen(true);
+      setQuickCreateMode('universal');
+      setQuickCreateOpen(true);
     }, 550);
   };
   const cancelLongPress = () => {
@@ -1073,10 +1111,13 @@ function BottomNav() {
       window.dispatchEvent(new CustomEvent('trigger-haptic', { detail: 'light' }));
     } catch (e) {}
 
-    if (location.pathname === '/orders') {
-      window.dispatchEvent(new CustomEvent('open-new-order-modal'));
+    const action = getFabConfig(location.pathname);
+    
+    if (action === 'quick-create' || action === 'quick-actions') {
+      setQuickCreateMode(action);
+      setQuickCreateOpen(true);
     } else {
-      navigate('/orders?new=true');
+      window.dispatchEvent(new CustomEvent(action));
     }
   };
 
@@ -1088,8 +1129,8 @@ function BottomNav() {
     if (!item) return <div key={key} style={{ width: 56 }} />;
     const Icon = item.icon;
     return (
+      <motion.div key={key} whileTap={{ scale: 0.85 }} transition={{ type: 'spring', stiffness: 500, damping: 20 }}>
       <NavLink
-        key={key}
         to={item.to}
         end
         style={({ isActive }) => ({
@@ -1135,6 +1176,7 @@ function BottomNav() {
           </>
         )}
       </NavLink>
+      </motion.div>
     );
   };
 
@@ -1175,21 +1217,16 @@ function BottomNav() {
           {renderSlot(slotIds[0], 'slot-0')}
           {renderSlot(slotIds[1], 'slot-1')}
 
-          {/* Center FAB — hidden on /orders and /calendar where each
-              module already has its own primary "+" surface, so the
-              center button stops feeling redundant/intrusive. */}
-          {location.pathname === '/orders' || location.pathname === '/calendar' ? (
-            <div key="fab-spacer" style={{ width: 60, height: 44 }} aria-hidden="true" />
-          ) : (
-            <div
-              style={{
-                position: 'relative',
-                width: 60,
-                height: 44,
-                display: 'flex',
-                justifyContent: 'center',
-              }}
-            >
+          {/* Center FAB — Visible on all pages per requirements */}
+          <div
+            style={{
+              position: 'relative',
+              width: 60,
+              height: 44,
+              display: 'flex',
+              justifyContent: 'center',
+            }}
+          >
               {/* Ambient glow halo — soft rose ring that gives the FAB
                 its lift without the cheap hard white cutout border. */}
               <div
@@ -1219,19 +1256,13 @@ function BottomNav() {
                   // Soft rose gradient: subtle top-left highlight, deeper at the
                   // bottom-right. Reads as a single coherent material rather
                   // than a flat disc.
-                  background: 'linear-gradient(140deg, #C97582 0%, #B5606A 55%, #984E58 100%)',
+                  background: '#E15A75', /* Pure Pink for the reference */
                   color: 'white',
-                  // Layered shadow: a rose-tinted soft glow + a tight contact
-                  // shadow + a 1px inner highlight that fakes a lit rim.
-                  boxShadow:
-                    '0 14px 28px -8px rgba(181, 96, 106, 0.55), ' +
-                    '0 6px 12px -4px rgba(60, 20, 24, 0.30), ' +
-                    'inset 0 1px 0 0 rgba(255, 255, 255, 0.30), ' +
-                    'inset 0 -1px 0 0 rgba(60, 20, 24, 0.18)',
+                  boxShadow: '0 8px 24px rgba(225, 90, 117, 0.4)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  border: '1px solid rgba(255, 255, 255, 0.18)',
+                  border: 'none',
                   cursor: 'pointer',
                   transition: 'transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.18s ease',
                   zIndex: 91,
@@ -1250,7 +1281,6 @@ function BottomNav() {
                 <Plus size={22} strokeWidth={2.4} />
               </button>
             </div>
-          )}
 
           {/* Outer slots 3 & 4 */}
           {renderSlot(slotIds[2], 'slot-2')}
@@ -1263,6 +1293,11 @@ function BottomNav() {
         currentIds={slotIds}
         onClose={() => setCustomiseOpen(false)}
         onSave={handleSlotsChange}
+      />
+      <QuickCreateSheet 
+        open={quickCreateOpen} 
+        onClose={() => setQuickCreateOpen(false)} 
+        mode={quickCreateMode} 
       />
     </>
   );
@@ -1293,7 +1328,7 @@ function AnimatedRoutes() {
         {isAdmin || isBaker ? (
           <>
             {renderRoute('/', <Dashboard />)}
-
+            {renderRoute('/ai-assistant', <AIAssistantHub />)}
             {renderRoute('/orders', <Orders />)}
             {renderRoute('/calendar', <Calendar />)}
             {renderRoute('/products', <Products />)}
@@ -1303,9 +1338,12 @@ function AnimatedRoutes() {
             {renderRoute('/analytics', <Analytics />)}
             {renderRoute('/expenses', <Expenses />)}
             {renderRoute('/shopping-list', <ShoppingList />)}
+            {renderRoute('/recycle-bin', <RecycleBin />)}
             {renderRoute('/profile', <Profile />)}
             {renderRoute('/settings', <SettingsPage />)}
             {renderRoute('/menu-builder', <MenuDashboard />)}
+            {renderRoute('/menu-builder/analytics', <MenuAnalytics />)}
+            {renderRoute('/debug-analytics', <DebugAnalytics />)}
             {renderRoute('/menu-builder/create', <CreateMenu />)}
             {renderRoute('/menu-builder/categories', <MenuCategories />)}
             {renderRoute('/menu-builder/products', <MenuProducts />)}
@@ -1334,7 +1372,7 @@ function AnimatedRoutes() {
               <h2>404 - Page Not Found</h2>
               <button
                 className="btn btn-primary"
-                onClick={() => navigate('/')}
+                onClick={() => window.location.href = '/'}
                 style={{ marginTop: 20 }}
               >
                 Go Home
@@ -1575,6 +1613,13 @@ function MainLayout() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
+  // Register for push notifications (only runs on native Android/iOS)
+  usePushNotifications();
+  useAppRetention();
+  
+  // Register for Analytics and Crashlytics (only runs on native Android/iOS)
+  useAnalyticsAndCrashlytics();
+
   // ── Splash screen timing ────────────────────────────────────────────────────
   // Minimum 1.2s: enough for the brand animation to play through fully.
   // Hard 5s max: safety valve in case auth listener never fires (offline, etc.)
@@ -1636,38 +1681,32 @@ function MainLayout() {
   const [showTutorial, setShowTutorial] = useState(false);
   const alertedItemsRef = useRef(new Set());
 
+  const { inventory } = useData();
+
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || !inventory) {
       alertedItemsRef.current.clear();
       return;
     }
 
-    const unsubscribe = subscribeToInventory(
-      (items) => {
-        items.forEach((item) => {
-          const isLow = Number(item.stock) <= Number(item.minStock || 0);
-          if (isLow) {
-            if (!alertedItemsRef.current.has(item.id)) {
-              alertedItemsRef.current.add(item.id);
-              showToast(
-                `⚠️ Low Stock: "${item.item}" is down to ${item.stock} ${item.unit}!`,
-                'error'
-              );
-              try {
-                window.dispatchEvent(new CustomEvent('trigger-haptic', { detail: 'warning' }));
-              } catch (e) {}
-            }
-          } else {
-            alertedItemsRef.current.delete(item.id);
-          }
-        });
-      },
-      null,
-      currentUser.uid
-    );
-
-    return () => unsubscribe();
-  }, [currentUser]);
+    inventory.forEach((item) => {
+      const isLow = Number(item.stock) <= Number(item.minStock || 0);
+      if (isLow) {
+        if (!alertedItemsRef.current.has(item.id)) {
+          alertedItemsRef.current.add(item.id);
+          showToast(
+            `⚠️ Low Stock: "${item.item}" is down to ${item.stock} ${item.unit}!`,
+            'error'
+          );
+          try {
+            window.dispatchEvent(new CustomEvent('trigger-haptic', { detail: 'warning' }));
+          } catch (e) {}
+        }
+      } else {
+        alertedItemsRef.current.delete(item.id);
+      }
+    });
+  }, [currentUser, inventory]);
 
   useEffect(() => {
     if (currentUser) {
@@ -1748,6 +1787,11 @@ function MainLayout() {
         </AppErrorBoundary>
       </main>
       <BottomNav />
+      {currentUser && (
+        <Suspense fallback={null}>
+          <AICompanion />
+        </Suspense>
+      )}
       {currentUser && !localHasSeenTour && !hasSeenTourV1 && onboardingCompleted && (
         <PremiumAppTour onComplete={handleTourComplete} />
       )}
@@ -1777,7 +1821,9 @@ function MainLayout() {
     <>
       <AnimatePresence>{showSplash && <SplashScreen key="splash" />}</AnimatePresence>
       <SystemGuard>
-        <AnimatePresence mode="wait">{content}</AnimatePresence>
+        <AppPermissionGate uid={currentUser?.uid}>
+          <AnimatePresence mode="wait">{content}</AnimatePresence>
+        </AppPermissionGate>
       </SystemGuard>
     </>
   );
@@ -1787,13 +1833,15 @@ export default function App() {
   return (
     <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <AuthProvider>
-        <MainLayout />
-        <ToastContainer />
-        <OfflineBanner />
-        <ConfettiCanvas />
-        <SuccessBurstOverlay />
-        <FloatingRewardLayer />
-        <PwaUpdateToast />
+        <DataProvider>
+          <MainLayout />
+          <ToastContainer />
+          <OfflineBanner />
+          <ConfettiCanvas />
+          <SuccessBurstOverlay />
+          <FloatingRewardLayer />
+          <PwaUpdateToast />
+        </DataProvider>
       </AuthProvider>
     </BrowserRouter>
   );

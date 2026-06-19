@@ -17,7 +17,6 @@ export default function PwaUpdateToast() {
 
   useEffect(() => {
     let cancelled = false;
-    // eslint-disable-next-line import/no-unresolved
     import('virtual:pwa-register/react')
       .then((mod) => {
         if (cancelled) return;
@@ -44,7 +43,7 @@ function makeInner(useRegisterSW) {
       updateServiceWorker,
     } = useRegisterSW({
       onRegisterError(err) {
-        // eslint-disable-next-line no-console
+         
         console.warn('[PwaUpdateToast] SW register error:', err);
       },
     });

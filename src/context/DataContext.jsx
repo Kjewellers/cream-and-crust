@@ -1,145 +1,121 @@
-import { createContext, useContext, useState, useEffect } from 'react';
-import storage from '../utils/storage';
-import { products as defaultProducts, sampleOrders, sampleCustomers } from '../data/sampleData';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAuth } from './AuthContext';
+import {
+  subscribeToOrders,
+  subscribeToCustomers,
+  subscribeToInventory,
+  subscribeToExpenses,
+  subscribeToBusiness,
+  subscribeToProducts,
+  subscribeToShoppingList
+} from '../services/db';
+import { subscribeToAnalyticsSummary } from '../services/menuAnalytics';
 
-const DataContext = createContext();
+export const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const [products, setProducts] = useState(() => {
-    const stored = storage.getProducts();
-    if (stored.length === 0) {
-      storage.setProducts(defaultProducts);
-      return defaultProducts;
+  const { currentUser, userRole, isAdmin } = useAuth();
+  
+  const [orders, setOrders] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [inventory, setInventory] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [shoppingItems, setShoppingItems] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [business, setBusiness] = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+
+  // A global loading state that tracks if the initial data fetch is complete
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // IMMEDIATELY CLEAR PREVIOUS USER STATE TO PREVENT DATA LEAKAGE / FLICKERING
+    setOrders([]);
+    setCustomers([]);
+    setInventory([]);
+    setExpenses([]);
+    setShoppingItems([]);
+    setProducts([]);
+    setBusiness(null);
+    setAnalytics(null);
+
+    // Only fetch baker/admin data if they are logged in with the correct role
+    // Customers (userRole === 'customer') don't need all this global data.
+    const isBakerOrAdmin = isAdmin || userRole === 'baker';
+    
+    if (!currentUser?.uid || !isBakerOrAdmin) {
+      setLoading(false);
+      return;
     }
-    return stored;
-  });
 
-  const [orders, setOrders] = useState(() => {
-    const stored = storage.getOrders();
-    if (stored.length === 0) {
-      storage.setOrders(sampleOrders);
-      return sampleOrders;
-    }
-    return stored;
-  });
+    setLoading(true);
 
-  const [customers, setCustomers] = useState(() => {
-    const stored = storage.getCustomers();
-    if (stored.length === 0) {
-      storage.setCustomers(sampleCustomers);
-      return sampleCustomers;
-    }
-    return stored;
-  });
+    const unsubOrders = subscribeToOrders((data) => {
+      setOrders(data || []);
+      setLoading(false); // Consider the app "loaded" once orders arrive
+    }, currentUser.uid);
 
-  useEffect(() => { storage.setProducts(products); }, [products]);
-  useEffect(() => { storage.setOrders(orders); }, [orders]);
-  useEffect(() => { storage.setCustomers(customers); }, [customers]);
+    const unsubCustomers = subscribeToCustomers((data) => {
+      setCustomers(data || []);
+    }, null, currentUser.uid);
 
-  // Product CRUD
-  const addProduct = (product) => {
-    const newProduct = { ...product, id: Date.now() };
-    setProducts(prev => [...prev, newProduct]);
-    return newProduct;
-  };
+    const unsubInventory = subscribeToInventory((data) => {
+      setInventory(data || []);
+    }, null, currentUser.uid);
 
-  const updateProduct = (id, updates) => {
-    setProducts(prev =>
-      prev.map(p => (p.id === id ? { ...p, ...updates } : p))
-    );
-  };
+    const unsubExpenses = subscribeToExpenses((data) => {
+      setExpenses(data || []);
+    }, null, currentUser.uid);
 
-  const deleteProduct = (id) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
-  };
+    const unsubShopping = subscribeToShoppingList((data) => {
+      setShoppingItems(data || []);
+    }, null, currentUser.uid);
 
-  const toggleProductAvailability = (id) => {
-    setProducts(prev =>
-      prev.map(p => (p.id === id ? { ...p, available: !p.available } : p))
-    );
-  };
+    const unsubBusiness = subscribeToBusiness((data) => {
+      setBusiness(data);
+    }, null, currentUser.uid);
 
-  // Order management
-  const addOrder = (order) => {
-    const newOrder = {
-      ...order,
-      id: `CC-${String(orders.length + 1).padStart(3, '0')}`,
+    const unsubProducts = subscribeToProducts((data) => {
+      setProducts(data || []);
+    }, null, currentUser.uid);
+
+    const unsubAnalytics = subscribeToAnalyticsSummary(currentUser.uid, (data) => {
+      setAnalytics(data);
+    });
+
+    return () => {
+      unsubOrders();
+      unsubCustomers();
+      unsubInventory();
+      unsubExpenses();
+      unsubShopping();
+      unsubBusiness();
+      unsubProducts();
+      if (unsubAnalytics) unsubAnalytics();
     };
-    setOrders(prev => [newOrder, ...prev]);
-
-    // Update customer
-    const cust = customers.find(c => c.phone === order.customer.phone);
-    if (cust) {
-      setCustomers(prev =>
-        prev.map(c =>
-          c.phone === order.customer.phone
-            ? {
-                ...c,
-                totalOrders: c.totalOrders + 1,
-                totalSpent: c.totalSpent + order.total,
-                lastOrder: new Date().toISOString().split('T')[0],
-              }
-            : c
-        )
-      );
-    } else {
-      setCustomers(prev => [
-        ...prev,
-        {
-          id: Date.now(),
-          name: order.customer.name,
-          phone: order.customer.phone,
-          address: order.customer.address,
-          totalOrders: 1,
-          totalSpent: order.total,
-          lastOrder: new Date().toISOString().split('T')[0],
-        },
-      ]);
-    }
-
-    return newOrder;
-  };
-
-  const updateOrderStatus = (orderId, status) => {
-    setOrders(prev =>
-      prev.map(o => (o.id === orderId ? { ...o, status } : o))
-    );
-  };
-
-  const updateOrderPayment = (orderId, paymentStatus, paymentMethod) => {
-    setOrders(prev =>
-      prev.map(o =>
-        o.id === orderId
-          ? { ...o, paymentStatus, paymentMethod: paymentMethod || o.paymentMethod }
-          : o
-      )
-    );
-  };
-
-  const deleteOrder = (orderId) => {
-    setOrders(prev => prev.filter(o => o.id !== orderId));
-  };
-
-  // Customer management
-  const deleteCustomer = (id) => {
-    setCustomers(prev => prev.filter(c => c.id !== id));
-  };
-
-  const updateCustomer = (id, updates) => {
-    setCustomers(prev =>
-      prev.map(c => (c.id === id ? { ...c, ...updates } : c))
-    );
-  };
+  }, [currentUser?.uid, userRole, isAdmin]);
 
   return (
     <DataContext.Provider value={{
-      products, addProduct, updateProduct, deleteProduct, toggleProductAvailability,
-      orders, addOrder, updateOrderStatus, updateOrderPayment, deleteOrder,
-      customers, deleteCustomer, updateCustomer,
+      orders, setOrders,
+      customers, setCustomers,
+      inventory, setInventory,
+      expenses, setExpenses,
+      shoppingItems, setShoppingItems,
+      products, setProducts,
+      business,
+      analytics,
+      loading
     }}>
       {children}
     </DataContext.Provider>
   );
 }
 
-export const useData = () => useContext(DataContext);
+export function useData() {
+  const context = useContext(DataContext);
+  if (!context) {
+    throw new Error('useData must be used within a DataProvider');
+  }
+  return context;
+}

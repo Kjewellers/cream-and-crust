@@ -36,7 +36,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // In development (localhost), set FIREBASE_APPCHECK_DEBUG_TOKEN=true in
 // the browser console to bypass App Check.
 if (import.meta.env.DEV) {
-  // eslint-disable-next-line no-restricted-globals
+   
   self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
 }
 

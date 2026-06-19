@@ -24,10 +24,13 @@ import {
   resetPasswordByEmail,
   lookupEmailByPhone,
   loginWithPhone,
+  resetPasswordViaPhone,
 } from '../services/auth';
-import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
+import { signInWithPhoneNumber } from 'firebase/auth';
 import { auth } from '../services/firebase';
+import { getVerifier, resetVerifier } from '../services/recaptchaManager';
 import { triggerHaptic, showToast } from '../components/iOS';
+import { withAuthTimeout } from '../utils/authTimeout';
 
 /* ─── Palette ──────────────────────────────────────────────────────
    Warm bakery atelier palette consistent with the rest of the app.
@@ -294,22 +297,47 @@ function PhoneOtpFlow({
   setOtpCode,
   otpSent,
   loading,
+  loadingMessage,
   onSendOtp,
   onVerifyOtp,
 }) {
+  const [timer, setTimer] = useState(30);
+
+  useEffect(() => {
+    let intval;
+    if (otpSent && timer > 0) {
+      intval = setInterval(() => setTimer((t) => t - 1), 1000);
+    }
+    return () => clearInterval(intval);
+  }, [otpSent, timer]);
+
+  // Handle auto-verify when 6 digits are entered
+  useEffect(() => {
+    if (otpCode.length === 6 && !loading && otpSent) {
+      onVerifyOtp();
+    }
+  }, [otpCode, loading, otpSent, onVerifyOtp]);
+
+  // Derived UI State
+  let state = 'input';
+  if (loading && !otpSent) state = 'sending';
+  if (!loading && otpSent) state = 'verify';
+  if (loading && otpSent) state = 'verifying';
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      onClick={onClose}
+      transition={{ duration: 0.2 }}
+      onClick={state === 'input' ? onClose : undefined}
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 100,
-        background: 'rgba(28, 20, 16, 0.4)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
+        zIndex: 2000,
+        background: 'rgba(28, 20, 16, 0.5)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -317,74 +345,120 @@ function PhoneOtpFlow({
       }}
     >
       <motion.div
-        initial={{ y: 30, opacity: 0, scale: 0.96 }}
-        animate={{ y: 0, opacity: 1, scale: 1 }}
-        exit={{ y: 20, opacity: 0, scale: 0.96 }}
-        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 30 }}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: 380,
+          maxWidth: 360,
           background: '#fff',
           borderRadius: 24,
-          padding: '28px 24px',
-          boxShadow: '0 24px 60px rgba(0,0,0,0.18)',
+          padding: '32px 24px',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.12)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          position: 'relative',
         }}
       >
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div
+        {state === 'verify' && (
+          <button
+            onClick={() => {
+              // Hack to go back: just close the modal for now, or reset parent state.
+              // We'll just close it so they can reopen it to start fresh.
+              onClose();
+            }}
             style={{
-              width: 52,
-              height: 52,
-              borderRadius: 16,
-              background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 14px',
-              color: '#fff',
+              position: 'absolute',
+              top: 24,
+              left: 20,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: C.mute,
             }}
           >
-            <Phone size={22} strokeWidth={2} />
-          </div>
-          <h3
-            style={{
-              fontFamily: FONT_DISPLAY,
-              fontSize: 22,
-              fontWeight: 700,
-              margin: '0 0 4px',
-              letterSpacing: '-0.02em',
-              color: C.ink,
-            }}
-          >
-            {otpSent ? 'Enter OTP' : 'Phone Sign In'}
-          </h3>
-          <p style={{ fontSize: 13, color: C.mute, margin: 0 }}>
-            {otpSent
-              ? 'We sent a 6-digit code to your phone'
-              : "We'll send a one-time code to verify"}
-          </p>
+            <ArrowLeft size={20} />
+          </button>
+        )}
+
+        {/* Dynamic Header / Graphic */}
+        <div style={{ marginBottom: 24, textAlign: 'center' }}>
+          {state === 'input' && (
+            <>
+              <div style={{ fontSize: 56, marginBottom: 8, filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.08))' }}>🧁</div>
+              <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 24, margin: '0 0 8px', color: C.ink }}>Login with Phone</h2>
+              <p style={{ margin: 0, fontSize: 13.5, color: C.mute, lineHeight: 1.4 }}>
+                Manage orders, customers, and<br/>grow your bakery business.
+              </p>
+            </>
+          )}
+
+          {state === 'sending' && (
+            <>
+              <div style={{ fontSize: 56, marginBottom: 16, filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.08))' }}>🧁</div>
+              <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 22, margin: '0 0 8px', color: C.ink }}>Sending OTP...</h2>
+              <p style={{ margin: 0, fontSize: 13.5, color: C.mute }}>Verifying your number.</p>
+              <div style={{ marginTop: 24, display: 'flex', gap: 6, justifyContent: 'center' }}>
+                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0 }} style={{ width: 8, height: 8, borderRadius: '50%', background: C.rose }} />
+                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }} style={{ width: 8, height: 8, borderRadius: '50%', background: C.gold }} />
+                <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }} style={{ width: 8, height: 8, borderRadius: '50%', background: C.mute }} />
+              </div>
+            </>
+          )}
+
+          {state === 'verify' && (
+            <>
+              <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 22, margin: '0 0 8px', color: C.ink }}>Verify Your Number</h2>
+              <p style={{ margin: 0, fontSize: 13.5, color: C.mute }}>
+                OTP sent to <span style={{ color: C.roseDeep, fontWeight: 600, letterSpacing: '0.02em' }}>{phoneNumber}</span>
+              </p>
+            </>
+          )}
+
+          {state === 'verifying' && (
+            <>
+              <div style={{ position: 'relative', display: 'inline-block', marginBottom: 16 }}>
+                <div style={{ fontSize: 56, filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.08))' }}>🧁</div>
+                <div style={{ position: 'absolute', bottom: -4, right: -4, background: '#fff', borderRadius: '50%', padding: 2, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                  <ShieldCheck size={24} color="#10B981" fill="#D1FAE5" />
+                </div>
+              </div>
+              <h2 style={{ fontFamily: FONT_DISPLAY, fontSize: 22, margin: '0 0 8px', color: C.ink }}>Verifying OTP...</h2>
+              <p style={{ margin: 0, fontSize: 13.5, color: C.mute }}>Please wait while we verify your code.</p>
+            </>
+          )}
         </div>
 
-        {!otpSent ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Input Phase */}
+        {state === 'input' && (
+          <div style={{ width: '100%' }}>
             <label
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 10,
-                padding: '12px 14px',
-                borderRadius: 14,
+                gap: 12,
+                padding: '14px 18px',
+                borderRadius: 16,
                 background: C.cream,
-                border: `1.5px solid ${C.hairline}`,
+                border: `1.5px solid ${C.ivory}`,
+                marginBottom: 16,
               }}
             >
-              <span style={{ fontSize: 18 }}>🇮🇳</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingRight: 12, borderRight: `1.5px solid ${C.hairline}` }}>
+                <span style={{ fontSize: 18 }}>🇮🇳</span>
+                <span style={{ fontWeight: 600, color: C.ink, fontSize: 15 }}>+91</span>
+              </div>
               <input
                 type="tel"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="+91 98765 43210"
+                value={phoneNumber.replace('+91', '')}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  setPhoneNumber('+91' + cleaned);
+                }}
+                placeholder="98765 43210"
                 style={{
                   flex: 1,
                   border: 'none',
@@ -394,7 +468,7 @@ function PhoneOtpFlow({
                   fontFamily: FONT_BODY,
                   color: C.ink,
                   outline: 'none',
-                  letterSpacing: '0.02em',
+                  letterSpacing: '0.04em',
                 }}
                 autoFocus
               />
@@ -402,106 +476,183 @@ function PhoneOtpFlow({
             <button
               type="button"
               onClick={onSendOtp}
-              disabled={loading || phoneNumber.replace(/\D/g, '').length < 10}
+              disabled={phoneNumber.replace(/\D/g, '').length !== 12}
               style={{
                 width: '100%',
-                height: 48,
-                borderRadius: 14,
+                height: 52,
+                borderRadius: 16,
                 border: 'none',
-                background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
+                background: C.rose,
                 color: '#fff',
                 fontFamily: FONT_BODY,
-                fontSize: 14,
-                fontWeight: 800,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
+                fontSize: 15,
+                fontWeight: 700,
                 cursor: 'pointer',
-                opacity: loading || phoneNumber.replace(/\D/g, '').length < 10 ? 0.5 : 1,
-                boxShadow: `0 8px 20px ${C.rose}40`,
+                opacity: phoneNumber.replace(/\D/g, '').length !== 12 ? 0.5 : 1,
+                boxShadow: `0 8px 24px ${C.rose}40`,
+                transition: 'opacity 0.2s',
               }}
             >
-              {loading ? 'Sending...' : 'Send OTP'}
+              Continue
             </button>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '14px',
-                borderRadius: 14,
-                background: C.cream,
-                border: `1.5px solid ${C.hairline}`,
-              }}
-            >
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                placeholder="------"
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  fontSize: 24,
-                  fontWeight: 800,
-                  fontFamily: 'ui-monospace, monospace',
-                  color: C.ink,
-                  outline: 'none',
-                  textAlign: 'center',
-                  letterSpacing: '0.3em',
-                  width: '100%',
-                }}
-                autoFocus
-              />
-            </label>
-            <button
-              type="button"
-              onClick={onVerifyOtp}
-              disabled={loading || otpCode.length !== 6}
-              style={{
-                width: '100%',
-                height: 48,
-                borderRadius: 14,
-                border: 'none',
-                background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`,
-                color: '#fff',
-                fontFamily: FONT_BODY,
-                fontSize: 14,
-                fontWeight: 800,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                cursor: 'pointer',
-                opacity: loading || otpCode.length !== 6 ? 0.5 : 1,
-                boxShadow: `0 8px 20px ${C.rose}40`,
-              }}
-            >
-              {loading ? 'Verifying...' : 'Verify & Sign In'}
-            </button>
+            <p style={{ textAlign: 'center', fontSize: 11.5, color: C.mute, marginTop: 16, marginBottom: 0, lineHeight: 1.4 }}>
+              By continuing, you agree to our<br/>
+              <span style={{ color: C.rose, textDecoration: 'underline' }}>Terms of Service</span> & <span style={{ color: C.rose, textDecoration: 'underline' }}>Privacy Policy</span>
+            </p>
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
+        {/* Sending State (Informational box) */}
+        {state === 'sending' && (
+          <div style={{
+            background: C.cream,
+            borderRadius: 16,
+            padding: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
             width: '100%',
-            marginTop: 12,
-            padding: '10px',
-            border: 'none',
-            background: 'transparent',
-            color: C.mute,
-            fontSize: 13,
-            fontWeight: 700,
-            cursor: 'pointer',
-            fontFamily: FONT_BODY,
-          }}
-        >
-          Cancel
-        </button>
+          }}>
+            <ShieldCheck size={20} color={C.mute} />
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>This usually takes</div>
+              <div style={{ fontSize: 12, color: C.mute }}>5-15 seconds</div>
+            </div>
+          </div>
+        )}
+
+        {/* Verify State */}
+        {state === 'verify' && (
+          <div style={{ width: '100%' }}>
+            {/* Native-feeling OTP boxes */}
+            <div style={{ position: 'relative', marginBottom: 24 }}>
+              <input
+                type="tel"
+                autoFocus
+                maxLength={6}
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  opacity: 0,
+                  cursor: 'text',
+                  zIndex: 10,
+                }}
+              />
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                {[0, 1, 2, 3, 4, 5].map((i) => {
+                  const digit = otpCode[i] || '';
+                  const isActive = otpCode.length === i;
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        width: 42,
+                        height: 52,
+                        borderRadius: 12,
+                        border: `1.5px solid ${isActive ? C.rose : (digit ? C.mute : C.ivory)}`,
+                        background: digit ? '#fff' : C.cream,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 22,
+                        fontWeight: 700,
+                        color: C.ink,
+                        transition: 'all 0.2s',
+                        boxShadow: isActive ? `0 0 0 3px ${C.roseSoft}` : 'none',
+                      }}
+                    >
+                      {digit}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ textAlign: 'center', marginBottom: 24 }}>
+              <div style={{ fontSize: 13, color: C.mute, marginBottom: 4 }}>Didn't receive OTP?</div>
+              <button
+                type="button"
+                disabled={timer > 0}
+                onClick={() => {
+                  setTimer(30);
+                  setOtpCode('');
+                  onSendOtp();
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: timer > 0 ? C.mute : C.rose,
+                  fontSize: 13.5,
+                  fontWeight: 700,
+                  cursor: timer > 0 ? 'default' : 'pointer',
+                  padding: 0,
+                }}
+              >
+                {timer > 0 ? `Resend in 00:${timer.toString().padStart(2, '0')}` : 'Resend OTP'}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={onVerifyOtp}
+              disabled={otpCode.length !== 6}
+              style={{
+                width: '100%',
+                height: 52,
+                borderRadius: 16,
+                border: 'none',
+                background: C.rose,
+                color: '#fff',
+                fontFamily: FONT_BODY,
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer',
+                opacity: otpCode.length !== 6 ? 0.5 : 1,
+                boxShadow: `0 8px 24px ${C.rose}40`,
+                marginBottom: 16,
+              }}
+            >
+              Verify OTP
+            </button>
+
+            <div style={{
+              background: C.cream,
+              borderRadius: 16,
+              padding: '12px 16px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 12,
+              width: '100%',
+            }}>
+              <ShieldCheck size={18} color={C.mute} style={{ marginTop: 2 }} />
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.ink }}>Your data is safe</div>
+                <div style={{ fontSize: 11.5, color: C.mute }}>We never share your number.</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Verifying State (Informational box) */}
+        {state === 'verifying' && (
+          <div style={{
+            background: C.cream,
+            borderRadius: 16,
+            padding: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            width: '100%',
+          }}>
+            <Lock size={20} color={C.mute} />
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>This won't take long</div>
+              <div style={{ fontSize: 12, color: C.mute }}>Hang tight!</div>
+            </div>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );
@@ -512,9 +663,17 @@ function ForgotPasswordFlow({ onClose }) {
   const [method, setMethod] = useState('email'); // 'email' | 'phone'
   const [resetEmail, setResetEmail] = useState('');
   const [resetPhone, setResetPhone] = useState('');
-  const [step, setStep] = useState('input'); // 'input' | 'sending' | 'sent'
+  const [step, setStep] = useState('input'); // 'input' | 'sending' | 'sent' | 'phone_otp' | 'phone_new_password'
   const [maskedEmail, setMaskedEmail] = useState('');
   const [error, setError] = useState('');
+  const [loadingMessage, setLoadingMessage] = useState('');
+
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState(null);
+  // RecaptchaVerifier is managed by the singleton recaptchaManager module.
+  // No useRef, no useEffect — avoids StrictMode double-mount and
+  // destroy-on-close/create-on-open cycling bugs.
 
   const handleResetViaEmail = async () => {
     const trimmed = resetEmail.trim();
@@ -525,7 +684,7 @@ function ForgotPasswordFlow({ onClose }) {
     setError('');
     setStep('sending');
     try {
-      await resetPasswordByEmail(trimmed);
+      await withAuthTimeout(resetPasswordByEmail(trimmed), 12000, 'Password reset');
       const [local, domain] = trimmed.split('@');
       const masked =
         local.length <= 2
@@ -540,6 +699,7 @@ function ForgotPasswordFlow({ onClose }) {
       const msgs = {
         'auth/invalid-email': 'That doesn\'t look like a valid email.',
         'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
+        'auth/timeout': 'Request timed out. Please check your connection.',
       };
       setError(msgs[err?.code] || 'Reset link sent if an account exists with that email.');
       // Show success anyway to prevent user enumeration
@@ -550,24 +710,88 @@ function ForgotPasswordFlow({ onClose }) {
     }
   };
 
-  const handleResetViaPhone = async () => {
+  const handleSendOtp = async () => {
     const digits = resetPhone.replace(/\D/g, '');
     if (digits.length < 10) {
       setError('Enter a valid phone number (at least 10 digits).');
       return;
     }
+    const fullPhone = digits.length === 10 ? `+91${digits}` : `+${digits}`;
+    setError('');
+    
+    const t0 = performance.now();
+    setStep('sending');
+    setLoadingMessage('Verifying...');
+    
+    try {
+      console.log(`[Auth] [Timing] Forgot Password OTP Request Started`);
+      const t_lookup0 = performance.now();
+      await withAuthTimeout(lookupEmailByPhone(resetPhone), 12000, 'Phone lookup');
+      const t_lookup1 = performance.now();
+      console.log(`[Auth] [Timing] Phone lookup took ${(t_lookup1 - t_lookup0).toFixed(2)}ms`);
+
+      const t1 = performance.now();
+      setLoadingMessage('Sending OTP...');
+      const verifier = await getVerifier();
+      const result = await withAuthTimeout(signInWithPhoneNumber(auth, fullPhone, verifier), 12000, 'OTP request');
+      const t2 = performance.now();
+      console.log(`[Auth] [Timing] Firebase OTP Request took ${(t2 - t1).toFixed(2)}ms`);
+      console.log(`[Auth] [Timing] Total Time to OTP Sent: ${(t2 - t0).toFixed(2)}ms`);
+
+      // Token is consumed after successful send — reset for Resend
+      resetVerifier();
+
+      setConfirmationResult(result);
+      setStep('phone_otp');
+      triggerHaptic('success');
+
+    } catch (err) {
+      console.error('[Auth] Phone reset error:', err);
+      // Reset verifier on failure so next attempt gets a fresh one
+      resetVerifier();
+      if (step !== 'phone_otp') setStep('input');
+      const msgs = {
+        'auth/timeout': 'Request timed out. Please try again.',
+      };
+      setError(msgs[err?.code] || err?.message || 'Could not find an account with that phone number.');
+    } finally {
+      setLoadingMessage('');
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otpCode.length !== 6) {
+      setError('Enter the 6-digit OTP');
+      return;
+    }
     setError('');
     setStep('sending');
     try {
-      const result = await lookupEmailByPhone(resetPhone);
-      await resetPasswordByEmail(result.email);
-      setMaskedEmail(result.maskedEmail);
+      await withAuthTimeout(confirmationResult.confirm(otpCode), 12000, 'OTP verify');
+      setStep('phone_new_password');
+      triggerHaptic('success');
+    } catch (err) {
+      setStep('phone_otp');
+      setError(err?.code === 'auth/timeout' ? 'Verification timed out.' : 'Invalid OTP code. Please try again.');
+    }
+  };
+
+  const handleSetNewPassword = async () => {
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    setError('');
+    setStep('sending');
+    try {
+      await withAuthTimeout(resetPasswordViaPhone(newPassword), 12000, 'Password update');
+      const { signOut } = await import('firebase/auth');
+      await signOut(auth);
       setStep('sent');
       triggerHaptic('success');
     } catch (err) {
-      console.error('Phone reset error:', err);
-      setStep('input');
-      setError(err?.message || 'Could not find an account with that phone number.');
+      setStep('phone_new_password');
+      setError(err?.code === 'auth/timeout' ? 'Update timed out.' : 'Failed to update password. ' + (err.message || ''));
     }
   };
 
@@ -575,13 +799,13 @@ function ForgotPasswordFlow({ onClose }) {
     flex: 1,
     padding: '10px 0',
     border: 'none',
-    borderBottom: `2.5px solid ${active ? C.rose : 'transparent'}`,
-    background: 'transparent',
+    borderRadius: '12px',
+    background: active ? `${C.rose}15` : 'transparent',
     color: active ? C.roseDeep : C.mute,
     fontFamily: FONT_BODY,
     fontSize: 13,
     fontWeight: 700,
-    letterSpacing: '0.06em',
+    letterSpacing: '0.04em',
     textTransform: 'uppercase',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
@@ -653,12 +877,12 @@ function ForgotPasswordFlow({ onClose }) {
               color: C.ink,
             }}
           >
-            {step === 'sent' ? 'Check Your Inbox' : 'Reset Password'}
+            {step === 'sent' ? (method === 'phone' ? 'Password Updated!' : 'Check Your Inbox') : 'Reset Password'}
           </h3>
           <p style={{ fontSize: 13, color: C.mute, margin: 0, lineHeight: 1.5 }}>
             {step === 'sent'
-              ? 'We\'ve sent a password reset link'
-              : 'Enter your email or phone number to receive a reset link'}
+              ? (method === 'phone' ? 'Your password has been successfully changed.' : 'We\'ve sent a password reset link')
+              : 'Enter your email or phone number to reset your password'}
           </p>
         </div>
 
@@ -748,6 +972,64 @@ function ForgotPasswordFlow({ onClose }) {
                 Back to Login
               </button>
             </motion.div>
+          ) : step === 'phone_otp' || step === 'phone_new_password' ? (
+            /* ── OTP / New Password state ───────────────────── */
+            <motion.div
+              key="otp-pw"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {step === 'phone_otp' ? (
+                  <>
+                    <input
+                      type="number"
+                      value={otpCode}
+                      onChange={(e) => { setOtpCode(e.target.value); setError(''); }}
+                      placeholder="Enter 6-digit OTP"
+                      autoFocus
+                      style={{ padding: '12px 14px', borderRadius: 14, border: `1.5px solid ${error ? '#EF4444' : C.hairline}`, background: C.cream, fontSize: 16, outline: 'none' }}
+                    />
+                    {error && <p style={{ color: '#EF4444', fontSize: 12, margin: 0 }}>{error}</p>}
+                    <button onClick={handleVerifyOtp} style={{ background: C.ink, color: '#fff', padding: '12px', borderRadius: 14, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>
+                      Verify OTP
+                    </button>
+                    <button 
+                      onClick={handleSendOtp} 
+                      disabled={step === 'sending'}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: C.rose,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: '8px'
+                      }}
+                    >
+                      {step === 'sending' ? (loadingMessage || 'Sending...') : 'Resend OTP'}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => { setNewPassword(e.target.value); setError(''); }}
+                      placeholder="Enter new password (min 6 chars)"
+                      autoFocus
+                      style={{ padding: '12px 14px', borderRadius: 14, border: `1.5px solid ${error ? '#EF4444' : C.hairline}`, background: C.cream, fontSize: 16, outline: 'none' }}
+                    />
+                    {error && <p style={{ color: '#EF4444', fontSize: 12, margin: 0 }}>{error}</p>}
+                    <button onClick={handleSetNewPassword} style={{ background: `linear-gradient(135deg, ${C.rose}, ${C.gold})`, color: '#fff', padding: '12px', borderRadius: 14, fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>
+                      Update Password
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
           ) : (
             /* ── Input state ───────────────────── */
             <motion.div
@@ -761,8 +1043,11 @@ function ForgotPasswordFlow({ onClose }) {
               <div
                 style={{
                   display: 'flex',
-                  borderBottom: `1.5px solid ${C.hairline}`,
-                  marginBottom: 2,
+                  background: C.cream,
+                  padding: '4px',
+                  borderRadius: '16px',
+                  marginBottom: '16px',
+                  border: `1.5px solid ${C.hairline}`,
                 }}
               >
                 <button
@@ -882,7 +1167,7 @@ function ForgotPasswordFlow({ onClose }) {
               {/* Submit button */}
               <button
                 type="button"
-                onClick={method === 'email' ? handleResetViaEmail : handleResetViaPhone}
+                onClick={method === 'email' ? handleResetViaEmail : handleSendOtp}
                 disabled={step === 'sending'}
                 style={{
                   width: '100%',
@@ -919,7 +1204,7 @@ function ForgotPasswordFlow({ onClose }) {
                         display: 'inline-block',
                       }}
                     />
-                    {method === 'phone' ? 'Looking up...' : 'Sending...'}
+                    {method === 'phone' ? (loadingMessage || 'Looking up...') : 'Sending...'}
                   </>
                 ) : (
                   'Send Reset Link'
@@ -965,6 +1250,7 @@ function ForgotPasswordFlow({ onClose }) {
             Cancel
           </button>
         )}
+        {/* reCAPTCHA is rendered in the persistent #recaptcha-root div in index.html */}
       </motion.div>
     </motion.div>
   );
@@ -982,6 +1268,7 @@ export default function Login() {
   const [capsOn, setCapsOn] = useState(false);
   const [taglineIdx, setTaglineIdx] = useState(0);
   const [showPhoneLogin, setShowPhoneLogin] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
@@ -994,7 +1281,9 @@ export default function Login() {
   const [phoneLookupHint, setPhoneLookupHint] = useState(''); // display hint text
   const [phoneLookupStatus, setPhoneLookupStatus] = useState(''); // 'searching'|'found'|'notfound'|''
   const heroRef = useRef(null);
-  const recaptchaRef = useRef(null);
+  // RecaptchaVerifier is managed by the singleton recaptchaManager module.
+  // No useRef, no useEffect — avoids StrictMode double-mount and
+  // destroy-on-close/create-on-open cycling bugs.
 
   // Rotate taglines every 5.5s
   useEffect(() => {
@@ -1052,14 +1341,17 @@ export default function Login() {
     }
   };
 
-  const act = async (fn) => {
+  const act = async (fn, operationName = 'Authentication') => {
     if (loading) return;
     setLoading(true);
     try {
       triggerHaptic('light');
     } catch (_) {}
     try {
-      await fn();
+      await withAuthTimeout(fn(), 12000, operationName);
+      // Explicitly release loading state on success to prevent UI freezing 
+      // if unmounting takes time or fails.
+      setLoading(false);
     } catch (err) {
       const message = err?.message || 'Authentication failed.';
       // Friendlier copy for known firebase auth codes
@@ -1073,6 +1365,7 @@ export default function Login() {
         'auth/network-request-failed': 'Network hiccup. Check your connection.',
         'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
         'auth/popup-closed-by-user': 'Sign-in was cancelled.',
+        'auth/timeout': 'Login timed out. Check your connection and try again.',
       };
       const friendly = err?.code && codeMap[err.code] ? codeMap[err.code] : message;
       showToast(friendly, 'error');
@@ -1113,12 +1406,12 @@ export default function Login() {
     if (mode === 'login') {
       // Phone login: use the looked-up email internally
       if (resolvedEmail && phoneInputValue) {
-        act(() => loginWithPhone(phoneInputValue, password));
+        act(() => loginWithPhone(phoneInputValue, password), 'Phone login');
       } else {
-        act(() => loginUser(email.trim(), password));
+        act(() => loginUser(email.trim(), password), 'Email login');
       }
     } else {
-      act(() => registerUser(email.trim(), password, nameClean));
+      act(() => registerUser(email.trim(), password, nameClean), 'Registration');
     }
   };
 
@@ -1158,7 +1451,7 @@ export default function Login() {
         // Debounce by 700ms
         phoneLookupTimerRef.current = setTimeout(async () => {
           try {
-            const result = await lookupEmailByPhone(stripped);
+            const result = await withAuthTimeout(lookupEmailByPhone(stripped), 10000, 'Phone check');
             setResolvedEmail(result.email);
             setPhoneInputValue(stripped);
             setPhoneLookupHint(`✓ Account found — enter your password to sign in`);
@@ -1183,36 +1476,44 @@ export default function Login() {
     }
     const fullPhone = digits.length === 10 ? `+91${digits}` : `+${digits}`;
 
+    const t0 = performance.now();
     setLoading(true);
+    setLoadingMessage('Verifying...');
+
     try {
-      // Create invisible reCAPTCHA verifier
-      if (!recaptchaRef.current) {
-        recaptchaRef.current = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible',
-        });
-      }
-      const result = await signInWithPhoneNumber(auth, fullPhone, recaptchaRef.current);
+      console.log(`[Auth] [Timing] OTP Request Started`);
+
+      const t1 = performance.now();
+      setLoadingMessage('Sending OTP...');
+      const verifier = await getVerifier();
+      const result = await withAuthTimeout(signInWithPhoneNumber(auth, fullPhone, verifier), 15000, 'Send OTP');
+
+      const t2 = performance.now();
+      console.log(`[Auth] [Timing] Firebase Request & Response took ${(t2 - t1).toFixed(2)}ms`);
+      console.log(`[Auth] [Timing] Total Time to OTP Sent: ${(t2 - t0).toFixed(2)}ms`);
+
+      // Token is consumed after successful send — reset for Resend
+      resetVerifier();
+
       setConfirmationResult(result);
       setOtpSent(true);
       triggerHaptic('success');
       showToast('OTP sent! Check your messages', 'success');
+
     } catch (err) {
-      console.error('OTP send error:', err);
+      console.error('[Auth] OTP send error:', err);
+      // Reset verifier on failure so next attempt gets a fresh one
+      resetVerifier();
       const msgs = {
         'auth/invalid-phone-number': 'Invalid phone number. Include country code (e.g. +91...)',
         'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
         'auth/captcha-check-failed': 'reCAPTCHA verification failed. Refresh and try again.',
+        'auth/timeout': 'Request timed out. Please try again.',
       };
       showToast(msgs[err?.code] || err?.message || 'Failed to send OTP', 'error');
-      // Reset reCAPTCHA on failure
-      if (recaptchaRef.current) {
-        try {
-          recaptchaRef.current.clear();
-        } catch {}
-        recaptchaRef.current = null;
-      }
     } finally {
       setLoading(false);
+      setLoadingMessage('');
     }
   };
 
@@ -1227,7 +1528,7 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      const result = await confirmationResult.confirm(otpCode);
+      const result = await withAuthTimeout(confirmationResult.confirm(otpCode), 12000, 'Verify OTP');
       const user = result.user;
       triggerHaptic('success');
 
@@ -1258,6 +1559,7 @@ export default function Login() {
       const msgs = {
         'auth/invalid-verification-code': 'Wrong OTP. Check and try again.',
         'auth/code-expired': 'OTP expired. Request a new one.',
+        'auth/timeout': 'Verification timed out. Try again.',
       };
       showToast(msgs[err?.code] || 'Verification failed', 'error');
       triggerHaptic('error');
@@ -1538,7 +1840,7 @@ export default function Login() {
                 type="button"
                 whileTap={{ scale: 0.98 }}
                 className="cc-google"
-                onClick={() => act(() => signInWithGoogle())}
+                onClick={() => act(() => signInWithGoogle(), 'Google login')}
                 disabled={loading}
               >
                 <GoogleIcon />
@@ -1556,6 +1858,18 @@ export default function Login() {
                 <Phone size={18} strokeWidth={2} />
                 <span>Continue with Phone</span>
               </motion.button>
+
+              {/* Terms of Service Disclaimer */}
+              <p style={{
+                textAlign: 'center',
+                fontSize: 12,
+                color: C.mute,
+                marginTop: 24,
+                marginBottom: 0,
+                lineHeight: 1.5,
+              }}>
+                By continuing, you agree to our <a href="#" style={{ color: C.ink, textDecoration: 'none', borderBottom: `1px solid ${C.hairline}` }}>Terms of Service</a> and <a href="#" style={{ color: C.ink, textDecoration: 'none', borderBottom: `1px solid ${C.hairline}` }}>Privacy Policy</a>.
+              </p>
             </motion.form>
           </AnimatePresence>
 
@@ -1576,6 +1890,7 @@ export default function Login() {
                 setOtpCode={setOtpCode}
                 otpSent={otpSent}
                 loading={loading}
+                loadingMessage={loadingMessage}
                 onSendOtp={handleSendOtp}
                 onVerifyOtp={handleVerifyOtp}
               />
@@ -1611,8 +1926,7 @@ export default function Login() {
           <span aria-hidden="true">&middot;</span>
           <span>Crafted in India</span>
         </footer>
-        {/* Invisible reCAPTCHA container for phone auth */}
-        <div id="recaptcha-container" />
+        {/* reCAPTCHA is rendered in the persistent #recaptcha-root div in index.html */}
       </main>
 
       <style>{`
@@ -1962,10 +2276,36 @@ export default function Login() {
         }
 
         .cc-remember input {
-          width: 16px; height: 16px;
+          appearance: none;
+          -webkit-appearance: none;
+          width: 18px; height: 18px;
           margin: 0;
-          accent-color: ${C.rose};
+          border: 1.5px solid ${C.mute};
+          border-radius: 4px;
           cursor: pointer;
+          position: relative;
+          background: transparent;
+          transition: all 0.2s ease;
+          box-shadow: none;
+          padding: 0;
+        }
+        .cc-remember input:checked {
+          background-color: ${C.rose};
+          border-color: ${C.rose};
+        }
+        .cc-remember input:checked::after {
+          content: "";
+          position: absolute;
+          left: 5px;
+          top: 1px;
+          width: 5px;
+          height: 10px;
+          border: solid white;
+          border-width: 0 2px 2px 0;
+          transform: rotate(45deg);
+        }
+        .cc-remember span {
+          user-select: none;
         }
 
         .cc-link {

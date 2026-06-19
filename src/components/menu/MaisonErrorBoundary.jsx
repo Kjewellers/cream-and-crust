@@ -21,7 +21,7 @@ export default class MaisonErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     this.setState({ info });
-    // eslint-disable-next-line no-console
+     
     console.error('[MaisonMenuRenderer crashed]', error, info);
   }
 

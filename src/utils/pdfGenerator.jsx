@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import InvoiceTemplate from '../components/orders/InvoiceTemplate';
-import { nativeShareFile, saveFileToCache } from '../services/nativeShare';
+import { nativeShareFile, saveFileToDocuments, saveFileToCache } from '../services/nativeShare';
 
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'unsigned_preset';
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'demo';
@@ -48,9 +48,10 @@ const waitForImages = async (element) => {
 
 export const generateInvoicePdf = async (order, bakeryProfile, options = {}) => {
   const container = document.createElement('div');
-  container.style.position = 'fixed';
+  container.style.position = 'absolute';
   container.style.top = '0';
-  container.style.left = '-10000px';
+  container.style.left = '0';
+  container.style.zIndex = '-9999';
   container.style.width = '794px';
   container.style.pointerEvents = 'none';
   container.style.opacity = '0';
@@ -134,7 +135,7 @@ export const downloadInvoicePdf = async (order, bakeryProfile) => {
   const result = await generateInvoicePdf(order, bakeryProfile);
   console.log('[PDF] downloadInvoicePdf: saving file:', result.fileName);
 
-  await saveFileToCache({ blob: result.blob, fileName: result.fileName });
+  await saveFileToDocuments({ blob: result.blob, fileName: result.fileName });
 
   console.log('[PDF] downloadInvoicePdf: done');
   return result;

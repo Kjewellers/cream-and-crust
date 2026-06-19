@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -24,8 +24,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  subscribeToOrders,
-  subscribeToCustomers,
   addOrderToDB,
   updateOrderInDB,
   updateOrderStatusInDB,
@@ -36,6 +34,7 @@ import {
 import { shareToWhatsApp } from '../services/whatsapp';
 import { nativeShareFile } from '../services/nativeShare';
 import { useAuth } from '../context/AuthContext';
+import { useData } from '../context/DataContext';
 import { formatDate, formatTime, formatCurrency, formatOrderNumber } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
 import { saveDraft, loadDraft, removeDraft } from '../utils/draftStore';
@@ -52,6 +51,7 @@ import StatusBadge, { STATUS_COLORS } from '../components/orders/StatusBadge';
 import StatusUpdateModal from '../components/orders/StatusUpdateModal';
 import CalendarView from '../components/orders/CalendarView';
 import CustomerProfileSheet from '../components/orders/CustomerProfileSheet';
+import InvoicePreviewModal from '../components/orders/InvoicePreviewModal';
 import OrderForm from '../components/orders/OrderForm';
 import PaymentToggle from '../components/orders/PaymentToggle';
 import AnimatedNumber from '../components/AnimatedNumber';
@@ -797,15 +797,14 @@ const ORDER_SOURCES = ['Instagram', 'WhatsApp', 'Walk-in', 'Website', 'Referral'
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'Online', 'Partial'];
 
 export default function Orders() {
-  const [orders, setOrders] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { orders, setOrders, customers, setCustomers, loading } = useData();
   const [showModal, setShowModal] = useState(false);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const isSavingRef = useRef(false);
   // When set, the modal saves via updateOrderInDB instead of addOrderToDB.
   const [editingOrderId, setEditingOrderId] = useState(null);
   const [generatedOrderCard, setGeneratedOrderCard] = useState(null);
@@ -815,6 +814,8 @@ export default function Orders() {
   const [showSwipeBanner, setShowSwipeBanner] = useState(true);
   const [showHeaderSearch, setShowHeaderSearch] = useState(false);
   const [viewMode, setViewMode] = useState('list');
+  const [previewOrder, setPreviewOrder] = useState(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   // Payment filter: 'all' | 'pending' | 'paid'
   const [paymentFilter, setPaymentFilter] = useState('all');
   // Saved categories (persisted per user)
@@ -832,6 +833,12 @@ export default function Orders() {
   // Status-update WhatsApp modal state (replaces the popup-blocked confirm+setTimeout)
   const [statusUpdate, setStatusUpdate] = useState(null);
   const { currentUser, isCustomer, business } = useAuth();
+
+  useEffect(() => {
+    const handleOpenModal = () => setShowModal(true);
+    window.addEventListener('open-new-order-modal', handleOpenModal);
+    return () => window.removeEventListener('open-new-order-modal', handleOpenModal);
+  }, []);
 
   // ── Order-form draft persistence (production hardening, Req 7) ──────
   // Auto-save the in-progress NEW order so a refresh / accidental close /
@@ -853,7 +860,7 @@ export default function Orders() {
       draftRestoredRef.current = true;
       showToast('Draft restored ✨', 'info');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [showModal, editingOrderId, draftKey]);
 
   // Debounced auto-save while editing a NEW order (at most once/second).
@@ -974,58 +981,19 @@ export default function Orders() {
   }, [loading, orders.length]);
 
   useEffect(() => {
-    // Wait for Firebase auth to restore the user before subscribing.
-    // Subscribing too early (before auth.currentUser exists) queries with
-    // "NO_USER" and trips a permission error whose path never clears the
-    // loader — that's why Orders only loaded after a few refreshes.
-    const uid = currentUser?.uid;
-    if (!uid) {
-      // No user yet — keep showing the loader, but don't hang forever.
-      return undefined;
-    }
-
-    setLoading(true);
-
-    // Safety net: never let the loader hang. If no data/error arrives in
-    // time, drop the spinner so the page renders (empty state if needed).
-    const safety = setTimeout(() => setLoading(false), 8000);
-
-    const handleOrders = (newOrders) => {
-      clearTimeout(safety);
-      setOrders(newOrders || []);
-      setLoading(false);
-      // If we arrived from Calendar with an order to open, show its card.
+    if (orders && orders.length > 0) {
       try {
         const openId = window.history.state?.usr?.openOrderId;
         if (openId) {
-          const match = (newOrders || []).find((o) => o.id === openId);
+          const match = orders.find((o) => o.id === openId);
           if (match) {
             setGeneratedOrderCard(match);
-            // Clear the state so it doesn't reopen on next render
             window.history.replaceState({ ...window.history.state, usr: {} }, '');
           }
         }
       } catch (e) {}
-    };
-
-    const handleError = (err) => {
-      clearTimeout(safety);
-      console.error('Orders load error:', err);
-      setLoading(false); // render rather than hang on a stuck spinner
-    };
-
-    let unsubOrders = subscribeToOrders(handleOrders, uid, handleError);
-    let unsubCustomers = subscribeToCustomers(
-      (newCust) => setCustomers(newCust || []),
-      undefined,
-      uid
-    );
-    return () => {
-      clearTimeout(safety);
-      unsubOrders && unsubOrders();
-      unsubCustomers && unsubCustomers();
-    };
-  }, [isCustomer, currentUser]);
+    }
+  }, [orders]);
 
   // Task 3.9 — Subscribe to recipes for the recipeId picker
   useEffect(() => {
@@ -1194,7 +1162,12 @@ export default function Orders() {
       showToast('Opening Rapido...', 'info', 2000);
     }
     // Opening the Rapido website will automatically launch the Rapido App on mobile devices if installed via Universal Links
-    window.open('https://rapido.bike/', '_blank');
+    try {
+      const { openLink } = await import('../utils/openLink');
+      await openLink('https://rapido.bike/');
+    } catch {
+      window.open('https://rapido.bike/', '_blank');
+    }
   };
 
   const openCustomerProfile = (order) => {
@@ -1226,8 +1199,10 @@ export default function Orders() {
     }
   };
 
-  const addOrder = async (e) => {
+  const handleSaveOrder = async (e) => {
     e.preventDefault();
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     setSubmitting(true);
     try {
       const totalAmount = Number(form.total) || 0;
@@ -1321,6 +1296,7 @@ export default function Orders() {
       showToast(editingOrderId ? 'Failed to update order' : 'Failed to create order', 'error');
     } finally {
       setSubmitting(false);
+      isSavingRef.current = false;
     }
   };
 
@@ -2431,16 +2407,9 @@ export default function Orders() {
           {/* ── 2x2 Action Grid ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <button
-              onClick={async () => {
-                try {
-                  showToast('Preparing customer invoice PDF...', 'info');
-                  const result = await downloadInvoicePdf(o, business);
-                  o.invoiceGeneratedAt = result.generatedAt;
-                  showToast(`Invoice downloaded: ${result.fileName}`, 'success');
-                } catch (err) {
-                  console.error(err);
-                  showToast('Failed to generate invoice', 'error');
-                }
+              onClick={() => {
+                setPreviewOrder(o);
+                setIsPreviewModalOpen(true);
               }}
               style={{
                 display: 'flex',
@@ -2494,10 +2463,15 @@ export default function Orders() {
                     return;
                   }
                   const msg = `Hi ${cName},\nThank you for ordering from ${business?.name || 'Cream & Crust'}.\nYour invoice is ready.`;
-                  window.open(
-                    `https://wa.me/91${(phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`,
-                    '_blank'
-                  );
+                  try {
+                    const { openWhatsAppChat } = await import('../utils/openLink');
+                    await openWhatsAppChat(phone, msg);
+                  } catch {
+                    window.open(
+                      `https://wa.me/91${(phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`,
+                      '_blank'
+                    );
+                  }
                   showToast('PDF downloaded. Attach in WhatsApp.', 'info', 3500);
                 } catch (err) {
                   showToast('Failed to share invoice', 'error');
@@ -3600,7 +3574,7 @@ export default function Orders() {
               <OrderForm
                 form={form}
                 setForm={setForm}
-                onSubmit={addOrder}
+                onSubmit={handleSaveOrder}
                 editingOrderId={editingOrderId}
                 savedCategories={savedCategories}
                 setSavedCategories={setSavedCategories}
@@ -3626,7 +3600,7 @@ export default function Orders() {
           <OrderForm
             form={form}
             setForm={setForm}
-            onSubmit={addOrder}
+            onSubmit={handleSaveOrder}
             editingOrderId={editingOrderId}
             savedCategories={savedCategories}
             setSavedCategories={setSavedCategories}
@@ -3653,6 +3627,16 @@ export default function Orders() {
         customerName={statusUpdate?.customerName}
         phone={statusUpdate?.phone}
         message={statusUpdate?.message}
+      />
+      <InvoicePreviewModal
+        isOpen={isPreviewModalOpen}
+        onClose={() => {
+          setIsPreviewModalOpen(false);
+          setPreviewOrder(null);
+        }}
+        order={previewOrder}
+        business={business}
+        showToast={showToast}
       />
       <AnimatedDemo moduleId="orders" title="How to Create an Order" scenes={ordersDemoScenes} />
     </motion.div>

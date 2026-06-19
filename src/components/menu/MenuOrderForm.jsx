@@ -16,12 +16,14 @@
  * channel-tagged rules.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, MessageCircle, X, User, Phone, MapPin, Calendar, Package } from 'lucide-react';
-import { addDoc, collection } from 'firebase/firestore';
+import { Check, MessageCircle, X, User, Phone, MapPin, Calendar, Package, Map as MapIcon, Loader2 } from 'lucide-react';
+import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../services/firebase';
 import { addInquiryToDB, addNotificationToDB } from '../../services/db';
+import { useJsApiLoader, GoogleMap, Marker } from '@react-google-maps/api';
+import { trackEvent, getVisitorId, getSessionId, getTrafficSource } from '../../services/menuAnalytics';
 
 const PRIMARY = '#B5606A';
 const GOLD = '#D8B97E';
@@ -47,10 +49,37 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
     productName: product?.name || '',
     quantity: 1,
     notes: '',
+    location: null,
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState({});
+  const [geocoding, setGeocoding] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+  });
+
+  const mapCenter = form.location || { lat: 28.6139, lng: 77.2090 }; // Default to New Delhi
+
+  const handleMapClick = useCallback((e) => {
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    setForm(f => ({ ...f, location: { lat, lng } }));
+    
+    if (window.google) {
+      setGeocoding(true);
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        setGeocoding(false);
+        if (status === 'OK' && results[0]) {
+          setForm(f => ({ ...f, address: results[0].formatted_address }));
+        }
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -60,13 +89,21 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
       }));
       setSubmitted(false);
       setErrors({});
+      if (business?.id) {
+        trackEvent('order_started', business.id, data?.username || 'default', product?.id, { channel: 'website' });
+      }
     }
   }, [open, product]);
 
   useEffect(() => {
     if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === 'Escape' && !submitting) onClose();
+      if (e.key === 'Escape' && !submitting) {
+        if (!submitted && business?.id) {
+          trackEvent('checkout_abandoned', business.id, data?.username || 'default', product?.id, { channel: 'website', reason: 'escape_key' });
+        }
+        onClose();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -113,6 +150,7 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
         unitPrice ? `Price: \u20B9${unitPrice}${qty > 1 ? ` x${qty} = \u20B9${total}` : ''}` : null,
         form.deliveryDate ? `Needed by: ${form.deliveryDate}` : null,
         form.address ? `Deliver to: ${form.address}` : null,
+        form.location ? `Map: https://maps.google.com/?q=${form.location.lat},${form.location.lng}` : null,
         form.notes ? `Notes: ${form.notes}` : null,
         `Phone: ${form.phone.trim()}`,
       ]
@@ -144,7 +182,15 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
         deliveryAddress: form.address.trim() || null,
         deliveryDate: form.deliveryDate || null,
         notes: form.notes.trim() || null,
-        source: 'menu-website',
+        source: getTrafficSource(),
+        orderSource: 'menu',
+        bakeryId: bakeryUid,
+        menuId: data?.username || 'default',
+        productId: product?.id || null,
+        visitorId: getVisitorId(),
+        sessionId: getSessionId(),
+        amount: total || 0,
+        timestamp: serverTimestamp(),
         createdAt: new Date().toISOString(),
       });
 
@@ -173,6 +219,13 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
         channel: 'website',
       }).catch((e) => console.warn('notify failed:', e?.code || e?.message));
 
+      if (bakeryUid) {
+        trackEvent('order_completed', bakeryUid, data?.username || 'default', product?.id, {
+          channel: 'website',
+          revenue: total
+        });
+      }
+
       setSubmitted(true);
     } catch (err) {
       console.error('Order submit failed:', err);
@@ -198,7 +251,12 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         onClick={() => {
-          if (!submitting) onClose();
+          if (!submitting) {
+            if (!submitted && business?.id) {
+              trackEvent('checkout_abandoned', business.id, data?.username || 'default', product?.id, { channel: 'website', reason: 'backdrop_click' });
+            }
+            onClose();
+          }
         }}
         style={{
           position: 'fixed',
@@ -250,7 +308,12 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
           {!submitting && (
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                if (!submitted && business?.id) {
+                  trackEvent('checkout_abandoned', business.id, data?.username || 'default', product?.id, { channel: 'website', reason: 'close_button' });
+                }
+                onClose();
+              }}
               aria-label="Close"
               style={{
                 position: 'absolute',
@@ -446,13 +509,77 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
                 </div>
 
                 <Field icon={MapPin} label="Delivery address (optional)">
-                  <textarea
-                    rows={2}
-                    value={form.address}
-                    onChange={(e) => update('address', e.target.value)}
-                    placeholder="Door no, street, city, pincode"
-                    style={{ ...inputStyle(), resize: 'vertical', minHeight: 64 }}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <textarea
+                      rows={2}
+                      value={form.address}
+                      onChange={(e) => update('address', e.target.value)}
+                      placeholder="Door no, street, city, pincode"
+                      style={{ ...inputStyle(), resize: 'vertical', minHeight: 64, paddingRight: 40 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowMap(!showMap)}
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        top: 8,
+                        background: showMap ? PRIMARY : '#EEE',
+                        color: showMap ? '#FFF' : INK,
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: 6,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: '0.2s',
+                      }}
+                      title="Choose on Map"
+                    >
+                      <MapIcon size={16} />
+                    </button>
+                  </div>
+                  
+                  <AnimatePresence>
+                    {showMap && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        style={{ overflow: 'hidden', marginTop: 8, borderRadius: 10 }}
+                      >
+                        {isLoaded ? (
+                          <div style={{ position: 'relative', height: 200, width: '100%', borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${BORDER}` }}>
+                            <GoogleMap
+                              mapContainerStyle={{ width: '100%', height: '100%' }}
+                              center={mapCenter}
+                              zoom={13}
+                              onClick={handleMapClick}
+                              options={{
+                                disableDefaultUI: true,
+                                zoomControl: true,
+                              }}
+                            >
+                              {form.location && <Marker position={form.location} />}
+                            </GoogleMap>
+                            {geocoding && (
+                              <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', background: '#FFF', padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+                                <Loader2 size={12} className="animate-spin" color={PRIMARY} /> Locating...
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ height: 200, width: '100%', borderRadius: 10, background: SOFT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#9C8A80' }}>
+                            Loading Map...
+                          </div>
+                        )}
+                        <div style={{ fontSize: 11, color: '#9C8A80', marginTop: 6, textAlign: 'center' }}>
+                          Tap anywhere on the map to drop a pin.
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </Field>
 
                 <Field icon={null} label="Anything else? (notes, flavour, occasion)">

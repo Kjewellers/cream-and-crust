@@ -133,64 +133,113 @@ export function useMenuAnalytics(uid, dateRange = 'month') {
     const duration = now.getTime() - startDate.getTime();
     prevStartDate.setTime(prevStartDate.getTime() - duration);
 
-    // Add a 1 hour buffer to 'now' to prevent server-client clock skew from dropping real-time events
-    const futureBuffer = new Date(now.getTime() + 60 * 60 * 1000);
-    const currentEvents = events.filter(e => e.date >= startDate && e.date <= futureBuffer);
-    const prevEvents = events.filter(e => e.date >= prevStartDate && e.date < startDate);
-
-    // Helper to count events
-    const countEvents = (evs, type) => evs.filter(e => e.eventType === type).length;
-    const countUnique = (evs, type, key = 'visitorId') =>
-      new Set(evs.filter(e => e.eventType === type).map(e => e[key]).filter(Boolean)).size;
-
-    // ── KPIs ──────────────────────────────────────────────────────────
-    // Map to summary if available, else fallback to raw events
-    const useSummary = !!summary;
-    
-    const menuViews = useSummary ? (summary.totalMenuViews || 0) : countEvents(currentEvents, 'menu_view');
-    const prevMenuViews = countEvents(prevEvents, 'menu_view');
-    const viewsGrowth = prevMenuViews ? ((menuViews - prevMenuViews) / prevMenuViews) * 100 : 0;
-
-    const whatsappClicks = useSummary ? (summary.totalWhatsappClicks || 0) : countEvents(currentEvents, 'whatsapp_click');
-    const prevWhatsappClicks = countEvents(prevEvents, 'whatsapp_click');
-    const whatsappGrowth = prevWhatsappClicks ? ((whatsappClicks - prevWhatsappClicks) / prevWhatsappClicks) * 100 : 0;
-
-    const instagramClicks = countEvents(currentEvents, 'instagram_click');
-    const prevInstagramClicks = countEvents(prevEvents, 'instagram_click');
-    const instagramGrowth = prevInstagramClicks ? ((instagramClicks - prevInstagramClicks) / prevInstagramClicks) * 100 : 0;
-
-    // Use actual orders from DataContext for accuracy, filtered by date and ONLY from menu website
-    const menuOrders = orders.filter(o => o.orderSource === 'menu');
-    const currentOrders = menuOrders.filter(o => new Date(o.createdAt || o.date) >= startDate);
-    const prevOrders = menuOrders.filter(o => {
-      const d = new Date(o.createdAt || o.date);
-      return d >= prevStartDate && d < startDate;
+    // Filter Daily Data for date ranges
+    const currentDaily = dailyData.filter(d => new Date(d.date) >= startDate);
+    const prevDaily = dailyData.filter(d => {
+      const dDate = new Date(d.date);
+      return dDate >= prevStartDate && dDate < startDate;
     });
 
-    const ordersReceived = useSummary ? (summary.totalOrdersCompleted || 0) : currentOrders.length;
-    const prevOrdersReceived = prevOrders.length;
-    const ordersGrowth = prevOrdersReceived ? ((ordersReceived - prevOrdersReceived) / prevOrdersReceived) * 100 : 0;
+    const sumDaily = (arr, key) => arr.reduce((sum, d) => sum + (Number(d[key]) || 0), 0);
 
-    const revenue = useSummary ? (summary.totalRevenue || 0) : currentOrders.reduce((sum, o) => sum + (Number(o.total || o.totalAmount) || 0), 0);
-    const prevRevenue = prevOrders.reduce((sum, o) => sum + (Number(o.total || o.totalAmount) || 0), 0);
-    const revenueGrowth = prevRevenue ? ((revenue - prevRevenue) / prevRevenue) * 100 : 0;
+    // ── KPIs ──────────────────────────────────────────────────────────
+    let menuViews = 0, prevMenuViews = 0;
+    let whatsappClicks = 0, prevWhatsappClicks = 0;
+    let instagramClicks = 0, prevInstagramClicks = 0;
+    let ordersReceived = 0, prevOrdersReceived = 0;
+    let revenue = 0, prevRevenue = 0;
+    let productViews = 0, productOpens = 0, abandonedCheckouts = 0;
+    let uniqueVisitors = 0;
+
+    if (currentDaily.length > 0) {
+      // ── TIER 1: Aggregated Daily Data (fastest, date-range filtered) ──
+      menuViews = sumDaily(currentDaily, 'views');
+      whatsappClicks = sumDaily(currentDaily, 'whatsappClicks');
+      instagramClicks = sumDaily(currentDaily, 'instagramClicks');
+      ordersReceived = sumDaily(currentDaily, 'orders');
+      revenue = sumDaily(currentDaily, 'revenue');
+      productViews = sumDaily(currentDaily, 'productViews');
+      productOpens = sumDaily(currentDaily, 'productOpens');
+
+      prevMenuViews = sumDaily(prevDaily, 'views');
+      prevWhatsappClicks = sumDaily(prevDaily, 'whatsappClicks');
+      prevInstagramClicks = sumDaily(prevDaily, 'instagramClicks');
+      prevOrdersReceived = sumDaily(prevDaily, 'orders');
+      prevRevenue = sumDaily(prevDaily, 'revenue');
+
+      const visitorSet = new Set();
+      currentDaily.forEach(d => {
+        if (d.uniqueVisitors) d.uniqueVisitors.forEach(v => visitorSet.add(v));
+      });
+      uniqueVisitors = visitorSet.size;
+
+    } else if (events.length > 0) {
+      // ── TIER 2: Raw Events fallback (date-range filtered) ────────────
+      const futureBuffer = new Date(now.getTime() + 60 * 60 * 1000);
+      const currentEvents = events.filter(e => e.date >= startDate && e.date <= futureBuffer);
+      const prevEvents = events.filter(e => e.date >= prevStartDate && e.date < startDate);
+
+      const countEvents = (evs, type) => evs.filter(e => e.eventType === type).length;
+      const countUnique = (evs, type, key = 'visitorId') =>
+        new Set(evs.filter(e => e.eventType === type).map(e => e[key]).filter(Boolean)).size;
+
+      menuViews = countEvents(currentEvents, 'menu_view');
+      prevMenuViews = countEvents(prevEvents, 'menu_view');
+      whatsappClicks = countEvents(currentEvents, 'whatsapp_click');
+      prevWhatsappClicks = countEvents(prevEvents, 'whatsapp_click');
+      instagramClicks = countEvents(currentEvents, 'instagram_click');
+      prevInstagramClicks = countEvents(prevEvents, 'instagram_click');
+      productViews = countEvents(currentEvents, 'product_view');
+      productOpens = countEvents(currentEvents, 'product_expand');
+      abandonedCheckouts = countEvents(currentEvents, 'checkout_abandoned');
+      uniqueVisitors = countUnique(currentEvents, 'menu_view');
+
+      // Only menu orders — never app orders
+      const menuOrders = orders.filter(o => o.orderSource === 'menu');
+      const currentOrders = menuOrders.filter(o => new Date(o.createdAt || o.date) >= startDate);
+      const prevOrders = menuOrders.filter(o => {
+        const d = new Date(o.createdAt || o.date);
+        return d >= prevStartDate && d < startDate;
+      });
+      ordersReceived = currentOrders.length;
+      prevOrdersReceived = prevOrders.length;
+      revenue = currentOrders.reduce((sum, o) => sum + (Number(o.total || o.totalAmount) || 0), 0);
+      prevRevenue = prevOrders.reduce((sum, o) => sum + (Number(o.total || o.totalAmount) || 0), 0);
+
+    } else if (summary) {
+      // ── TIER 3: analytics_summary fallback (all-time totals) ─────────
+      // Used when dailyData and rawEvents are both empty.
+      // This is the ONLY source of truth when Firestore aggregation exists
+      // but the client-side collections haven't loaded data for the period.
+      console.log('[useMenuAnalytics] No daily/event data — using analytics_summary as fallback', summary);
+      menuViews = summary.totalMenuViews || 0;
+      whatsappClicks = summary.totalWhatsappClicks || 0;
+      instagramClicks = summary.totalInstagramClicks || 0;
+      ordersReceived = summary.totalOrdersCompleted || 0;
+      revenue = summary.totalRevenue || 0;
+      productViews = summary.totalProductViews || 0;
+      productOpens = summary.totalProductOpens || 0;
+      abandonedCheckouts = summary.totalCheckoutsAbandoned || 0;
+      uniqueVisitors = summary.uniqueVisitors ? summary.uniqueVisitors.length : 0;
+    }
+
+    // Growth Calcs
+    const calcGrowth = (curr, prev) => prev ? ((curr - prev) / prev) * 100 : 0;
+    const viewsGrowth = calcGrowth(menuViews, prevMenuViews);
+    const whatsappGrowth = calcGrowth(whatsappClicks, prevWhatsappClicks);
+    const instagramGrowth = calcGrowth(instagramClicks, prevInstagramClicks);
+    const ordersGrowth = calcGrowth(ordersReceived, prevOrdersReceived);
+    const revenueGrowth = calcGrowth(revenue, prevRevenue);
 
     // ── Funnel Data ──────────────────────────────────────────────────
-    const uniqueVisitors = useSummary && summary.uniqueVisitors ? summary.uniqueVisitors.length : countUnique(currentEvents, 'menu_view');
-    const productViews = useSummary ? (summary.totalProductViews || 0) : countEvents(currentEvents, 'product_view');
-    const productOpens = useSummary ? (summary.totalProductOpens || 0) : countEvents(currentEvents, 'product_expand');
-    const abandonedCheckouts = useSummary ? (summary.totalCheckoutsAbandoned || 0) : countEvents(currentEvents, 'checkout_abandoned');
-
-    // Overall Conversion
     const overallConversion = uniqueVisitors > 0 ? (ordersReceived / uniqueVisitors) * 100 : 0;
-    const prevConversion = countUnique(prevEvents, 'menu_view') > 0
-      ? (prevOrdersReceived / countUnique(prevEvents, 'menu_view')) * 100 : 0;
+    const prevConversion = prevMenuViews > 0 ? (prevOrdersReceived / prevMenuViews) * 100 : 0;
     const conversionGrowth = overallConversion - prevConversion;
 
     // ── Traffic Sources ──────────────────────────────────────────────
     const sources = {};
     const devices = { mobile: 0, desktop: 0, tablet: 0 };
-    currentEvents.forEach(e => {
+    events.filter(e => e.date >= startDate).forEach(e => {
       if (e.eventType === 'menu_view') {
         sources[e.source] = (sources[e.source] || 0) + 1;
         if (e.devicePlatform) {
@@ -202,16 +251,13 @@ export function useMenuAnalytics(uid, dateRange = 'month') {
     });
 
     // ── Peak Hours ───────────────────────────────────────────────────
-    // Prefer aggregated data, fall back to raw events
     let hours = new Array(24).fill(0);
     if (hoursData?.hours && dateRange === 'all') {
-      // Use aggregated data for all-time view
       for (let i = 0; i < 24; i++) {
         hours[i] = hoursData.hours[i] || 0;
       }
     } else {
-      // Use raw events for date-range filtered view
-      currentEvents.forEach(e => {
+      events.filter(e => e.date >= startDate).forEach(e => {
         if (e.eventType === 'menu_view' || e.eventType === 'order_completed') {
           if (e.date && typeof e.date.getHours === 'function') {
             hours[e.date.getHours()]++;
@@ -221,14 +267,12 @@ export function useMenuAnalytics(uid, dateRange = 'month') {
     }
 
     // ── Top Products ─────────────────────────────────────────────────
-    // Use aggregated product data for all-time, raw events for filtered
     const productStats = {};
     products.forEach(p => {
       productStats[p.id] = { id: p.id, name: p.name, image: p.image, views: 0, opens: 0, orders: 0, revenue: 0, whatsappClicks: 0 };
     });
 
     if (dateRange === 'all' && productAnalytics.length > 0) {
-      // Use aggregated product analytics
       productAnalytics.forEach(pa => {
         if (productStats[pa.productId]) {
           productStats[pa.productId].views = pa.views || 0;
@@ -240,7 +284,6 @@ export function useMenuAnalytics(uid, dateRange = 'month') {
             productStats[pa.productId].name = pa.productName;
           }
         } else {
-          // Product from analytics not in current product list
           productStats[pa.productId] = {
             id: pa.productId,
             name: pa.productName || pa.productId,
@@ -254,17 +297,18 @@ export function useMenuAnalytics(uid, dateRange = 'month') {
         }
       });
     } else {
-      // Use raw events for filtered views
-      currentEvents.filter(e => e.eventType === 'product_view' && e.productId).forEach(e => {
-        if (productStats[e.productId]) productStats[e.productId].views++;
+      events.filter(e => e.date >= startDate).forEach(e => {
+        if (e.eventType === 'product_view' && e.productId) {
+          if (productStats[e.productId]) productStats[e.productId].views++;
+        }
+        if (e.eventType === 'product_expand' && e.productId) {
+          if (productStats[e.productId]) productStats[e.productId].opens++;
+        }
+        if (e.eventType === 'whatsapp_click' && e.productId) {
+          if (productStats[e.productId]) productStats[e.productId].whatsappClicks++;
+        }
       });
-      currentEvents.filter(e => e.eventType === 'product_expand' && e.productId).forEach(e => {
-        if (productStats[e.productId]) productStats[e.productId].opens++;
-      });
-      currentEvents.filter(e => e.eventType === 'whatsapp_click' && e.productId).forEach(e => {
-        if (productStats[e.productId]) productStats[e.productId].whatsappClicks++;
-      });
-      currentOrders.forEach(o => {
+      orders.filter(o => new Date(o.createdAt || o.date) >= startDate).forEach(o => {
         const match = products.find(p => p.name === o.product || p.name === o.cakeFlavour || p.id === o.productId);
         if (match && productStats[match.id]) {
           productStats[match.id].orders++;
@@ -290,21 +334,35 @@ export function useMenuAnalytics(uid, dateRange = 'month') {
         if (c.city) cities[c.city] = (cities[c.city] || 0) + (c.views || 0);
       });
     } else {
-      currentEvents.forEach(e => {
+      events.filter(e => e.date >= startDate).forEach(e => {
         if (e.city) cities[e.city] = (cities[e.city] || 0) + 1;
       });
     }
 
     // ── Customer Insights ────────────────────────────────────────────
-    const prevVisitors = new Set(prevEvents.map(e => e.visitorId).filter(Boolean));
-    const currentVisitorSet = new Set(currentEvents.filter(e => e.eventType === 'menu_view').map(e => e.visitorId).filter(Boolean));
+    let newCustomers = 0;
     let returningCustomers = 0;
-    currentVisitorSet.forEach(vid => {
-      if (prevVisitors.has(vid)) returningCustomers++;
-    });
-    const newCustomers = currentVisitorSet.size - returningCustomers;
+    let repeatCustomers = 0;
+    let avgOrdersPerCustomer = 0;
+    let avgCLV = 0;
+    let customerListLength = 0;
+
+    if (dateRange === 'all' && summary) {
+      newCustomers = summary.uniqueVisitors ? summary.uniqueVisitors.length : 0;
+      returningCustomers = 0; // Requires raw data or specialized aggregation
+    } else {
+      const prevStartDateDate = new Date(prevStartDate);
+      const startDateDate = new Date(startDate);
+      const prevVisitors = new Set(events.filter(e => e.date >= prevStartDateDate && e.date < startDateDate && e.eventType === 'menu_view').map(e => e.visitorId).filter(Boolean));
+      const currentVisitorSet = new Set(events.filter(e => e.date >= startDateDate && e.eventType === 'menu_view').map(e => e.visitorId).filter(Boolean));
+      currentVisitorSet.forEach(vid => {
+        if (prevVisitors.has(vid)) returningCustomers++;
+      });
+      newCustomers = currentVisitorSet.size - returningCustomers;
+    }
 
     // Customer lifetime value from menu orders
+    const menuOrders = orders.filter(o => o.orderSource === 'menu');
     const customerOrderCounts = {};
     menuOrders.forEach(o => {
       const vid = o.visitorId || 'unknown';
@@ -313,18 +371,36 @@ export function useMenuAnalytics(uid, dateRange = 'month') {
       customerOrderCounts[vid].revenue += Number(o.total || o.totalAmount || 0);
     });
     const customerList = Object.values(customerOrderCounts);
-    const avgOrdersPerCustomer = customerList.length > 0 
+    avgOrdersPerCustomer = customerList.length > 0 
       ? customerList.reduce((s, c) => s + c.orders, 0) / customerList.length : 0;
-    const avgCLV = customerList.length > 0
+    avgCLV = customerList.length > 0
       ? customerList.reduce((s, c) => s + c.revenue, 0) / customerList.length : 0;
-    const repeatCustomers = customerList.filter(c => c.orders > 1).length;
+    repeatCustomers = customerList.filter(c => c.orders > 1).length;
+    customerListLength = customerList.length;
 
     // ── Instagram Analytics ──────────────────────────────────────────
     const instagramCTR = menuViews > 0 ? (instagramClicks / menuViews) * 100 : 0;
     const whatsappCTR = menuViews > 0 ? (whatsappClicks / menuViews) * 100 : 0;
 
+    // ── Debug: log final KPI values before render ─────────────────────
+    console.log('[useMenuAnalytics] KPIs →', {
+      dateRange,
+      dailyDocs: dailyData.length,
+      currentDailyDocs: currentDaily.length,
+      rawEvents: events.length,
+      summaryExists: !!summary,
+      menuViews, whatsappClicks, ordersReceived, revenue, productViews,
+    });
+
     // ── Has Data Check (for empty states) ────────────────────────────
-    const hasAnyData = events.length > 0 || (summary && summary.totalEvents > 0);
+    // True when ANY of these sources indicate real data exists
+    const summaryHasData = summary && (
+      (summary.totalEvents > 0) ||
+      (summary.totalMenuViews > 0) ||
+      (summary.totalOrdersCompleted > 0) ||
+      (summary.totalRevenue > 0)
+    );
+    const hasAnyData = events.length > 0 || !!summaryHasData || currentDaily.length > 0;
 
     return {
       hasAnyData,
@@ -362,14 +438,14 @@ export function useMenuAnalytics(uid, dateRange = 'month') {
         repeatPurchases: repeatCustomers,
         avgOrdersPerCustomer: Math.round(avgOrdersPerCustomer * 10) / 10,
         avgCLV: Math.round(avgCLV),
-        totalCustomers: customerList.length,
+        totalCustomers: customerListLength,
       },
       health,
       summary,
-      rawEvents: currentEvents,
-      _debug: { events, summary }
+      rawEvents: events,
+      _debug: { events, summary, currentDaily }
     };
   }, [events, dateRange, products, orders, summary, productAnalytics, hoursData, citiesData, sourcesData, customersData, dailyData, health]);
 
-  return { data: aggregatedData, loading };
+  return { data: aggregatedData, loading, hasAnyData: aggregatedData.hasAnyData };
 }

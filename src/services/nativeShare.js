@@ -16,6 +16,7 @@
  */
 
 import { Capacitor } from '@capacitor/core';
+import { log } from '../utils/logger';
 
 const isNative = () => Capacitor.isNativePlatform();
 
@@ -54,15 +55,25 @@ async function blobToBase64(blob) {
 async function writeFileToCache(base64Data, fileName) {
   const { Filesystem, Directory } = await import('@capacitor/filesystem');
 
-  const result = await Filesystem.writeFile({
-    path: fileName,
-    data: base64Data,
-    directory: Directory.Cache,
-    recursive: true,
-  });
+  // Retry once on failure (some devices flake on first write)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: base64Data,
+        directory: Directory.Cache,
+        recursive: true,
+      });
 
-  console.log('[NativeShare] Wrote file to cache:', result.uri);
-  return result.uri;
+      log.share('writeFileToCache: success on attempt', attempt + 1, result.uri);
+      return result.uri;
+    } catch (e) {
+      log.share.warn('writeFileToCache: attempt', attempt + 1, 'failed:', e?.message);
+      if (attempt === 1) throw e;
+      // Wait briefly before retry
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
 }
 
 // ─── Native share via @capacitor/share ───────────────────────────────────────
@@ -79,7 +90,7 @@ async function writeFileToCache(base64Data, fileName) {
  * @returns {Promise<{shared: boolean, uri?: string}>}
  */
 export async function nativeShareFile({ blob, fileName, title, text, mimeType }) {
-  console.log('[NativeShare] Starting share for:', fileName);
+  log.share('nativeShareFile: starting share for', fileName);
 
   if (isNative()) {
     try {
@@ -94,16 +105,36 @@ export async function nativeShareFile({ blob, fileName, title, text, mimeType })
         dialogTitle: title || 'Share file',
       });
 
-      console.log('[NativeShare] Native share succeeded');
+      log.share('nativeShareFile: native share succeeded');
+
+      // Cleanup: delete cached file after a short delay
+      setTimeout(async () => {
+        try {
+          const { Filesystem, Directory } = await import('@capacitor/filesystem');
+          await Filesystem.deleteFile({
+            path: fileName,
+            directory: Directory.Cache,
+          });
+          log.share('nativeShareFile: cleaned up cached file', fileName);
+        } catch {
+          // Cleanup is best-effort
+        }
+      }, 5000);
+
       return { shared: true, uri };
     } catch (e) {
-      console.error('[NativeShare] Native share failed:', e?.message || e);
+      // User cancellation is not an error
+      if (e?.message?.includes('cancel') || e?.message?.includes('dismissed')) {
+        log.share('nativeShareFile: user cancelled sharing');
+        return { shared: false };
+      }
+      log.share.error('nativeShareFile: native share failed:', e?.message || e);
       throw e;
     }
   }
 
   // ── Web fallback ─────────────────────────────────────────────────────────────
-  console.log('[NativeShare] Using web fallback');
+  log.share('nativeShareFile: using web fallback');
 
   const fileObj = new File([blob], fileName, {
     type: mimeType || blob.type || 'application/octet-stream',
@@ -117,11 +148,11 @@ export async function nativeShareFile({ blob, fileName, title, text, mimeType })
         title: title || fileName,
         text: text || '',
       });
-      console.log('[NativeShare] Web Share API succeeded');
+      log.share('nativeShareFile: web share API succeeded');
       return { shared: true };
     } catch (e) {
       if (e?.name !== 'AbortError') {
-        console.warn('[NativeShare] Web Share API failed, falling back to download:', e?.message);
+        log.share.warn('nativeShareFile: web share API failed, falling back to download:', e?.message);
       }
     }
   }
@@ -136,7 +167,7 @@ export async function nativeShareFile({ blob, fileName, title, text, mimeType })
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
 
-  console.log('[NativeShare] Triggered download via anchor click');
+  log.share('nativeShareFile: triggered download via anchor click');
   return { shared: false };
 }
 
@@ -167,4 +198,47 @@ export async function saveFileToCache({ blob, fileName }) {
   document.body.removeChild(link);
   setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
   return null;
+}
+
+/**
+ * Save a file to the user's public Documents directory on native, or download on web.
+ */
+export async function saveFileToDocuments({ blob, fileName }) {
+  if (isNative()) {
+    try {
+      const { requestStoragePermission } = await import('./permissions');
+      const perm = await requestStoragePermission();
+      if (perm !== 'granted') {
+        throw new Error('Storage permission denied');
+      }
+
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const base64 = await blobToBase64(blob);
+
+      // Write to Directory.Documents
+      const writeResult = await Filesystem.writeFile({
+        path: fileName,
+        data: base64,
+        directory: Directory.Documents,
+        recursive: true,
+      });
+
+      log.share('saveFileToDocuments: saved to', writeResult.uri);
+      return { success: true, uri: writeResult.uri };
+    } catch (e) {
+      log.share.error('saveFileToDocuments failed:', e?.message);
+      return { success: false, error: e?.message };
+    }
+  }
+
+  // Web fallback: download
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+  return { success: true, uri: null };
 }

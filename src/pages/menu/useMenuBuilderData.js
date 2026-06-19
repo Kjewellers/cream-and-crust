@@ -61,8 +61,9 @@ export function useMenuBuilderData() {
     await updateMenuSettings(currentUser.uid, next);
   };
 
-  const publishMenu = async () => {
-    await publishMenuSettings(currentUser.uid, menu);
+  const publishMenu = async (patch) => {
+    const nextMenu = patch ? { ...menu, ...patch, theme: { ...menu.theme, ...(patch.theme || {}) } } : menu;
+    await publishMenuSettings(currentUser.uid, nextMenu);
   };
 
   const saveProduct = async (productId, patch) => {

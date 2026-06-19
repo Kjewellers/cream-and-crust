@@ -24,6 +24,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Persistent reCAPTCHA container — lives outside React so StrictMode
+         double-mounts and component re-renders never touch it. The singleton
+         RecaptchaVerifier in recaptchaManager.js binds to this element. -->
+    <div id="recaptcha-root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

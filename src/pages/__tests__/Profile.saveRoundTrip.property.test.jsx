@@ -44,6 +44,8 @@ vi.mock('../../services/db', () => ({
     cb(h.businessDoc);
     return () => {};
   },
+  subscribeToProducts: (cb) => { cb([]); return () => {}; },
+  subscribeToRecipes: (cb) => { cb([]); return () => {}; },
   updateBusinessInDB: (...args) => h.updateBusinessInDB(...args),
 }));
 

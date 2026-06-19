@@ -25,6 +25,7 @@ import React, { useState, useCallback } from 'react';
 import WeightPicker, { isWeightCategory } from './WeightPicker';
 import OrderChannelPicker from './OrderChannelPicker';
 import MenuOrderForm from './MenuOrderForm';
+import { trackEvent } from '../../services/menuAnalytics';
 
 export default function useOrderFlow({ business, data }) {
   const [weightPickerOpen, setWeightPickerOpen] = useState(false);
@@ -42,6 +43,12 @@ export default function useOrderFlow({ business, data }) {
     setWeightData(null);
     setFormOpen(false);
     setPickerOpen(false);
+
+    if (prod) {
+      const menuId = data?.username || 'default';
+      trackEvent('product_view', business.id, menuId, prod.id, { categoryId: prod.category });
+      trackEvent('product_expand', business.id, menuId, prod.id, { categoryId: prod.category });
+    }
 
     // If the product belongs to a cake-like category, show weight
     // picker first. Otherwise go straight to channel picker.

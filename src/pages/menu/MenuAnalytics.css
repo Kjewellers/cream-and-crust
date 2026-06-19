@@ -1,0 +1,366 @@
+.analytics-dashboard {
+  padding: 16px;
+  background-color: #FAF7F4;
+  min-height: 100vh;
+  padding-bottom: 100px;
+}
+
+.analytics-header {
+  margin-bottom: 24px;
+}
+
+.analytics-title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #2D2323;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.02em;
+}
+
+.analytics-subtitle {
+  font-size: 0.9rem;
+  color: #7B6E6A;
+  margin: 0 0 16px 0;
+  line-height: 1.4;
+  max-width: 280px;
+}
+
+.date-picker-btn {
+  background: #FFF;
+  border: 1px solid #EEE7E2;
+  padding: 10px 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #2D2323;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 768px) {
+  .kpi-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.kpi-card {
+  background: #FFFDFC;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+  border: 1px solid rgba(238, 231, 226, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.kpi-card.pink .kpi-icon-wrapper { background: #FDECEF; color: #C95C74; }
+.kpi-card.purple .kpi-icon-wrapper { background: #F3E8FF; color: #9333EA; }
+.kpi-card.green .kpi-icon-wrapper { background: #DCFCE7; color: #16A34A; }
+.kpi-card.orange .kpi-icon-wrapper { background: #FFEDD5; color: #EA580C; }
+
+.kpi-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #2D2323;
+  margin-bottom: 4px;
+  letter-spacing: -0.02em;
+}
+
+.kpi-label {
+  font-size: 0.75rem;
+  color: #7B6E6A;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.kpi-growth {
+  font-size: 0.7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.kpi-growth.positive { color: #16A34A; }
+.kpi-growth.negative { color: #DC2626; }
+.kpi-growth-vs { color: #A8A29E; font-weight: 500; }
+
+.dashboard-section {
+  background: #FFFDFC;
+  border-radius: 20px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+  border: 1px solid rgba(238, 231, 226, 0.5);
+}
+
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #2D2323;
+  margin: 0 0 16px 0;
+}
+
+.two-col-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+@media (min-width: 768px) {
+  .two-col-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Sales Funnel */
+.funnel-container {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.funnel-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 100px;
+  padding-top: 8px;
+}
+
+.funnel-segment {
+  height: 24px;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.funnel-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.funnel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  font-size: 0.8rem;
+}
+
+.funnel-item-label { color: #7B6E6A; }
+.funnel-item-value { font-weight: 700; color: #2D2323; }
+.funnel-item-pct { color: #A8A29E; font-size: 0.75rem; width: 36px; text-align: right; }
+
+/* Product Table */
+.product-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.product-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  color: #A8A29E;
+  font-weight: 600;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #EEE7E2;
+}
+
+.product-table td {
+  padding: 12px 0;
+  border-bottom: 1px solid #F5F1EE;
+  font-size: 0.85rem;
+  vertical-align: middle;
+}
+
+.product-table tr:last-child td {
+  border-bottom: none;
+}
+
+.product-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.product-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.product-name {
+  font-weight: 700;
+  color: #2D2323;
+  margin-bottom: 2px;
+}
+
+.product-price {
+  color: #A8A29E;
+  font-size: 0.75rem;
+}
+
+/* Horizontal Bars */
+.horiz-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.horiz-bar-label {
+  width: 80px;
+  font-size: 0.8rem;
+  color: #2D2323;
+  font-weight: 600;
+}
+
+.horiz-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #F5F1EE;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.horiz-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  background: #C95C74;
+}
+
+.horiz-bar-pct {
+  width: 30px;
+  text-align: right;
+  font-size: 0.75rem;
+  color: #7B6E6A;
+  font-weight: 700;
+}
+
+/* Customer Insights Cards */
+.insight-subcard {
+  background: #FDFBF9;
+  border: 1px solid #EEE7E2;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.insight-subcard-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: #2D2323;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.insight-subcard-val {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #2D2323;
+  margin-bottom: 4px;
+}
+
+/* Milestone Story Card (Instagram 9:16) */
+.milestone-card {
+  width: 1080px;
+  height: 1920px;
+  background: linear-gradient(135deg, #FFF8F1 0%, #FCEAE0 55%, #F7DCC9 100%);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 80px;
+  box-sizing: border-box;
+}
+
+.milestone-card::before {
+  content: "";
+  position: absolute;
+  right: -200px;
+  top: -200px;
+  width: 800px;
+  height: 800px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(216,185,126,0.3) 0%, rgba(216,185,126,0) 70%);
+  pointer-events: none;
+}
+
+.milestone-brand {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 48px;
+  font-weight: 800;
+  color: #3F1D22;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+}
+
+.milestone-title {
+  font-family: "Inter", sans-serif;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8B4951;
+  margin-bottom: 120px;
+}
+
+.milestone-stat-val {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 200px;
+  font-weight: 900;
+  color: #B5606A;
+  line-height: 1;
+  margin-bottom: 20px;
+  text-shadow: 0 10px 40px rgba(181,96,106,0.2);
+}
+
+.milestone-stat-label {
+  font-family: "Inter", sans-serif;
+  font-size: 40px;
+  font-weight: 700;
+  color: #3F1D22;
+  margin-bottom: 120px;
+}
+
+.milestone-footer {
+  font-family: "Inter", sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: #8B4951;
+  background: rgba(255,255,255,0.6);
+  padding: 20px 40px;
+  border-radius: 99px;
+  border: 2px solid rgba(181,96,106,0.2);
+}

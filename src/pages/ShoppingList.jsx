@@ -17,17 +17,17 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  subscribeToShoppingList,
   addShoppingItemToDB,
   toggleShoppingItemInDB,
   deleteShoppingItemFromDB,
-  subscribeToInventory,
   addExpenseToDB,
   updateInventoryStockInDB,
 } from '../services/db';
+import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { showToast, triggerHaptic } from '../components/iOS';
+import { showToast, triggerHaptic, PullToRefresh, CardSkeleton, SwipeRow, BottomSheet } from '../components/iOS';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
+import { FileText } from 'lucide-react';
 
 const UNITS = ['pcs', 'kg', 'g', 'L', 'ml', 'cups', 'tbsp', 'tsp', 'dozen', 'packets'];
 
@@ -71,10 +71,15 @@ const QUICK_APPS = [
 ];
 
 const QuickOrderApps = ({ searchQuery }) => {
-  const handleOpen = (app) => {
+  const handleOpen = async (app) => {
     // Try deep link first (opens native app), fall back to web
     const webUrl = searchQuery ? `${app.webUrl}?q=${encodeURIComponent(searchQuery)}` : app.webUrl;
-    window.open(webUrl, '_blank');
+    try {
+      const { openLink } = await import('../utils/openLink');
+      await openLink(webUrl);
+    } catch {
+      window.open(webUrl, '_blank');
+    }
   };
 
   return (
@@ -347,7 +352,7 @@ const ProcessItemModal = ({ item, inventory, onClose, onProcess }) => {
                     borderRadius: 12,
                     fontWeight: 800,
                     fontSize: '1.2rem',
-                    background: 'white',
+                    background: 'var(--bg)',
                     border: '1px solid var(--border)',
                   }}
                 />
@@ -383,19 +388,23 @@ const ProcessItemModal = ({ item, inventory, onClose, onProcess }) => {
 const emptyForm = { name: '', qty: '', unit: 'kg', category: 'Dry Goods' };
 
 const ItemRow = ({ item, onToggle, onPrompt, onDelete }) => (
+  <SwipeRow onDelete={() => onDelete(item.id)}>
   <motion.div
     layout
-    initial={{ opacity: 0, y: 10 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, scale: 0.9 }}
+    initial={{ opacity: 0, y: 15, scale: 0.98 }}
+    animate={{ opacity: 1, y: 0, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+    whileHover={{ scale: 1.01, boxShadow: 'var(--shadow)' }}
     style={{
       display: 'flex',
       alignItems: 'center',
       gap: 16,
       padding: '16px 20px',
-      borderBottom: '1px solid var(--border)',
-      background: item.bought ? 'rgba(0,0,0,0.02)' : 'var(--card)',
-      transition: 'all 0.3s',
+      background: item.bought ? 'rgba(52, 199, 89, 0.04)' : 'var(--card)',
+      transition: 'background 0.3s',
+      borderRadius: '16px',
+      margin: '0 8px 8px 8px',
+      border: item.bought ? '1px solid rgba(52, 199, 89, 0.2)' : '1px solid var(--border)',
     }}
   >
     <motion.button
@@ -470,50 +479,30 @@ const ItemRow = ({ item, onToggle, onPrompt, onDelete }) => (
           <Receipt size={14} /> Record Cost
         </button>
       )}
-      <button
-        className="btn-icon"
-        onClick={() => onDelete(item.id)}
-        style={{ color: 'rgba(255, 59, 48, 0.6)', width: 32, height: 32, background: 'none' }}
-      >
-        <Trash2 size={16} />
-      </button>
     </div>
   </motion.div>
+  </SwipeRow>
 );
 
 export default function ShoppingList() {
-  const [items, setItems] = useState([]);
-  const [inventory, setInventory] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { shoppingItems: items, setShoppingItems: setItems, inventory, loading } = useData();
   const [showModal, setShowModal] = useState(false);
   const [showPrompt, setShowPrompt] = useState(null); // Item to prompt for expense conversion
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
-  const { currentUser } = useAuth();
+  const [showBought, setShowBought] = useState(false);
+  const { currentUser, business } = useAuth();
 
   useEffect(() => {
-    if (!currentUser) return;
-    const unsubItems = subscribeToShoppingList(
-      (data) => {
-        setItems(Array.isArray(data) ? data : []);
-        setLoading(false);
-      },
-      () => setLoading(false),
-      currentUser.uid
-    );
-    const unsubInv = subscribeToInventory(
-      (data) => setInventory(Array.isArray(data) ? data : []),
-      null,
-      currentUser.uid
-    );
-    return () => {
-      unsubItems();
-      unsubInv();
-    };
-  }, [currentUser]);
+    const handleOpenModal = () => setShowModal(true);
+    window.addEventListener('open-new-shopping-modal', handleOpenModal);
+    return () => window.removeEventListener('open-new-shopping-modal', handleOpenModal);
+  }, []);
 
   const pending = items.filter((i) => i && !i.bought);
   const bought = items.filter((i) => i && i.bought);
+  const totalItems = pending.length + bought.length;
+  const progressPercent = totalItems === 0 ? 0 : Math.round((bought.length / totalItems) * 100);
 
   const lowStockCount = useMemo(() => {
     return (inventory || []).filter((i) => i && Number(i.stock) <= Number(i.minStock || 0)).length;
@@ -614,13 +603,21 @@ export default function ShoppingList() {
     }
   };
 
-  const syncFromInventory = async () => {
+  const syncFromInventory = async (silent = false) => {
+    if (!inventory || inventory.length === 0) {
+      if (!silent) showToast('Inventory is empty. Add items first.', 'info');
+      return;
+    }
+
     const lowStock = (inventory || []).filter(
       (i) => i && Number(i.stock) <= Number(i.minStock || 0)
     );
-    if (lowStock.length === 0) return showToast('Inventory is healthy! ✨', 'info');
+    if (lowStock.length === 0) {
+      if (!silent) showToast('Inventory is healthy! ✨', 'info');
+      return;
+    }
 
-    triggerHaptic('medium');
+    if (!silent) triggerHaptic('medium');
     let added = 0;
     for (const invItem of lowStock) {
       // Check if already in shopping list
@@ -640,19 +637,56 @@ export default function ShoppingList() {
         added++;
       }
     }
-    showToast(
-      added > 0 ? `Added ${added} items from Inventory` : 'Items already in list',
-      'success'
-    );
+    
+    if (added > 0) {
+      if (silent) {
+        showToast(`Auto-added ${added} low stock item${added > 1 ? 's' : ''}`, 'success');
+      } else {
+        showToast(`Added ${added} items from Inventory`, 'success');
+      }
+    } else if (!silent) {
+      showToast('Items already in list', 'success');
+    }
   };
 
-  const handleShareWhatsApp = () => {
+  // Auto-fill logic: check for low stock when the list loads
+  const hasAutoSynced = React.useRef(false);
+  useEffect(() => {
+    if (!loading && inventory && inventory.length > 0 && items && !hasAutoSynced.current) {
+      hasAutoSynced.current = true;
+      syncFromInventory(true);
+    }
+  }, [inventory, items, loading]);
+
+  const handleShareWhatsApp = async () => {
     if (pending.length === 0) return showToast('No items to share', 'error');
     const text = `🛒 *Shopping List — Cream & Crust*\n\n${pending.map((i) => `• ${i.name}${i.qty ? ` (${i.qty} ${i.unit})` : ''}`).join('\n')}\n\n_Generated by Cream & Crust App_`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    try {
+      const { openLink } = await import('../utils/openLink');
+      await openLink(`https://wa.me/?text=${encodeURIComponent(text)}`);
+    } catch {
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    }
+  };
+
+  const handleSharePdf = async () => {
+    if (items.length === 0) return showToast('No items to share', 'error');
+    triggerHaptic('medium');
+    setSubmitting(true);
+    showToast('Generating PDF...', 'info');
+    try {
+      const { shareShoppingListPdf } = await import('../utils/shoppingPdfGenerator');
+      await shareShoppingListPdf(items, business);
+    } catch (e) {
+      console.error(e);
+      showToast('Failed to generate PDF', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
+    <PullToRefresh onRefresh={syncFromInventory}>
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fade-in">
       {/* Header */}
       <div className="page-header" style={{ marginBottom: 32 }}>
@@ -676,10 +710,18 @@ export default function ShoppingList() {
           <div style={{ display: 'flex', gap: 12 }}>
             <button
               className="btn btn-outline"
+              onClick={handleSharePdf}
+              disabled={submitting}
+              style={{ borderRadius: 14, color: 'var(--accent)', borderColor: 'var(--accent)' }}
+            >
+              {submitting ? <Loader2 size={18} className="animate-spin" /> : <FileText size={18} />} Share PDF
+            </button>
+            <button
+              className="btn btn-outline"
               onClick={handleShareWhatsApp}
               style={{ borderRadius: 14, color: '#25D366', borderColor: '#25D366' }}
             >
-              <Share2 size={18} /> Share
+              <Share2 size={18} /> Text
             </button>
             <button
               className="btn btn-primary"
@@ -697,7 +739,7 @@ export default function ShoppingList() {
         searchQuery={pending.length > 0 ? pending.map((i) => i.name).join(', ') : ''}
       />
 
-      {/* Action Cards */}
+      {/* Action Cards & Progress */}
       <div
         className="content-grid"
         style={{
@@ -708,30 +750,39 @@ export default function ShoppingList() {
       >
         <div
           className="card"
-          style={{ display: 'flex', alignItems: 'center', gap: 20, padding: '24px' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '24px' }}
         >
-          <div
-            style={{
-              width: 54,
-              height: 54,
-              borderRadius: 16,
-              background: 'rgba(52, 199, 89, 0.1)',
-              color: '#34C759',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ShoppingCart size={28} />
-          </div>
-          <div>
-            <div className="stat-label">To Buy</div>
-            <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>
-              {pending.length}{' '}
-              <span style={{ fontSize: '0.9rem', color: 'var(--text3)', fontWeight: 600 }}>
-                items
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <div
+              style={{
+                width: 54,
+                height: 54,
+                borderRadius: 16,
+                background: 'rgba(52, 199, 89, 0.1)',
+                color: '#34C759',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <ShoppingCart size={28} />
             </div>
+            <div style={{ flex: 1 }}>
+              <div className="stat-label">Shopping Progress</div>
+              <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>
+                {bought.length} <span style={{ fontSize: '1.2rem', color: 'var(--text3)' }}>/ {totalItems}</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Smooth Progress Bar */}
+          <div style={{ width: '100%', height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden' }}>
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercent}%` }}
+              transition={{ type: 'spring', stiffness: 50, damping: 15 }}
+              style={{ height: '100%', background: 'linear-gradient(90deg, #34C759, #30D158)', borderRadius: 4 }}
+            />
           </div>
         </div>
 
@@ -757,7 +808,7 @@ export default function ShoppingList() {
               width: 54,
               height: 54,
               borderRadius: 16,
-              background: lowStockCount > 0 ? 'rgba(181, 96, 106, 0.1)' : 'rgba(0,0,0,0.05)',
+              background: lowStockCount > 0 ? 'rgba(181, 96, 106, 0.1)' : 'var(--border)',
               color: lowStockCount > 0 ? 'var(--accent)' : 'var(--text3)',
               display: 'flex',
               alignItems: 'center',
@@ -775,7 +826,11 @@ export default function ShoppingList() {
                 color: lowStockCount > 0 ? 'var(--accent)' : 'var(--text)',
               }}
             >
-              {lowStockCount > 0 ? `${lowStockCount} items low stock` : 'Inventory Healthy'}
+              {lowStockCount > 0 
+                ? `${lowStockCount} items low stock` 
+                : (!inventory || inventory.length === 0) 
+                  ? 'Inventory Empty' 
+                  : 'Inventory Healthy'}
             </div>
           </div>
           <ChevronRight size={20} color="var(--text3)" />
@@ -784,8 +839,10 @@ export default function ShoppingList() {
 
       {/* Main List Area */}
       {loading ? (
-        <div style={{ padding: 100, textAlign: 'center' }}>
-          <Loader2 className="animate-spin" size={40} color="var(--accent)" />
+        <div style={{ padding: '40px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <CardSkeleton lines={3} />
+          <CardSkeleton lines={2} />
+          <CardSkeleton lines={3} />
         </div>
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: 80, textAlign: 'center' }}>
@@ -840,11 +897,16 @@ export default function ShoppingList() {
                     >
                       <div
                         style={{
-                          padding: '14px 20px',
-                          background: 'rgba(0,0,0,0.02)',
-                          display: 'flex',
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: 80,
+                          background: 'linear-gradient(to right, var(--bg2), transparent)',
+                          pointerEvents: 'none',
                           justifyContent: 'space-between',
                           alignItems: 'center',
+                          marginBottom: '8px',
                           borderBottom: '1px solid var(--border)',
                         }}
                       >
@@ -880,7 +942,7 @@ export default function ShoppingList() {
 
           {/* Bought Section */}
           {bought.length > 0 && (
-            <div style={{ opacity: 0.8 }}>
+            <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div
                 style={{
                   display: 'flex',
@@ -888,102 +950,78 @@ export default function ShoppingList() {
                   alignItems: 'center',
                   marginBottom: 16,
                   padding: '0 8px',
+                  cursor: 'pointer',
                 }}
+                onClick={() => setShowBought(!showBought)}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <CheckCircle2 size={18} color="#34C759" />
+                  <div style={{ background: '#34C759', borderRadius: '50%', padding: 4 }}>
+                    <CheckCircle2 size={16} color="white" />
+                  </div>
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text2)' }}>
-                    Recently Bought
+                    Completed Items ({bought.length})
                   </h3>
+                  <motion.div
+                    animate={{ rotate: showBought ? 90 : 0 }}
+                    transition={{ type: 'spring', stiffness: 300 }}
+                  >
+                    <ChevronRight size={18} color="var(--text3)" />
+                  </motion.div>
                 </div>
                 <button
-                  onClick={async () => {
+                  onClick={async (e) => {
+                    e.stopPropagation();
                     if (window.confirm('Clear all bought items?'))
                       bought.forEach((i) => deleteShoppingItemFromDB(i.id));
                   }}
-                  style={{ fontSize: 13, color: '#FF3B30', fontWeight: 700 }}
+                  style={{ fontSize: 13, color: '#FF3B30', fontWeight: 700, padding: '4px 8px', background: 'rgba(255,59,48,0.1)', borderRadius: 8 }}
                 >
                   Clear all
                 </button>
               </div>
-              <div
-                className="card"
-                style={{
-                  padding: 0,
-                  overflow: 'hidden',
-                  border: '1px solid var(--border)',
-                  background: 'transparent',
-                  boxShadow: 'none',
-                }}
-              >
-                <AnimatePresence mode="popLayout">
-                  {bought.map((item) => (
-                    <ItemRow
-                      key={item.id}
-                      item={item}
-                      onToggle={handleToggle}
-                      onPrompt={setShowPrompt}
-                      onDelete={deleteShoppingItemFromDB}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-            </div>
+
+              <AnimatePresence>
+                {showBought && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <div
+                      className="card"
+                      style={{
+                        padding: '8px 0',
+                        border: '1px solid var(--border)',
+                        background: 'rgba(52, 199, 89, 0.02)',
+                        boxShadow: 'none',
+                      }}
+                    >
+                      <AnimatePresence mode="popLayout">
+                        {bought.map((item) => (
+                          <ItemRow
+                            key={item.id}
+                            item={item}
+                            onToggle={handleToggle}
+                            onPrompt={setShowPrompt}
+                            onDelete={deleteShoppingItemFromDB}
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
           )}
         </div>
       )}
 
-      <AnimatePresence>
-        {showModal && (
-          <div className="modal-overlay" onClick={() => setShowModal(false)}>
-            <motion.div
-              initial={{ y: '100%', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: '100%', opacity: 0 }}
-              transition={{ type: 'spring', damping: 30, stiffness: 350 }}
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 480, padding: 0, borderRadius: 28, overflow: 'hidden' }}
-            >
-              <div
-                style={{
-                  padding: '32px 32px 24px',
-                  background: 'linear-gradient(135deg, var(--bg2), var(--cream))',
-                  borderBottom: '1px solid var(--border)',
-                }}
-              >
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <div>
-                    <h2
-                      style={{
-                        margin: 0,
-                        fontSize: '1.6rem',
-                        fontWeight: 900,
-                        letterSpacing: '-0.04em',
-                      }}
-                    >
-                      Add Item
-                    </h2>
-                    <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginTop: 4 }}>
-                      What are we missing today?
-                    </p>
-                  </div>
-                  <button
-                    className="btn-icon"
-                    onClick={() => setShowModal(false)}
-                    style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '50%' }}
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-              </div>
-
-              <form
-                onSubmit={handleAdd}
-                style={{ padding: 32, overflowY: 'auto', maxHeight: 'calc(100vh - 150px)' }}
-              >
+      <BottomSheet open={showModal} onClose={() => setShowModal(false)} title="Add Item">
+        <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginTop: -10, marginBottom: 24 }}>
+          What are we missing today?
+        </p>
+        <form onSubmit={handleAdd}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   <div className="form-group">
                     <label className="form-label">Item Name</label>
@@ -996,9 +1034,10 @@ export default function ShoppingList() {
                       style={{
                         height: 56,
                         borderRadius: 16,
-                        background: 'var(--bg)',
+                        background: 'var(--card)',
                         border: '1px solid var(--border)',
-                        fontSize: '1.1rem',
+                        boxShadow: 'var(--shadow)',
+                        position: 'relative',
                         fontWeight: 600,
                       }}
                     />
@@ -1096,7 +1135,7 @@ export default function ShoppingList() {
                               form.priority === p.label
                                 ? `2px solid ${p.color}`
                                 : '1px solid var(--border)',
-                            background: form.priority === p.label ? `${p.color}15` : 'white',
+                            background: form.priority === p.label ? `${p.color}15` : 'var(--bg)',
                             color: form.priority === p.label ? p.color : 'var(--text3)',
                             transition: 'all 0.2s',
                           }}
@@ -1126,10 +1165,7 @@ export default function ShoppingList() {
                   </button>
                 </div>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </BottomSheet>
 
       {/* Process Action Prompt */}
       <AnimatePresence>
@@ -1143,5 +1179,6 @@ export default function ShoppingList() {
         )}
       </AnimatePresence>
     </motion.div>
+    </PullToRefresh>
   );
 }

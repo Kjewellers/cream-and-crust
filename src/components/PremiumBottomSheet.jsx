@@ -76,78 +76,55 @@ export default function PremiumBottomSheet({
     <AnimatePresence>
       {open && (
         <>
-          {/* Overlay — subtle, no heavy blur */}
+          {/* Overlay — solid dark fade, no blur */}
           <motion.div
             key="pbs-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.2 }}
             onClick={onClose}
             style={{
               position: 'fixed',
               inset: 0,
               zIndex: 9000,
-              background: 'rgba(15, 15, 15, 0.28)',
-              backdropFilter: 'blur(2px)',
-              WebkitBackdropFilter: 'blur(2px)',
+              background: 'rgba(0, 0, 0, 0.65)',
             }}
           />
 
-          {/* Sheet */}
+          {/* Modal */}
           <motion.div
             key="pbs-sheet"
-            initial={{ y: '100%', opacity: 0.8 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: '100%', opacity: 0 }}
-            transition={{
-              type: 'spring',
-              stiffness: 340,
-              damping: 34,
-              mass: 0.8,
-            }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label={title || 'Bottom sheet'}
+            aria-label={title || 'Dialog'}
             style={{
               position: 'fixed',
+              top: 0,
               bottom: 0,
               left: 0,
               right: 0,
+              margin: 'auto',
+              width: 'calc(100% - 40px)',
+              maxWidth: 560,
+              height: 'fit-content',
               zIndex: 9001,
               maxHeight,
               display: 'flex',
               flexDirection: 'column',
               background: '#FFFDF9',
-              borderRadius: '24px 24px 0 0',
-              boxShadow: '0 -8px 40px rgba(0,0,0,0.12), 0 -2px 8px rgba(0,0,0,0.04)',
+              borderRadius: '24px',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.08)',
               fontFamily: '"Inter", system-ui, sans-serif',
               color: '#2D1B14',
               overflow: 'hidden',
             }}
           >
-            {/* Drag handle */}
-            {showHandle && (
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  paddingTop: 10,
-                  paddingBottom: 6,
-                  flexShrink: 0,
-                }}
-              >
-                <div
-                  style={{
-                    width: 36,
-                    height: 4,
-                    borderRadius: 2,
-                    background: 'rgba(140, 122, 107, 0.25)',
-                  }}
-                />
-              </div>
-            )}
 
             {/* Header */}
             {(title || showClose) && (

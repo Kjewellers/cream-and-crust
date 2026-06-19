@@ -38,6 +38,9 @@ export default defineConfig({
       workbox: {
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
+        // Exclude public menu template HTML from precache — they change
+        // frequently and must always load fresh from the network.
+        globIgnores: ['**/menu/**', '**/template/**'],
         // Force new SW to take over immediately
         skipWaiting: true,
         clientsClaim: true,
@@ -50,6 +53,17 @@ export default defineConfig({
             options: {
               cacheName: 'google-fonts-cache',
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          // Menu templates — always fetch fresh, fall back to cache
+          {
+            urlPattern: /\/menu\/|template/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'menu-templates',
+              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 }, // 1 hour
+              networkTimeoutSeconds: 5,
               cacheableResponse: { statuses: [0, 200] },
             },
           },
@@ -94,6 +108,8 @@ export default defineConfig({
           pdf: ['jspdf', 'html2canvas'],
           // Chart rendering — only needed on Analytics page
           charts: ['chart.js', 'react-chartjs-2'],
+          // Capacitor browser plugin — only needed on native
+          'cap-browser': ['@capacitor/browser'],
         },
       },
     },

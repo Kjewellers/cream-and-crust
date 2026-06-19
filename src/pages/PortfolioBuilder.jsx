@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronRight, ChevronLeft, Palette, Type, Layout, Sparkles, 
@@ -699,8 +699,22 @@ export default function PortfolioBuilder() {
       triggerHaptic('success');
       showToast('Menu link copied!', 'success');
     };
-    const handleWhatsApp = () => window.open(whatsappUrl, '_blank');
-    const handleInstagram = () => window.open(instagramUrl, '_blank');
+    const handleWhatsApp = async () => {
+      try {
+        const { openLink } = await import('../utils/openLink');
+        await openLink(whatsappUrl);
+      } catch {
+        window.open(whatsappUrl, '_blank');
+      }
+    };
+    const handleInstagram = async () => {
+      try {
+        const { openLink } = await import('../utils/openLink');
+        await openLink(instagramUrl);
+      } catch {
+        window.open(instagramUrl, '_blank');
+      }
+    };
 
     return (
       <div className="shared-menu-studio">
@@ -865,7 +879,15 @@ export default function PortfolioBuilder() {
           <button onClick={() => setView('templates')} style={{ width: '100%', height: 50, borderRadius: 12, border: '1px solid #E2E8F0', background: '#FAFAFA', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: '#0F172A' }}>
             <LayoutGrid size={16} /> Change Theme ({selectedTemplate.name})
           </button>
-          <button onClick={() => window.open(`/portfolio/${business?.username}`, '_blank')} style={{ width: '100%', height: 50, borderRadius: 12, border: 'none', background: '#F0FDF4', color: '#166534', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <button onClick={async () => {
+            const url = `/portfolio/${business?.username}`;
+            try {
+              const { openLink } = await import('../utils/openLink');
+              await openLink(url);
+            } catch {
+              window.open(url, '_blank');
+            }
+          }} style={{ width: '100%', height: 50, borderRadius: 12, border: 'none', background: '#F0FDF4', color: '#166534', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
             <Eye size={16} /> View Live Site
           </button>
         </div>
@@ -1932,7 +1954,15 @@ export default function PortfolioBuilder() {
               <p style={{ color: '#64748B', fontSize: '1.1rem', marginBottom: 48, lineHeight: 1.6 }}>Your stunning bakery portfolio is now live and ready to take orders.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                  <button onClick={() => { setShowSuccess(false); setView('home'); }} style={{ height: 64, borderRadius: 20, background: '#0F172A', color: 'white', border: 'none', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer' }}>Go to Dashboard</button>
-                 <button onClick={() => window.open(`/portfolio/${business?.username}`, '_blank')} style={{ height: 64, borderRadius: 20, background: 'white', border: '1px solid #E2E8F0', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer' }}>View Public Site</button>
+                 <button onClick={async () => {
+                   const url = `/portfolio/${business?.username}`;
+                   try {
+                     const { openLink } = await import('../utils/openLink');
+                     await openLink(url);
+                   } catch {
+                     window.open(url, '_blank');
+                   }
+                 }} style={{ height: 64, borderRadius: 20, background: 'white', border: '1px solid #E2E8F0', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer' }}>View Public Site</button>
               </div>
             </motion.div>
           </motion.div>

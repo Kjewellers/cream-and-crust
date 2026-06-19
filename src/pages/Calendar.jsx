@@ -12,7 +12,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { subscribeToOrders } from '../services/db';
+import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { formatTime } from '../utils/date';
 import { BottomSheet, EmptyState, Skeleton, triggerHaptic } from '../components/iOS';
@@ -81,20 +81,12 @@ function isPickupOrder(o) {
 export default function Calendar() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { orders, loading } = useData();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [showSheet, setShowSheet] = useState(false);
 
-  useEffect(() => {
-    if (!currentUser) return;
-    const unsub = subscribeToOrders((o) => {
-      setOrders(o || []);
-      setLoading(false);
-    }, currentUser.uid);
-    return () => unsub();
-  }, [currentUser]);
+
 
   // Map dateStr -> orders
   const ordersByDate = useMemo(() => {
@@ -180,11 +172,11 @@ export default function Calendar() {
         whileTap={{ scale: 0.97 }}
         onClick={() => navigate('/orders', { state: { openOrderId: o.id } })}
         style={{
-          background: 'white',
+          background: 'var(--card)',
           borderRadius: 18,
           padding: '14px 16px',
-          border: '1px solid rgba(74,59,50,0.05)',
-          boxShadow: '0 2px 12px rgba(74,59,50,0.06)',
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--shadow-xs)',
           cursor: 'pointer',
           marginBottom: 10,
         }}
@@ -245,7 +237,7 @@ export default function Calendar() {
             alignItems: 'center',
             marginTop: 10,
             paddingTop: 10,
-            borderTop: '1px solid rgba(74,59,50,0.05)',
+            borderTop: '1px solid var(--border)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -268,7 +260,7 @@ export default function Calendar() {
                 gap: 3,
                 fontSize: '0.65rem',
                 fontWeight: 700,
-                color: pickup ? '#8C7A6B' : '#3B82F6',
+                color: pickup ? 'var(--text2)' : '#3B82F6',
               }}
             >
               {pickup ? '🏪 Pickup' : '🚚 Delivery'}
@@ -459,11 +451,11 @@ export default function Calendar() {
                   borderRadius: 16,
                   padding: '10px 6px',
                   textAlign: 'center',
-                  background: isSelected ? '#B5606A' : isToday ? 'rgba(181,96,106,0.1)' : 'white',
-                  border: `1.5px solid ${isSelected ? '#B5606A' : isBusy ? 'rgba(245,158,11,0.4)' : 'rgba(74,59,50,0.06)'}`,
+                  background: isSelected ? 'var(--accent)' : isToday ? 'var(--accent-lt)' : 'var(--card)',
+                  border: `1.5px solid ${isSelected ? 'var(--accent)' : isBusy ? 'rgba(245,158,11,0.4)' : 'var(--border)'}`,
                   boxShadow: isSelected
-                    ? '0 4px 16px rgba(181,96,106,0.25)'
-                    : '0 2px 8px rgba(74,59,50,0.04)',
+                    ? '0 4px 16px var(--accent-lt)'
+                    : 'var(--shadow-xs)',
                   cursor: 'pointer',
                   flexShrink: 0,
                 }}
@@ -501,8 +493,8 @@ export default function Calendar() {
                           ? 'rgba(255,255,255,0.2)'
                           : isBusy
                             ? 'rgba(245,158,11,0.15)'
-                            : 'rgba(181,96,106,0.1)',
-                        color: isSelected ? 'white' : isBusy ? '#D97706' : '#B5606A',
+                            : 'var(--accent-lt)',
+                        color: isSelected ? 'white' : isBusy ? '#D97706' : 'var(--accent)',
                       }}
                     >
                       {dayOrders.length}
@@ -532,11 +524,11 @@ export default function Calendar() {
         {/* Month Calendar */}
         <div
           style={{
-            background: 'white',
+            background: 'var(--card)',
             borderRadius: 24,
             padding: '20px 16px',
-            border: '1px solid rgba(74,59,50,0.05)',
-            boxShadow: '0 4px 20px rgba(74,59,50,0.04)',
+            border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow)',
           }}
         >
           {/* Month Nav */}
@@ -559,8 +551,8 @@ export default function Calendar() {
                   width: 34,
                   height: 34,
                   borderRadius: 10,
-                  border: '1px solid rgba(74,59,50,0.08)',
-                  background: 'var(--bg)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg2)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -578,8 +570,8 @@ export default function Calendar() {
                   height: 34,
                   padding: '0 12px',
                   borderRadius: 10,
-                  border: '1px solid rgba(74,59,50,0.08)',
-                  background: 'var(--bg)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg2)',
                   cursor: 'pointer',
                   fontSize: '0.72rem',
                   fontWeight: 700,
@@ -593,8 +585,8 @@ export default function Calendar() {
                   width: 34,
                   height: 34,
                   borderRadius: 10,
-                  border: '1px solid rgba(74,59,50,0.08)',
-                  background: 'var(--bg)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg2)',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -643,6 +635,7 @@ export default function Calendar() {
               const isToday = dateStr === todayStr();
               const isPrepWarn = prepWarnings.has(dateStr);
               const isBusy = active.length >= 3;
+              const dayRevenue = dayOrders.reduce((sum, o) => sum + Number(o.total || o.totalAmount || 0), 0);
 
               return (
                 <motion.div
@@ -659,9 +652,9 @@ export default function Calendar() {
                     cursor: 'pointer',
                     position: 'relative',
                     background: isSelected
-                      ? '#B5606A'
+                      ? 'var(--accent)'
                       : isToday
-                        ? 'rgba(181,96,106,0.1)'
+                        ? 'var(--accent-lt)'
                         : isPrepWarn
                           ? 'rgba(245,158,11,0.07)'
                           : 'transparent',
@@ -675,12 +668,24 @@ export default function Calendar() {
                     style={{
                       fontSize: '0.82rem',
                       fontWeight: isSelected || isToday ? 800 : 500,
-                      color: isSelected ? 'white' : isToday ? '#B5606A' : 'var(--text)',
+                      color: isSelected ? 'white' : isToday ? 'var(--accent)' : 'var(--text)',
                       lineHeight: 1,
                     }}
                   >
                     {new Date(dateStr + 'T00:00:00').getDate()}
                   </span>
+                  {dayRevenue > 0 && (
+                    <span
+                      style={{
+                        fontSize: '0.55rem',
+                        fontWeight: 800,
+                        color: isSelected ? 'rgba(255,255,255,0.9)' : 'var(--accent)',
+                        marginTop: 1,
+                      }}
+                    >
+                      ₹{dayRevenue >= 1000 ? (dayRevenue / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : dayRevenue}
+                    </span>
+                  )}
                   {dayOrders.length > 0 && !isSelected && (
                     <div
                       style={{
@@ -694,7 +699,7 @@ export default function Calendar() {
                     >
                       {dayOrders.slice(0, 3).map((o, oi) => {
                         const s = String(o.status || 'inquiry').toLowerCase();
-                        const c = STATUS_CONFIG[s]?.color || '#B5606A';
+                        const c = STATUS_CONFIG[s]?.color || 'var(--accent)';
                         return (
                           <span
                             key={oi}
@@ -789,11 +794,11 @@ export default function Calendar() {
         <div className="desktop-only">
           <div
             style={{
-              background: 'white',
+              background: 'var(--card)',
               borderRadius: 24,
               padding: 24,
-              border: '1px solid rgba(74,59,50,0.05)',
-              boxShadow: '0 4px 20px rgba(74,59,50,0.04)',
+              border: '1px solid var(--border)',
+              boxShadow: 'var(--shadow)',
               minHeight: 400,
             }}
           >

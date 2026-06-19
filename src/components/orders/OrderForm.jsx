@@ -66,7 +66,7 @@ export default function OrderForm({
       setForm((prev) => ({ ...prev, items: [{ ...DEFAULT_ITEM }] }));
       setExpandedItems([0]);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
 
   // Pricing calculations
@@ -93,7 +93,7 @@ export default function OrderForm({
     if (form.total !== gt) {
       setForm((prev) => ({ ...prev, total: gt }));
     }
-  }, [pricing.grandTotal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pricing.grandTotal]);
 
   // Sync form.product, form.size, and form.recipeId with first item (backward compat)
   useEffect(() => {
@@ -109,7 +109,7 @@ export default function OrderForm({
         setForm((prev) => ({ ...prev, ...updates }));
       }
     }
-  }, [form.items]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [form.items]);
 
   // Item summary for badge
   const itemSummary = useMemo(() => {

@@ -80,4 +80,11 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
+    <!--
+        Notifications — Android 13+ (API 33+)
+        Required for push notifications. On Android 12 and below,
+        notification permission is granted at install time.
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
 </manifest>

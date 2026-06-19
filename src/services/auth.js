@@ -5,9 +5,8 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,
   getRedirectResult,
-  RecaptchaVerifier,
-  signInWithPhoneNumber,
   OAuthProvider,
   EmailAuthProvider,
   reauthenticateWithCredential,
@@ -27,8 +26,10 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth, db } from './firebase';
 import { Capacitor } from '@capacitor/core';
+import { log } from '../utils/logger';
 
 /**
  * Returns true when running inside a Capacitor native app (Android/iOS APK).
@@ -53,6 +54,7 @@ appleProvider.addScope('name');
 // Log in an existing user
 export const loginUser = async (email, password) => {
   try {
+    log.auth('loginUser: attempting email login for', email);
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
@@ -69,9 +71,10 @@ export const loginUser = async (email, password) => {
       role = 'admin';
     }
 
+    log.auth('loginUser: success, uid:', user.uid, 'role:', role);
     return { user, role };
   } catch (error) {
-    console.error('Login error:', error);
+    log.auth.error('loginUser failed:', error?.code, error?.message);
     throw error;
   }
 };
@@ -115,17 +118,89 @@ export const registerUser = async (email, password, name) => {
 // On web browser: also use signInWithPopup (already the default).
 export const signInWithGoogle = async () => {
   const platform = Capacitor.getPlatform();
-  console.log(`[Auth] signInWithGoogle — platform: ${platform}, native: ${isNativeApp()}`);
+  log.auth(`signInWithGoogle - platform: ${platform}, native: ${isNativeApp()}`);
+
+  try {
+    if (isNativeApp()) {
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      const nativeResult = await FirebaseAuthentication.signInWithGoogle({
+        scopes: ['email', 'profile'],
+      });
+      const idToken = nativeResult?.credential?.idToken;
+      const accessToken = nativeResult?.credential?.accessToken;
+
+      if (!idToken && !accessToken) {
+        throw new Error('Google sign-in did not return a credential. Check native Firebase setup.');
+      }
+
+      const credential = GoogleAuthProvider.credential(idToken, accessToken);
+      const result = await signInWithCredential(auth, credential);
+      const user = result.user;
+      log.auth('signInWithGoogle: native credential succeeded, uid:', user.uid);
+      await ensureGoogleUserDocs(user);
+      return user;
+    }
+
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    log.auth('signInWithGoogle: popup succeeded, uid:', user.uid);
+    await ensureGoogleUserDocs(user);
+    return user;
+  } catch (error) {
+    log.auth.error('Google login error:', error?.code, error?.message);
+
+    const shouldFallbackToRedirect =
+      !isNativeApp() &&
+      [
+        'auth/popup-blocked',
+        'auth/popup-closed-by-user',
+        'auth/cancelled-popup-request',
+        'auth/operation-not-supported-in-this-environment',
+        'auth/web-storage-unsupported',
+      ].includes(error?.code);
+
+    if (shouldFallbackToRedirect) {
+      log.auth('Google popup unavailable; falling back to redirect.');
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+
+    throw error;
+  }
+};
+
+const signInWithGoogleLegacy = async () => {
+  const platform = Capacitor.getPlatform();
+  log.auth(`signInWithGoogle — platform: ${platform}, native: ${isNativeApp()}`);
 
   try {
     // signInWithPopup works on both web and Capacitor native
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
-    console.log('[Auth] signInWithGoogle: popup succeeded, uid:', user.uid);
+    log.auth('signInWithGoogle: popup succeeded, uid:', user.uid);
     await ensureGoogleUserDocs(user);
     return user;
   } catch (error) {
-    console.error('[Auth] Google login error:', error?.code, error?.message);
+    log.auth.error('Google login error:', error?.code, error?.message);
+
+    // On Capacitor native, if popup is blocked, try opening via Browser plugin
+    if (isNativeApp() && (error?.code === 'auth/popup-blocked' || error?.code === 'auth/popup-closed-by-user')) {
+      log.auth('Popup blocked on native, retrying with Browser plugin workaround...');
+      try {
+        const { Browser } = await import('@capacitor/browser');
+        // Re-attempt — the Browser plugin opens a proper Custom Tab
+        // that can handle the OAuth flow correctly
+        const retryResult = await signInWithPopup(auth, googleProvider);
+        const retryUser = retryResult.user;
+        log.auth('signInWithGoogle retry succeeded, uid:', retryUser.uid);
+        await ensureGoogleUserDocs(retryUser);
+        return retryUser;
+      } catch (retryError) {
+        log.auth.error('Google login retry also failed:', retryError?.code, retryError?.message);
+        throw retryError;
+      }
+    }
+
     throw error;
   }
 };
@@ -133,22 +208,36 @@ export const signInWithGoogle = async () => {
 // Handle redirect result (called once on app mount in AuthContext)
 // On native Capacitor, getRedirectResult always resolves to null because
 // we never call signInWithRedirect — skip it to prevent spurious errors.
+// On web, also skip if sessionStorage is unavailable (storage-partitioned
+// browsers) to prevent the "missing initial state" error.
 export const handleGoogleRedirectResult = async () => {
   if (isNativeApp()) {
-    // Never use redirect flow on native — popup is used instead.
-    console.log('[Auth] handleGoogleRedirectResult: skipped (native app)');
+    log.auth('handleGoogleRedirectResult: skipped (native app)');
     return null;
   }
   try {
+    // Check if sessionStorage is accessible before calling getRedirectResult
+    try {
+      sessionStorage.getItem('__test__');
+    } catch {
+      log.auth('handleGoogleRedirectResult: sessionStorage inaccessible, skipping');
+      return null;
+    }
     const result = await getRedirectResult(auth);
     if (result?.user) {
-      console.log('[Auth] handleGoogleRedirectResult: got user from redirect');
+      log.auth('handleGoogleRedirectResult: got user from redirect');
       await ensureGoogleUserDocs(result.user);
       return result.user;
     }
     return null;
   } catch (error) {
-    console.error('[Auth] Google redirect result error:', error?.code, error?.message);
+    // Silently ignore "missing initial state" errors — they're expected
+    // in storage-partitioned environments (3rd-party cookie restrictions)
+    if (error?.message?.includes('missing initial state')) {
+      log.auth('handleGoogleRedirectResult: missing initial state (expected in partitioned storage)');
+      return null;
+    }
+    log.auth.error('Google redirect result error:', error?.code, error?.message);
     return null;
   }
 };
@@ -177,6 +266,22 @@ async function ensureGoogleUserDocs(user) {
     });
   }
 }
+
+/**
+ * Reset password via Phone OTP (Calls Cloud Function)
+ * Note: The user MUST be currently signed in via Phone Auth for this to work.
+ */
+export const resetPasswordViaPhone = async (newPassword) => {
+  try {
+    const functions = getFunctions();
+    const resetPasswordFn = httpsCallable(functions, 'resetPasswordWithPhone');
+    const result = await resetPasswordFn({ newPassword });
+    return result.data;
+  } catch (error) {
+    console.error('OTP Password reset error:', error);
+    throw error;
+  }
+};
 
 // Apple Sign In
 export const signInWithApple = async () => {
@@ -214,25 +319,9 @@ export const signInWithApple = async () => {
   }
 };
 
-// Phone Authentication
-export const setupRecaptcha = (containerId) => {
-  if (!window.recaptchaVerifier) {
-    window.recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
-      size: 'invisible',
-    });
-  }
-};
-
-export const signInWithPhone = async (phoneNumber) => {
-  try {
-    const appVerifier = window.recaptchaVerifier;
-    const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
-    return confirmationResult;
-  } catch (error) {
-    console.error('Phone login error:', error);
-    throw error;
-  }
-};
+// Phone Authentication is now handled by recaptchaManager.js singleton
+// and Login.jsx directly. The old setupRecaptcha() and signInWithPhone()
+// functions that used window.recaptchaVerifier have been removed.
 
 // --- PASSWORD RESET ---
 
@@ -323,19 +412,17 @@ export const lookupEmailByPhone = async (phoneNumber) => {
   }
 };
 
-// ── Full storage clear — call on logout and on user-switch ──────────────────
+// ── Partial storage clear — call on logout and on user-switch ────────────────
 //
-// Clears every storage layer that might hold user-specific data:
-//   1. Firebase Auth session
-//   2. All cc_* keys in localStorage
-//   3. All cc_* keys in sessionStorage
-//   4. IndexedDB Firestore offline cache (terminates the offline cache so
-//      stale docs from the previous user don't appear for the next one)
+// Clears storage layers related to session tokens and UI state:
+//   1. All cc_* keys in localStorage
+//   2. All sessionStorage
 //
-// This is ALSO exported separately so AuthContext.logout() and any future
-// "switch account" flow can call it without importing the full auth module.
+// IMPORTANT: We intentionally DO NOT clear IndexedDB or unregister Service Workers.
+// This allows the PWA to load instantly offline, and preserves the encrypted Firestore
+// cache for a zero-lag experience when the user logs back in.
 export const clearAllAppStorage = async () => {
-  console.log('[Auth] clearAllAppStorage: starting full storage wipe...');
+  log.cache('clearAllAppStorage: starting full storage wipe...');
 
   // 1. localStorage — remove every key that starts with "cc_" or is a
   //    known non-prefixed key this app writes (theme, etc.)
@@ -349,54 +436,46 @@ export const clearAllAppStorage = async () => {
       }
     }
     keysToRemove.forEach((k) => localStorage.removeItem(k));
-    console.log('[Auth] clearAllAppStorage: localStorage cleared', keysToRemove);
+    log.cache('localStorage cleared:', keysToRemove.length, 'keys');
   } catch (e) {
-    console.warn('[Auth] localStorage clear failed:', e?.message);
+    log.cache.warn('localStorage clear failed:', e?.message);
   }
 
   // 2. sessionStorage — anonymous sign-in attempt flag + any other keys
   try {
     sessionStorage.clear();
-    console.log('[Auth] clearAllAppStorage: sessionStorage cleared');
+    log.cache('sessionStorage cleared');
   } catch (e) {
-    console.warn('[Auth] sessionStorage clear failed:', e?.message);
+    log.cache.warn('sessionStorage clear failed:', e?.message);
   }
 
-  // 3. IndexedDB — clear Firestore offline cache so the next user doesn't
-  //    see the previous user's data from the local cache.
-  //    We terminate the Firestore connection before deleting so there are
-  //    no "database is closing" errors.
-  try {
-    const { terminate, clearIndexedDbPersistence } = await import('firebase/firestore');
-    const { db } = await import('./firebase');
-    await terminate(db).catch(() => {}); // graceful — swallow if already terminated
-    await clearIndexedDbPersistence(db).catch((e) => {
-      // "failed-precondition" means multiple tabs are open — ignore, data
-      // will be invalidated once the old tabs are closed.
-      if (e?.code !== 'failed-precondition') {
-        console.warn('[Auth] clearIndexedDbPersistence error:', e?.code);
-      }
-    });
-    console.log('[Auth] clearAllAppStorage: Firestore IndexedDB cache cleared');
-  } catch (e) {
-    console.warn('[Auth] Firestore cache clear failed:', e?.message);
-  }
-
-  console.log('[Auth] clearAllAppStorage: done');
+  log.cache('clearAllAppStorage: done (IndexedDB and SW intentionally preserved)');
 };
 
-// Log out the current user — signs out Firebase Auth AND clears all storage
+// Log out the current user — signs out Firebase Auth AND clears all storage.
+// After cleanup, forces a hard page reload so Firestore re-initializes
+// cleanly without the "client already terminated" error.
 export const logoutUser = async () => {
-  console.log('[Auth] logoutUser: signing out...');
+  log.auth('logoutUser: signing out...');
   try {
-    // Clear storage layers first so Firestore doesn't try to flush pending
-    // writes under the old user's credentials after signOut.
-    await clearAllAppStorage();
+    if (isNativeApp()) {
+      try {
+        const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+        await FirebaseAuthentication.signOut();
+      } catch (nativeError) {
+        log.auth.warn('Native signOut skipped:', nativeError?.message);
+      }
+    }
     await signOut(auth);
-    console.log('[Auth] logoutUser: complete');
+    log.auth('logoutUser: signOut complete, clearing storage...');
+    await clearAllAppStorage();
+    log.auth('logoutUser: storage cleared, reloading page...');
+    // Hard reload to get a fresh Firestore instance
+    window.location.replace('/login');
   } catch (error) {
-    console.error('[Auth] Logout error:', error?.code, error?.message);
-    // Don't rethrow — a partial logout is better than a stuck state
+    log.auth.error('Logout error:', error?.code, error?.message);
+    // Even on error, try to navigate away
+    try { window.location.replace('/login'); } catch { /* ignore */ }
   }
 };
 

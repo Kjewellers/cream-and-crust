@@ -9,9 +9,10 @@
  *   - exportOrdersCSV(orders)        → downloads orders.csv
  *   - exportOrdersJSON(orders)       → downloads orders.json (for backup)
  *
- * No PII encryption used here — these are the user's OWN decrypted records
  * being exported at their explicit request for their own use.
  */
+
+import { saveFileToDocuments } from './nativeShare';
 
 /**
  * Convert an array of objects to a CSV string.
@@ -31,21 +32,14 @@ function toCSV(rows, columns) {
 }
 
 /**
- * Trigger a file download in the browser.
+ * Trigger a file download in the browser or native app.
  * @param {string} content
  * @param {string} filename
  * @param {string} mimeType
  */
-function downloadFile(content, filename, mimeType = 'text/plain') {
+async function downloadFile(content, filename, mimeType = 'text/plain') {
   const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  await saveFileToDocuments({ blob, fileName: filename });
 }
 
 /**

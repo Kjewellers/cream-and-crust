@@ -19,10 +19,36 @@ export default function ShareModal({ username, onClose }) {
   };
 
   const shareOptions = [
-    { name: 'WhatsApp', icon: MessageCircle, color: '#25D366', action: () => window.open(`https://wa.me/?text=Check out my bakery portfolio: ${link}`) },
+    {
+      name: 'WhatsApp',
+      icon: MessageCircle,
+      color: '#25D366',
+      action: async () => {
+        const url = `https://wa.me/?text=Check out my bakery portfolio: ${link}`;
+        try {
+          const { openLink } = await import('../../utils/openLink');
+          await openLink(url);
+        } catch {
+          window.open(url, '_blank');
+        }
+      }
+    },
     { name: 'Instagram', icon: Instagram, color: '#E4405F', action: () => showToast('Share to Stories coming soon!', 'info') },
     { name: 'QR Code', icon: QrCode, color: '#000000', action: () => showToast('QR generated!', 'success') },
-    { name: 'Browser', icon: Globe, color: '#2563EB', action: () => window.open(`/${username}`, '_blank') },
+    {
+      name: 'Browser',
+      icon: Globe,
+      color: '#2563EB',
+      action: async () => {
+        const url = `/${username}`;
+        try {
+          const { openLink } = await import('../../utils/openLink');
+          await openLink(url);
+        } catch {
+          window.open(url, '_blank');
+        }
+      }
+    },
   ];
 
   return (

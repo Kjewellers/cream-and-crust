@@ -107,19 +107,19 @@ export default function WebsiteOrdersCard({ orders }) {
     }
   };
 
-  const sendWhatsApp = (o, message) => {
+  const sendWhatsApp = async (o, message) => {
     const phone = pickPhone(o);
     if (!phone) {
       showToast('No phone on this order', 'error');
       return;
     }
-    const digits = String(phone).replace(/\D/g, '');
-    const fullPhone = digits.length === 10 ? '91' + digits : digits;
-    window.open(
-      `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
+    try {
+      const { openWhatsAppChat } = await import('../../utils/openLink');
+      await openWhatsAppChat(phone, message);
+    } catch (e) {
+      console.warn('[CC:WhatsApp] WebsiteOrders send failed:', e?.message);
+      showToast('Could not open WhatsApp', 'error');
+    }
   };
 
   const visible = websiteInquiries.filter((o) => !dismissed[o.id]);

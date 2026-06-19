@@ -38,6 +38,8 @@ vi.mock('../../services/db', () => ({
     cb(businessRef.current);
     return () => {};
   },
+  subscribeToProducts: (cb) => { cb([]); return () => {}; },
+  subscribeToRecipes: (cb) => { cb([]); return () => {}; },
   updateBusinessInDB: vi.fn(),
 }));
 

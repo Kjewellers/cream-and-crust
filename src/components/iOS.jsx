@@ -12,12 +12,14 @@ import {
   Trash2,
   MessageSquare,
 } from 'lucide-react';
+import { playSound } from '../utils/audioManager';
 export { Loader2 };
 
 /* ─────────────────────────────────────────────────────────────────
    MOBILE UTILITIES  — Haptics & Sharing
    ───────────────────────────────────────────────────────────────── */
 export const triggerHaptic = (type = 'light') => {
+  playSound(type);
   if (!window.navigator.vibrate) return;
   const patterns = {
     light: [10],
@@ -99,6 +101,9 @@ export function PullToRefresh({ onRefresh, children }) {
   const [pulling, setPulling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const startY = useRef(null);
+  const lastRefreshTime = useRef(0);
+  const PULL_THRESHOLD = 120; // Increased from 80 to prevent accidental triggers
+  const DEBOUNCE_MS = 2000; // Minimum 2s between refreshes
 
   const handleTouchStart = (e) => {
     if (window.scrollY <= 0) {
@@ -121,8 +126,14 @@ export function PullToRefresh({ onRefresh, children }) {
     const currentY = e.touches[0].clientY;
     const distance = currentY - startY.current;
 
-    // Trigger pull state if dragged down more than 80px from top
-    if (distance > 80) {
+    // Only track positive (downward) pulls
+    if (distance < 0) {
+      setPulling(false);
+      return;
+    }
+
+    // Trigger pull state if dragged down more than threshold from top
+    if (distance > PULL_THRESHOLD) {
       setPulling(true);
     } else {
       setPulling(false);
@@ -132,6 +143,13 @@ export function PullToRefresh({ onRefresh, children }) {
   const handleTouchEnd = () => {
     startY.current = null;
     if (pulling && !refreshing) {
+      const now = Date.now();
+      // Debounce: prevent rapid successive refreshes
+      if (now - lastRefreshTime.current < DEBOUNCE_MS) {
+        setPulling(false);
+        return;
+      }
+      lastRefreshTime.current = now;
       setRefreshing(true);
       triggerHaptic('medium');
       onRefresh().finally(() => {
@@ -623,46 +641,44 @@ export function BottomSheet({ open, onClose, title, children }) {
             style={{
               position: 'fixed',
               inset: 0,
-              background: 'rgba(15, 15, 15, 0.28)',
-              backdropFilter: 'blur(2px)',
-              WebkitBackdropFilter: 'blur(2px)',
+              background: 'rgba(0, 0, 0, 0.65)',
               zIndex: 200,
             }}
           />
           <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
             style={{
               position: 'fixed',
+              top: 0,
               bottom: 0,
               left: 0,
               right: 0,
+              margin: 'auto',
+              width: 'calc(100% - 40px)',
+              maxWidth: 560,
+              height: 'fit-content',
               maxHeight: '92dvh',
               background: 'var(--bg)',
-              borderRadius: '24px 24px 0 0',
+              borderRadius: '24px',
               zIndex: 201,
-              boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.08)',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
             }}
           >
-            {/* Sticky header with drag handle + title + close */}
+            {/* Sticky header with title + close */}
             <div
               style={{
                 flexShrink: 0,
-                padding: '10px 20px 14px',
+                padding: '14px 20px',
                 borderBottom: '1px solid var(--border)',
                 background: 'var(--card)',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 10 }}>
-                <div
-                  style={{ width: 36, height: 4, borderRadius: 2, background: 'var(--border-md)' }}
-                />
-              </div>
               {title && (
                 <div
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}

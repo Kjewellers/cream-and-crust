@@ -89,7 +89,7 @@ const TEMPLATE_OPTIONS = [
 ];
 
 export default function MenuThemeCustomizer() {
-  const { business, menu, products, loading, saveMenu } = useMenuBuilderData();
+  const { business, menu, products, loading, publishMenu } = useMenuBuilderData();
   const [theme, setTheme] = useState(menu.theme);
   const [saving, setSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState(null); // template id being previewed
@@ -112,8 +112,8 @@ export default function MenuThemeCustomizer() {
   const save = async () => {
     setSaving(true);
     try {
-      await saveMenu({ theme });
-      showToast('Theme saved! 🎨', 'success');
+      await publishMenu({ theme });
+      showToast('Theme published to live menu! ✨', 'success');
     } finally {
       setSaving(false);
     }
@@ -517,7 +517,7 @@ export default function MenuThemeCustomizer() {
         </div>
       </div>
 
-      <SaveBar onSave={save} saving={saving} label="Save Theme" />
+      <SaveBar onSave={save} saving={saving} label="Publish Theme" />
 
       {/* ── Template Preview Modal — portaled to body to escape page stacking context ── */}
       {createPortal(
@@ -705,7 +705,7 @@ export default function MenuThemeCustomizer() {
                       update('template', previewTemplate);
                       setPreviewTemplate(null);
                       showToast(
-                        `Template set to ${TEMPLATE_OPTIONS.find((t) => t.id === previewTemplate)?.label || previewTemplate}. Tap Save Theme to apply.`,
+                        `Template set to ${TEMPLATE_OPTIONS.find((t) => t.id === previewTemplate)?.label || previewTemplate}. Tap Publish Theme to apply.`,
                         'success'
                       );
                     }}

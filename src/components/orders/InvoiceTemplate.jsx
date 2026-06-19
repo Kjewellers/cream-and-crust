@@ -226,7 +226,9 @@ const InvoiceTemplate = ({ order = {}, bakeryProfile = {}, invoiceNumber }) => {
   const tax = asNumber(order.tax ?? order.gstAmount);
   const computedTotal = Math.max(0, subtotal + deliveryCharges + packagingCharges + tax - discount);
   const total = asNumber(order.totalAmount ?? order.total, computedTotal) || computedTotal;
-  const advancePaid = asNumber(order.advance ?? order.advancePaid ?? order.paidAmount);
+  const isExplicitlyPaid = String(order.paymentStatus).toLowerCase() === 'paid';
+  const recordedAdvance = asNumber(order.advance ?? order.advancePaid ?? order.paidAmount);
+  const advancePaid = isExplicitlyPaid ? total : recordedAdvance;
   const balanceDue = Math.max(0, total - advancePaid);
   const fullyPaid = balanceDue <= 0 && total > 0;
   const paymentStatus = fullyPaid
@@ -377,7 +379,7 @@ const InvoiceTemplate = ({ order = {}, bakeryProfile = {}, invoiceNumber }) => {
               <img
                 src={logoSrc}
                 alt={brandName}
-                crossOrigin="anonymous"
+                crossOrigin={logoSrc.startsWith('http') ? 'anonymous' : undefined}
                 style={{ width: '88%', height: '88%', objectFit: 'cover', borderRadius: '50%' }}
               />
             ) : (
@@ -770,7 +772,7 @@ const InvoiceTemplate = ({ order = {}, bakeryProfile = {}, invoiceNumber }) => {
                     <img
                       src={qrUrl}
                       alt={usingUploadedQr ? `${brandName} UPI QR` : 'UPI payment QR'}
-                      crossOrigin="anonymous"
+                      crossOrigin={qrUrl.startsWith('http') ? 'anonymous' : undefined}
                       style={{ width: 92, height: 92, objectFit: 'contain' }}
                     />
                   ) : (

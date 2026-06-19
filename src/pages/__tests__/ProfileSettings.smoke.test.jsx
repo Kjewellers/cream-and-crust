@@ -28,6 +28,8 @@ vi.mock('../../services/db', () => ({
     cb({ id: 'u1', name: 'Cream & Crust', logo: '🧁' });
     return () => {};
   },
+  subscribeToProducts: (cb) => { cb([]); return () => {}; },
+  subscribeToRecipes: (cb) => { cb([]); return () => {}; },
   updateBusinessInDB: vi.fn(),
 }));
 

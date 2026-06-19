@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User as UserIcon,
@@ -35,7 +36,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { subscribeToOrders, subscribeToBusiness, updateBusinessInDB } from '../services/db';
+import { subscribeToOrders, subscribeToBusiness, updateBusinessInDB, subscribeToProducts, subscribeToRecipes } from '../services/db';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -43,6 +44,10 @@ import { showToast } from '../components/iOS';
 import { BUSINESS_FIELDS, calculateProfileCompleteness } from '../utils/profileFields';
 import PremiumBadge from '../components/PremiumBadge';
 import { useSubscription } from '../hooks/useSubscription';
+import { useAchievements, ACHIEVEMENTS, TIER_STYLES } from '../utils/achievements';
+import { triggerConfetti, triggerSuccessBurst } from '../components/DopamineKit';
+import { useContext } from 'react';
+import { DataContext } from '../context/DataContext';
 
 /* ─────────────────────────────────────────────
    Field metadata
@@ -129,11 +134,20 @@ const EDITABLE_KEYS = new Set([
 export default function Profile() {
   const { currentUser, userRole, logout } = useAuth();
   const navigate = useNavigate();
+  // Safe read — DataContext may be absent in test environments (Profile smoke tests
+  // don't wrap with DataProvider). Fall back to empty arrays so achievements simply
+  // show as all-locked rather than crashing.
+  const dataCtx = useContext(DataContext);
+  const dataOrders = dataCtx?.orders ?? [];
+  const dataCustomers = dataCtx?.customers ?? [];
   const [orderCount, setOrderCount] = useState(0);
   const [business, setBusiness] = useState({ name: '', logo: '', id: null });
   const [editingDetails, setEditingDetails] = useState(false);
   const [savingDetails, setSavingDetails] = useState(false);
   const { isActive: subscriptionActive } = useSubscription();
+  const [productsCount, setProductsCount] = useState(0);
+  const [recipesCount, setRecipesCount] = useState(0);
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
 
   // Edit-mode state for each editable field
   const [editName, setEditName] = useState('');
@@ -219,13 +233,27 @@ export default function Profile() {
     const unsubOrders = subscribeToOrders((orders) => setOrderCount(orders.length), userIdFilter);
 
     let unsubBiz = () => {};
+    let unsubProducts = () => {};
+    let unsubRecipes = () => {};
     if (userRole !== 'customer') {
       unsubBiz = subscribeToBusiness((biz) => setBusiness(biz), null, currentUser.uid);
+      unsubProducts = subscribeToProducts(
+        (prods) => setProductsCount(prods.length),
+        null,
+        currentUser.uid
+      );
+      unsubRecipes = subscribeToRecipes(
+        (recs) => setRecipesCount(recs.length),
+        null,
+        currentUser.uid
+      );
     }
 
     return () => {
       unsubOrders();
       unsubBiz();
+      unsubProducts();
+      unsubRecipes();
     };
   }, [userRole, currentUser]);
 
@@ -329,6 +357,401 @@ export default function Profile() {
   };
 
   const completeness = calculateProfileCompleteness(business);
+
+  // ─── Achievements ──────────────────────────────────────────────────────
+  const isBakerRole = userRole === 'admin' || userRole === 'baker';
+  const { all: allAchievements, unlocked: unlockedAchievements, newlyUnlocked } = useAchievements({
+    orders: isBakerRole ? dataOrders : [],
+    customers: isBakerRole ? dataCustomers : [],
+    productsCount,
+    recipesCount,
+    business,
+    uid: currentUser?.uid || '',
+  });
+
+  // Fire celebration effects when a new achievement is earned
+  useEffect(() => {
+    if (!newlyUnlocked || newlyUnlocked.length === 0) return;
+    const latest = newlyUnlocked[newlyUnlocked.length - 1];
+    setAchievementsOpen(true); // auto-open so the baker sees the new badge
+    triggerConfetti(window.innerWidth / 2, window.innerHeight / 3, 120);
+    setTimeout(() => {
+      triggerSuccessBurst(latest.emoji, `${latest.name} Unlocked!`);
+    }, 200);
+  }, [newlyUnlocked]);
+
+  /* ─────────────────────────────────────────────
+     Render: Achievements Section (collapsible card)
+     ───────────────────────────────────────────── */
+  const renderAchievements = () => {
+    if (!isBakerRole) return null;
+    const unlockedCount = unlockedAchievements.length;
+    const totalCount = ACHIEVEMENTS.length;
+    const pct = Math.round((unlockedCount / totalCount) * 100);
+
+    const TIER_LABEL = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' };
+
+    return (
+      <div
+        id="achievements-section"
+        style={{
+          background: 'var(--card)',
+          borderRadius: 'var(--radius)',
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--shadow)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* ── Tap-to-toggle header ──────────────────────────── */}
+        <button
+          onClick={() => setAchievementsOpen(o => !o)}
+          style={{
+            width: '100%',
+            background: achievementsOpen
+              ? 'linear-gradient(135deg, rgba(181,96,106,0.06) 0%, rgba(234,130,60,0.05) 100%)'
+              : 'var(--card)',
+            border: 'none',
+            padding: '16px 18px',
+            cursor: 'pointer',
+            textAlign: 'left',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            transition: 'background 0.2s',
+          }}
+        >
+          {/* Top row: icon + title + chevron */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {/* Icon */}
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 11,
+                background: 'linear-gradient(135deg, #B5606A 0%, #EA823C 100%)',
+                boxShadow: '0 4px 12px rgba(181,96,106,0.28)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 19,
+                flexShrink: 0,
+              }}
+            >
+              🏅
+            </div>
+
+            {/* Title + subtitle */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em' }}>
+                Baker Achievements
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--text3)', marginTop: 2 }}>
+                {unlockedCount === 0
+                  ? 'Earn badges as you grow your bakery'
+                  : `${unlockedCount} of ${totalCount} unlocked`}
+              </div>
+            </div>
+
+            {/* Progress pill + chevron */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  color: pct >= 50 ? '#B5606A' : 'var(--text3)',
+                  background: pct >= 50 ? 'rgba(181,96,106,0.10)' : 'var(--bg)',
+                  padding: '3px 8px',
+                  borderRadius: 99,
+                  letterSpacing: '0.04em',
+                  border: `1px solid ${pct >= 50 ? 'rgba(181,96,106,0.18)' : 'var(--border)'}`,
+                }}
+              >
+                {pct}%
+              </div>
+              <motion.div
+                animate={{ rotate: achievementsOpen ? 180 : 0 }}
+                transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+                style={{ color: 'var(--text3)', display: 'flex' }}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </motion.div>
+            </div>
+          </div>
+
+          {/* Peek row: unlocked emoji chips — always visible */}
+          {unlockedCount > 0 && (
+            <div
+              style={{
+                display: 'flex',
+                gap: 6,
+                paddingLeft: 48, // align with title
+                overflow: 'hidden',
+              }}
+              onClick={e => e.stopPropagation()} // prevent double-toggle on chip click
+            >
+              {unlockedAchievements.slice(0, 7).map(ach => (
+                <div
+                  key={ach.id}
+                  title={ach.name}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    background: TIER_STYLES[ach.tier].bg,
+                    border: `1px solid ${TIER_STYLES[ach.tier].border}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 14,
+                    flexShrink: 0,
+                  }}
+                >
+                  {ach.emoji}
+                </div>
+              ))}
+              {unlockedCount > 7 && (
+                <div
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    background: 'var(--bg)',
+                    border: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 9,
+                    fontWeight: 900,
+                    color: 'var(--text3)',
+                  }}
+                >
+                  +{unlockedCount - 7}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Overall progress bar */}
+          <div
+            style={{
+              height: 3,
+              background: 'var(--border-md)',
+              borderRadius: 99,
+              overflow: 'hidden',
+              marginLeft: 48,
+              marginTop: 2,
+            }}
+          >
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${pct}%` }}
+              transition={{ duration: 0.9, ease: [0.25, 1, 0.5, 1] }}
+              style={{
+                height: '100%',
+                background: 'linear-gradient(90deg, #B5606A, #EA823C)',
+                borderRadius: 99,
+              }}
+            />
+          </div>
+        </button>
+
+        {/* ── Collapsible body ─────────────────────────────── */}
+        <AnimatePresence initial={false}>
+          {achievementsOpen && (
+            <motion.div
+              key="ach-body"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3, ease: [0.25, 1, 0.5, 1] }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div
+                style={{
+                  borderTop: '1px solid var(--border)',
+                  padding: '14px 14px 18px',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: 10,
+                }}
+              >
+                {allAchievements.map((ach, idx) => {
+                  const tier = TIER_STYLES[ach.tier];
+                  const prog = ach.progressInfo;
+                  const cardPct = ach.unlocked ? 100 : Math.round((prog.current / prog.target) * 100);
+
+                  return (
+                    <motion.div
+                      key={ach.id}
+                      initial={{ opacity: 0, scale: 0.94 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: idx * 0.035, duration: 0.22 }}
+                      style={{
+                        background: ach.unlocked ? tier.bg : 'var(--bg)',
+                        border: `1.5px solid ${ach.unlocked ? tier.border : 'rgba(74,59,50,0.07)'}`,
+                        borderRadius: 16,
+                        padding: '13px 12px 11px',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        boxShadow: ach.unlocked ? `0 3px 14px ${tier.glow}` : 'none',
+                        opacity: ach.unlocked ? 1 : 0.68,
+                      }}
+                    >
+                      {/* Shimmer for unlocked */}
+                      {ach.unlocked && (
+                        <motion.div
+                          animate={{ x: ['-120%', '220%'] }}
+                          transition={{ duration: 2.8, repeat: Infinity, repeatDelay: 5, ease: 'easeInOut' }}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '38%',
+                            height: '100%',
+                            background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.32), transparent)',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                      )}
+
+                      {/* Tier label pill (top-left for unlocked) */}
+                      {ach.unlocked && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 8,
+                            left: 10,
+                            fontSize: 8,
+                            fontWeight: 900,
+                            letterSpacing: '0.08em',
+                            textTransform: 'uppercase',
+                            color: tier.text,
+                            background: tier.badge,
+                            backgroundClip: 'unset',
+                            padding: '2px 6px',
+                            borderRadius: 6,
+                            opacity: 0.85,
+                            WebkitTextFillColor: 'white',
+                          }}
+                        >
+                          {TIER_LABEL[ach.tier]}
+                        </div>
+                      )}
+
+                      {/* Check badge (top-right for unlocked) */}
+                      {ach.unlocked && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 10,
+                            width: 17,
+                            height: 17,
+                            borderRadius: '50%',
+                            background: tier.badge,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <svg width="8" height="6" viewBox="0 0 8 6" fill="none">
+                            <path d="M1 2.8L3 5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      )}
+
+                      {/* Emoji */}
+                      <div
+                        style={{
+                          fontSize: 28,
+                          marginBottom: 6,
+                          marginTop: ach.unlocked ? 14 : 0, // make room for tier pill
+                          filter: ach.unlocked ? 'none' : 'grayscale(1) opacity(0.5)',
+                          lineHeight: 1,
+                        }}
+                      >
+                        {ach.unlocked ? ach.emoji : '🔒'}
+                      </div>
+
+                      {/* Name */}
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: ach.unlocked ? tier.text : 'var(--text2)',
+                          letterSpacing: '-0.01em',
+                          marginBottom: 3,
+                          lineHeight: 1.25,
+                        }}
+                      >
+                        {ach.name}
+                      </div>
+
+                      {/* Desc */}
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: ach.unlocked ? tier.text : 'var(--text3)',
+                          opacity: ach.unlocked ? 0.75 : 0.65,
+                          lineHeight: 1.45,
+                          marginBottom: ach.unlocked ? 0 : 9,
+                        }}
+                      >
+                        {ach.desc}
+                      </div>
+
+                      {/* Progress bar + label (locked only) */}
+                      {!ach.unlocked && (
+                        <>
+                          <div
+                            style={{
+                              height: 3,
+                              background: 'var(--border-md)',
+                              borderRadius: 99,
+                              overflow: 'hidden',
+                              marginBottom: 4,
+                            }}
+                          >
+                            <div
+                              style={{
+                                height: '100%',
+                                width: `${cardPct}%`,
+                                background: 'linear-gradient(90deg, #B5606A, #EA823C)',
+                                borderRadius: 99,
+                                transition: 'width 0.7s ease',
+                              }}
+                            />
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 9,
+                              color: 'var(--text3)',
+                              fontWeight: 700,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                            }}
+                          >
+                            <span>
+                              {prog.prefix || ''}{Number(prog.current).toLocaleString('en-IN')}{prog.suffix || ''}
+                            </span>
+                            <span>
+                              {prog.prefix || ''}{Number(prog.target).toLocaleString('en-IN')}{prog.suffix || ''}
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
 
   const completenessMessage = useMemo(() => {
     if (completeness >= 100) return 'Your profile looks great';
@@ -1295,7 +1718,15 @@ export default function Profile() {
             <Copy size={13} /> Copy link
           </button>
           <button
-            onClick={() => window.open(`/menu/${business.username}`, '_blank')}
+            onClick={async () => {
+              const url = `/menu/${business.username}`;
+              try {
+                const { openLink } = await import('../utils/openLink');
+                await openLink(url);
+              } catch {
+                window.open(url, '_blank');
+              }
+            }}
             style={{
               flex: 1,
               display: 'inline-flex',
@@ -1898,6 +2329,7 @@ export default function Profile() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {renderHeroCard()}
           {renderQuickStats()}
+          {isBakerOrAdmin && renderAchievements()}
           {isBakerOrAdmin && renderBusinessDetails()}
           {isBakerOrAdmin && renderPaymentSetup()}
           {renderPublicMenu()}
@@ -1925,6 +2357,7 @@ export default function Profile() {
           >
             {renderHeroCard()}
             {renderQuickStats()}
+            {isBakerOrAdmin && renderAchievements()}
             {renderPublicMenu()}
             {renderSignOut()}
           </div>
@@ -1938,18 +2371,19 @@ export default function Profile() {
       )}
 
       {/* Password Modal */}
-      <AnimatePresence>
-        {showPasswordModal && (
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showPasswordModal && (
           <div
             className="modal-overlay"
             onClick={() => setShowPasswordModal(false)}
             style={{ zIndex: 1000 }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.94, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: 12 }}
-              transition={{ duration: 0.22, ease: [0.25, 1, 0.5, 1] }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
               className="modal"
               onClick={(e) => e.stopPropagation()}
               style={{ maxWidth: 420 }}
@@ -2036,46 +2470,28 @@ export default function Profile() {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* ── Delete Account Modal (multi-step, deliberately effortful) ── */}
-      <AnimatePresence>
-        {showDeleteModal && (
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showDeleteModal && (
           <div
             className="modal-overlay"
             onClick={() => !deleting && setShowDeleteModal(false)}
-            style={{ zIndex: 1200, alignItems: 'flex-end' }}
+            style={{ zIndex: 1200 }}
           >
             <motion.div
-              initial={{ y: '100%', opacity: 0.6 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: '100%', opacity: 0 }}
-              transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+              className="modal"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
               onClick={(e) => e.stopPropagation()}
-              style={{
-                width: '100%',
-                maxWidth: 460,
-                margin: '0 auto',
-                background: 'var(--card)',
-                borderRadius: '28px 28px 0 0',
-                padding: '14px 22px',
-                paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 16px))',
-                maxHeight: 'calc(100vh - 80px)',
-                overflowY: 'auto',
-                boxShadow: '0 -16px 50px rgba(0,0,0,0.25)',
-              }}
+              style={{ maxWidth: 460, padding: 24 }}
             >
-              {/* drag pill */}
-              <div
-                style={{
-                  width: 36,
-                  height: 4,
-                  borderRadius: 99,
-                  background: 'var(--border-md)',
-                  margin: '0 auto 18px',
-                }}
-              />
-
               {/* Step indicator */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
                 {[1, 2, 3].map((s) => (
@@ -2346,7 +2762,9 @@ export default function Profile() {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }

@@ -77,8 +77,7 @@ service cloud.firestore {
       // must be tagged channel='website' (so only this flow can use it),
       // include a small set of customer-facing fields, and target an
       // existing public business profile.
-      allow create: if isAuthenticated()
-                    && request.resource.data.channel == 'website'
+      allow create: if request.resource.data.channel == 'website'
                     && request.resource.data.keys().hasAll(['uid', 'createdAt', 'channel'])
                     && validString(request.resource.data.uid, 1, 100)
                     && exists(/databases/$(database)/documents/business/$(request.resource.data.uid));
@@ -144,8 +143,7 @@ service cloud.firestore {
       // Public website / WhatsApp / Instagram channel — customer creates
       // an inquiry that targets a bakery. The doc must be tagged channel
       // and route to an existing public business profile.
-      allow create: if isAuthenticated()
-                    && request.resource.data.channel in ['website', 'whatsapp', 'instagram']
+      allow create: if request.resource.data.channel in ['website', 'whatsapp', 'instagram']
                     && request.resource.data.keys().hasAll(['uid', 'createdAt', 'channel'])
                     && exists(/databases/$(database)/documents/business/$(request.resource.data.uid));
       allow read, update, delete: if isDocOwner();
@@ -161,8 +159,7 @@ service cloud.firestore {
       // Public website / WhatsApp / Instagram channel — customer event
       // pings the bakery. Doc must be tagged channel and route to an
       // existing public business profile.
-      allow create:       if isAuthenticated()
-                          && request.resource.data.channel in ['website', 'whatsapp', 'instagram']
+      allow create:       if request.resource.data.channel in ['website', 'whatsapp', 'instagram']
                           && request.resource.data.keys().hasAll(['uid', 'channel'])
                           && exists(/databases/$(database)/documents/business/$(request.resource.data.uid));
       allow update:       if isDocOwner();
@@ -188,6 +185,59 @@ service cloud.firestore {
       allow read, delete: if isDocOwner();
       allow create:       if isCreatingAsOwner();
       allow update:       if isDocOwner() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid']));
+    }
+
+    // ======================================================
+    // MENU ANALYTICS — Event Tracking
+    // ======================================================
+    match /analytics_events/{eventId} {
+      // Anyone can create an event (visitors on public menus)
+      // Must contain a valid bakeryId mapping to a business
+      allow create: if request.resource.data.keys().hasAll(['bakeryId', 'eventType', 'timestamp'])
+                    && validString(request.resource.data.bakeryId, 1, 100)
+                    && exists(/databases/$(database)/documents/business/$(request.resource.data.bakeryId));
+      // Only the bakery owner can read/delete their own events
+      allow read, delete: if isAuthenticated() && resource.data.bakeryId == request.auth.uid;
+      allow update: if false;
+    }
+
+    // ======================================================
+    // MENU ANALYTICS — Aggregation Collections
+    // Only Cloud Functions write. Bakery owners read their own.
+    // ======================================================
+    match /analytics_summary/{bakeryId} {
+      allow read: if isAuthenticated() && request.auth.uid == bakeryId;
+      allow create, update, delete: if false; // Cloud Functions only
+    }
+
+    match /analytics_products/{docId} {
+      allow read: if isAuthenticated() && resource.data.bakeryId == request.auth.uid;
+      allow create, update, delete: if false; // Cloud Functions only
+    }
+
+    match /analytics_peak_hours/{bakeryId} {
+      allow read: if isAuthenticated() && request.auth.uid == bakeryId;
+      allow create, update, delete: if false; // Cloud Functions only
+    }
+
+    match /analytics_cities/{docId} {
+      allow read: if isAuthenticated() && resource.data.bakeryId == request.auth.uid;
+      allow create, update, delete: if false; // Cloud Functions only
+    }
+
+    match /analytics_sources/{bakeryId} {
+      allow read: if isAuthenticated() && request.auth.uid == bakeryId;
+      allow create, update, delete: if false; // Cloud Functions only
+    }
+
+    match /analytics_customers/{bakeryId} {
+      allow read: if isAuthenticated() && request.auth.uid == bakeryId;
+      allow create, update, delete: if false; // Cloud Functions only
+    }
+
+    match /analytics_daily/{docId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create, update, delete: if false; // Cloud Functions only
     }
 
     // ======================================================

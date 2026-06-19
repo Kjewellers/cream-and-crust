@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "357779803337",
+    "project_id": "cream-and-crust",
+    "storage_bucket": "cream-and-crust.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:357779803337:android:6f37d27eb8b30895d75118",
+        "android_client_info": {
+          "package_name": "com.creamandcrust.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "357779803337-igdqc9grisrhsdtnkijmo6ojvdhrmt31.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.creamandcrust.app",
+            "certificate_hash": "fc272c2f4ebdf16e2ba79dee1f32671a6b622d7a"
+          }
+        },
+        {
+          "client_id": "357779803337-v8vnmgs8dqcu1kpaehgun14u9n6cqk7b.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.creamandcrust.app",
+            "certificate_hash": "e31e8a4937540bb8457a4963d9b4b278ae3218c6"
+          }
+        },
+        {
+          "client_id": "357779803337-0489gefb6pinor5orbbro0dr43tus9hj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDBSZv9GGir8ulhTvHney0gj4ZVqI7rDv0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "357779803337-0489gefb6pinor5orbbro0dr43tus9hj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

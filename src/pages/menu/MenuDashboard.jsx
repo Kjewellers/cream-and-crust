@@ -15,6 +15,7 @@ import {
   QrCode,
   Sparkles,
   Check,
+  BarChart3,
 } from 'lucide-react';
 import { showToast } from '../../components/iOS';
 import { useMenuBuilderData } from './useMenuBuilderData';
@@ -650,6 +651,71 @@ export default function MenuDashboard() {
         </div>
 
         {/* ── Build Flow ── */}
+        {isPublished && (
+          <motion.div
+            whileHover={{ scale: 1.015 }}
+            whileTap={{ scale: 0.98 }}
+            style={{ marginBottom: 14 }}
+          >
+            <Link
+              to="/menu-builder/analytics"
+              style={{
+                padding: '20px',
+                borderRadius: 20,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                textDecoration: 'none',
+                background: 'linear-gradient(135deg, #2D2323 0%, #B5606A 100%)',
+                boxShadow: '0 8px 30px rgba(181,96,106,0.3)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+            >
+              {/* Shine effect */}
+              <motion.div 
+                animate={{ x: ['-100%', '250%'] }}
+                transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut', repeatDelay: 1 }}
+                style={{
+                  position: 'absolute', top: 0, left: 0, bottom: 0, width: '40%',
+                  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)',
+                  transform: 'skewX(-20deg)'
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
+                <div style={{
+                  width: 46, height: 46, borderRadius: 14,
+                  background: 'rgba(255,255,255,0.15)',
+                  backdropFilter: 'blur(8px)',
+                  color: '#FFF',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                }}>
+                  <BarChart3 size={24} strokeWidth={2.5} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#FFF', letterSpacing: '-0.01em', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    Menu Analytics <span style={{ background: '#D8B97E', color: '#FFF', fontSize: 10, padding: '2px 6px', borderRadius: 6, fontWeight: 900 }}>NEW</span>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.85)', marginTop: 2, fontWeight: 500 }}>
+                    Track live visitors & conversion
+                  </div>
+                </div>
+              </div>
+              <div style={{ 
+                background: 'rgba(255,255,255,0.15)', 
+                borderRadius: '50%', 
+                width: 34, height: 34, 
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                position: 'relative', zIndex: 1,
+                backdropFilter: 'blur(4px)'
+              }}>
+                <ArrowRight size={18} color="#FFF" />
+              </div>
+            </Link>
+          </motion.div>
+        )}
         <div className="card" style={{ padding: '16px 18px', borderRadius: 20, marginBottom: 14 }}>
           <div
             style={{

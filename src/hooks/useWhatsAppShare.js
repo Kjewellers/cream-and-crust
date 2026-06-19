@@ -2,15 +2,19 @@
  * useWhatsAppShare — open exactly one WhatsApp session per activation with a
  * leading-edge debounce, and a copy-text fallback if WhatsApp does not open.
  *
+ * Uses the centralized openLink utility for cross-platform compatibility
+ * (Capacitor native + web).
+ *
  * Requirements: 6.6 (one session per 1000ms), 6.7 (fallback toast within 3s).
  */
 import { useCallback, useRef } from 'react';
 import { buildWhatsAppLink } from '../utils/whatsappLink.js';
+import { openWhatsAppLink } from '../utils/openLink.js';
 import { showToast } from '../components/iOS.jsx';
 import { trackWhatsAppSend } from '../services/analytics.js';
+import { log } from '../utils/logger.js';
 
 const DEBOUNCE_MS = 1000;
-const FALLBACK_MS = 3000;
 
 export function useWhatsAppShare() {
   const lastFiredRef = useRef(0);
@@ -22,27 +26,21 @@ export function useWhatsAppShare() {
     lastFiredRef.current = now;
 
     const link = buildWhatsAppLink({ phone, message });
-    let win = null;
-    try {
-      win = window.open(link, '_blank');
-    } catch {
-      win = null;
-    }
+    log.whatsapp('useWhatsAppShare: opening link for context:', context);
+
+    // Use cross-platform link opener (handles native + web)
+    openWhatsAppLink(link).catch((e) => {
+      log.whatsapp.warn('useWhatsAppShare: openWhatsAppLink failed:', e?.message);
+      // Fallback: copy message to clipboard
+      try {
+        navigator.clipboard?.writeText(message || '');
+      } catch {
+        /* clipboard may be unavailable */
+      }
+      showToast('Could not open WhatsApp. Message copied — paste it in any chat.', 'info');
+    });
 
     trackWhatsAppSend(context);
-
-    // If WhatsApp could not open, offer a copy-text fallback.
-    setTimeout(() => {
-      const blocked = !win || win.closed || typeof win.closed === 'undefined';
-      if (blocked) {
-        try {
-          navigator.clipboard?.writeText(message || '');
-        } catch {
-          /* clipboard may be unavailable */
-        }
-        showToast('Could not open WhatsApp. Message copied — paste it in any chat.', 'info');
-      }
-    }, FALLBACK_MS);
 
     return link;
   }, []);

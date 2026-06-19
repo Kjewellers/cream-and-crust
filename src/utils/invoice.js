@@ -1,16 +1,26 @@
 /**
- * Print an invoice for an order.
+ * Print/share an invoice for an order.
+ *
+ * On web: opens a new window and triggers the browser print dialog.
+ * On native Capacitor: generates the HTML as a blob and shares via
+ * nativeShareFile, because window.open('', '_blank') returns null in
+ * Android WebView, completely breaking the print flow.
+ *
  * @param {object} order - The order data.
- * @param {object} [business] - Business profile (name, phone, address). Falls back to defaults.
+ * @param {object} [business] - Business profile (name, phone, address).
  */
-export function printInvoice(order, business = {}) {
-  const printWindow = window.open('', '_blank');
-  
-  const html = `
+import { Capacitor } from '@capacitor/core';
+import { log } from './logger';
+
+function buildInvoiceHTML(order, business = {}) {
+  const o = order || {};
+  const biz = business || {};
+
+  return `
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Invoice ${order.id}</title>
+      <title>Invoice ${esc(o.id || '')}</title>
       <style>
         @page { size: A4; margin: 20mm; }
         body { 
@@ -38,13 +48,13 @@ export function printInvoice(order, business = {}) {
     <body>
       <div class="header">
         <div class="brand">
-          <h1>${esc(business.name || 'Cream & Crust')}</h1>
-          <p>${esc(business.tagline || 'Artisan Home Bakery')}<br>Contact: ${esc(business.phone || business.whatsapp || '+91 9876543210')}</p>
+          <h1>${esc(biz.name || 'Your Bakery')}</h1>
+          <p>${esc(biz.tagline || 'Artisan Home Bakery')}<br>Contact: ${esc(biz.phone || biz.whatsapp || '')}</p>
         </div>
         <div class="invoice-details">
           <h2>INVOICE</h2>
-          <p><strong>Order #:</strong> ${esc(order.id)}<br>
-          <strong>Date:</strong> ${new Date(order.createdAt || Date.now()).toLocaleDateString()}</p>
+          <p><strong>Order #:</strong> ${esc(o.id || '')}<br>
+          <strong>Date:</strong> ${new Date(o.createdAt || Date.now()).toLocaleDateString()}</p>
         </div>
       </div>
 
@@ -52,14 +62,14 @@ export function printInvoice(order, business = {}) {
         <div>
           <h3>Bill To:</h3>
           <p>
-            <strong>${esc(order.customer?.name)}</strong><br>
-            Phone: ${esc(order.customer?.phone)}<br>
-            ${order.customer?.address ? `Address: ${esc(order.customer.address)}` : ''}
+            <strong>${esc(o.customer?.name || o.customerName || 'Customer')}</strong><br>
+            Phone: ${esc(o.customer?.phone || o.phone || '')}<br>
+            ${(o.customer?.address || o.deliveryAddress) ? `Address: ${esc(o.customer?.address || o.deliveryAddress)}` : ''}
           </p>
         </div>
         <div style="text-align: right">
           <h3>Payment Status:</h3>
-          <p style="text-transform: uppercase; font-weight: bold; color: ${order.paymentStatus === 'paid' ? 'green' : 'red'};">${esc(order.paymentStatus) || 'Pending'}</p>
+          <p style="text-transform: uppercase; font-weight: bold; color: ${(o.paymentStatus || '').toLowerCase() === 'paid' ? 'green' : 'red'};">${esc(o.paymentStatus) || 'Pending'}</p>
         </div>
       </div>
 
@@ -74,45 +84,127 @@ export function printInvoice(order, business = {}) {
           </tr>
         </thead>
         <tbody>
-          ${(order.items || []).map(item => `
+          ${Array.isArray(o.items) && o.items.length > 0 ? o.items.map(item => `
             <tr>
-              <td>${esc(item.name)}</td>
-              <td>${esc(item.size)}</td>
-              <td>${esc(item.qty)}</td>
-              <td style="text-align: right">₹${esc(item.price)}</td>
-              <td style="text-align: right">₹${esc(item.price * item.qty)}</td>
+              <td>${esc(item?.name || o.product || 'Custom Order')}</td>
+              <td>${esc(item?.size || o.size || '-')}</td>
+              <td>${esc(item?.qty || 1)}</td>
+              <td style="text-align: right">₹${esc(item?.price || o.total || 0)}</td>
+              <td style="text-align: right">₹${esc((item?.price || 0) * (item?.qty || 1))}</td>
             </tr>
-          `).join('')}
+          `).join('') : `
+            <tr>
+              <td>${esc(o.product || 'Custom Order')}</td>
+              <td>${esc(o.size || o.cakeWeight || '-')}</td>
+              <td>1</td>
+              <td style="text-align: right">₹${esc(o.total || o.totalAmount || 0)}</td>
+              <td style="text-align: right">₹${esc(o.total || o.totalAmount || 0)}</td>
+            </tr>
+          `}
         </tbody>
       </table>
 
       <div class="totals">
         <div class="totals-row">
           <span>Subtotal:</span>
-          <span>₹${esc(order.total)}</span>
+          <span>₹${esc(o.total || o.totalAmount || 0)}</span>
         </div>
-        <!-- GST can be added here if needed -->
+        ${Number(o.advance || 0) > 0 ? `
+          <div class="totals-row">
+            <span>Advance Paid:</span>
+            <span>-₹${esc(o.advance)}</span>
+          </div>
+        ` : ''}
         <div class="totals-row grand-total">
-          <span>Grand Total:</span>
-          <span>₹${esc(order.total)}</span>
+          <span>Balance Due:</span>
+          <span>₹${esc(Math.max(0, (Number(o.total || o.totalAmount || 0)) - Number(o.advance || 0)))}</span>
         </div>
       </div>
 
       <div class="footer">
-        <p>Thank you for your business!<br>Baked with love. Enjoy your treats!</p>
+        <p>Thank you for your business!<br>Baked with love by ${esc(biz.name || 'Your Bakery')}. Enjoy your treats!</p>
       </div>
-      
-      <script>
-        window.onload = function() {
-          window.print();
-        }
-      <\/script>
     </body>
     </html>
   `;
-  
-  printWindow.document.write(html);
+}
+
+export function printInvoice(order, business = {}) {
+  log.invoice('printInvoice: starting for order', order?.id);
+
+  const html = buildInvoiceHTML(order, business);
+
+  // On native Capacitor, window.open('', '_blank') returns null.
+  // Instead, share the HTML as a downloadable file.
+  if (Capacitor.isNativePlatform()) {
+    log.invoice('printInvoice: native platform detected, using share flow');
+    shareInvoiceAsHTML(html, order?.id || 'invoice')
+      .catch(e => log.invoice.error('Native invoice share failed:', e?.message));
+    return;
+  }
+
+  // Web: open in new window and print
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    log.invoice.warn('printInvoice: window.open blocked, trying download fallback');
+    // Fallback: download as HTML file
+    downloadInvoiceHTML(html, order?.id || 'invoice');
+    return;
+  }
+
+  const printHTML = html.replace('</body>', `
+    <script>
+      window.onload = function() {
+        window.print();
+      }
+    <\/script>
+    </body>
+  `);
+
+  printWindow.document.write(printHTML);
   printWindow.document.close();
+  log.invoice('printInvoice: web print window opened');
+}
+
+/**
+ * Share invoice as an HTML file on native platforms.
+ */
+async function shareInvoiceAsHTML(html, orderId) {
+  try {
+    const blob = new Blob([html], { type: 'text/html' });
+    const { nativeShareFile } = await import('../services/nativeShare');
+    await nativeShareFile({
+      blob,
+      fileName: `Invoice_${orderId}.html`,
+      title: `Invoice #${orderId}`,
+      text: 'Your invoice from the bakery',
+      mimeType: 'text/html',
+    });
+    log.invoice('shareInvoiceAsHTML: shared successfully');
+  } catch (e) {
+    log.invoice.error('shareInvoiceAsHTML failed:', e?.message);
+    // Last resort: try to open as data URL
+    try {
+      const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+      window.open(dataUrl, '_blank');
+    } catch { /* give up */ }
+  }
+}
+
+/**
+ * Download invoice as HTML file (popup-blocked fallback on web).
+ */
+function downloadInvoiceHTML(html, orderId) {
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Invoice_${orderId}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  log.invoice('downloadInvoiceHTML: triggered download');
 }
 
 /** Escapes a value for safe HTML interpolation — prevents XSS via user-controlled data. */

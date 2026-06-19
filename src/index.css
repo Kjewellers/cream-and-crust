@@ -1,30 +1,30 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Dancing+Script:wght@700&display=swap');
 
 :root {
-  /* ── Colors ───────────────────── */
-  --bg: #faf7f5; /* Warm Cream */
-  --bg2: #ffffff;
-  --card: #ffffff;
-  --text: #4a3b32; /* Muted Chocolate Text */
-  --text2: #8c7a6b; /* Softer Chocolate Text */
-  --text3: #bfafa0;
-  --accent: #b5606a; /* Warm Dusty Rose CTA */
-  --accent-lt: rgba(181, 96, 106, 0.12);
-  --accent-light: rgba(181, 96, 106, 0.08);
-  --accent2: #e8b4bb; /* Soft Blush Accents */
-  --rose: #fff1f2;
-  --mint: #ecfdf5;
-  --lavender: #eef2ff;
-  --gold: #fef3c7;
-  --cream: #fef3c7; /* Elegant Beige */
+  /* ── Colors: The Atelier Palette ───────────────────── */
+  --bg: #FDFBF7; /* Alabaster / Premium Flour */
+  --bg2: #FFFFFF;
+  --card: #FFFFFF;
+  --text: #1A1A1A; /* Obsidian Ink */
+  --text2: #6B6B6B; /* Muted Graphite */
+  --text3: #A3A3A3;
+  --accent: #D17581; /* Signature Rose */
+  --accent-lt: rgba(209, 117, 129, 0.12);
+  --accent-light: rgba(209, 117, 129, 0.08);
+  --accent2: #E2A3A9; /* Soft Blush Accents */
+  --rose: #FFF1F2;
+  --mint: #F0FDF4; /* Sage Green Tint */
+  --lavender: #EEF2FF;
+  --gold: #D4A050;
+  --cream: #FDFBF7; 
 
-  /* ── Borders & Shadows ────────── */
-  --border: rgba(74, 59, 50, 0.06);
-  --border-md: rgba(74, 59, 50, 0.1);
-  --shadow-xs: 0 2px 8px rgba(74, 59, 50, 0.04);
-  --shadow: 0 8px 24px rgba(74, 59, 50, 0.06), 0 2px 8px rgba(74, 59, 50, 0.04);
-  --shadow-lg: 0 24px 48px rgba(74, 59, 50, 0.08), 0 8px 24px rgba(74, 59, 50, 0.06);
-  --shadow-accent: 0 12px 32px rgba(181, 96, 106, 0.25);
+  /* ── Borders & Shadows (Extreme Depth) ────────── */
+  --border: rgba(0, 0, 0, 0.06);
+  --border-md: rgba(0, 0, 0, 0.1);
+  --shadow-xs: 0 2px 8px rgba(0, 0, 0, 0.03);
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.06), 0 2px 10px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.08), 0 8px 24px rgba(0, 0, 0, 0.04);
+  --shadow-accent: 0 16px 40px rgba(209, 117, 129, 0.25);
 
   /* ── Radiuses (squircle-inspired) ─ */
   --radius-xs: 12px;
@@ -33,12 +33,12 @@
   --radius-xl: 32px;
   --radius-pill: 999px;
 
-  /* ── Typography ───────────────── */
+  /* ── Typography (Editorial & Dense) ───────────────── */
   --font:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Plus Jakarta Sans',
+    'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Plus Jakarta Sans',
     system-ui, sans-serif;
   --font-serif:
-    -apple-system, BlinkMacSystemFont, 'SF Pro Display', serif; /* Remove Playfair for a cleaner iOS feel */
+    'Playfair Display', Georgia, serif;
 
   /* ── Layout ───────────────────── */
   --nav-w: 264px;
@@ -112,22 +112,22 @@
  * lifted slightly so they read clearly against the warm darks. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #1a1411; /* coffee-bean — page background */
-    --bg2: #221915; /* slightly lifted — sidebars, popovers */
-    --card: #2a1f1a; /* card surface, ~10% lighter than bg */
-    --text: #faf3ee; /* cream white — primary text */
-    --text2: #c7b8af; /* warm tan — secondary text */
-    --text3: #8a786e; /* muted brown-tan — labels, captions */
-    --border: rgba(250, 243, 238, 0.08);
-    --border-md: rgba(250, 243, 238, 0.14);
-    --cream: rgba(199, 138, 148, 0.14);
-    --accent: #d4838e; /* lifted rose — pops on dark */
-    --accent-lt: rgba(212, 131, 142, 0.18);
-    --gold: #d8b97e;
-    --shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
-    --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.6);
-    --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.35);
-    --shadow-accent: 0 12px 32px rgba(212, 131, 142, 0.25);
+    --bg: #121212; /* Deep Obsidian */
+    --bg2: #1A1A1A; 
+    --card: #1F1F1F;
+    --text: #FDFBF7; /* Alabaster */
+    --text2: #A3A3A3;
+    --text3: #6B6B6B;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-md: rgba(255, 255, 255, 0.12);
+    --cream: rgba(255, 255, 255, 0.05);
+    --accent: #E2A3A9; /* Lifted Signature Rose */
+    --accent-lt: rgba(226, 163, 169, 0.15);
+    --gold: #D8B97E;
+    --shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.8);
+    --shadow-xs: 0 2px 8px rgba(0, 0, 0, 0.4);
+    --shadow-accent: 0 16px 40px rgba(226, 163, 169, 0.2);
     color-scheme: dark;
   }
 }
@@ -1060,32 +1060,31 @@ tr:active td {
 /* ─── MODAL ────────────────────────────── */
 .modal-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.38);
-  backdrop-filter: blur(8px) saturate(180%);
-  -webkit-backdrop-filter: blur(8px) saturate(180%);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100dvh;
+  background: rgba(0, 0, 0, 0.65);
   z-index: 200;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  padding: max(20px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom)) 20px;
+  box-sizing: border-box;
   animation: fadeIn 0.2s var(--ease);
 }
 .modal {
   background: var(--bg2);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
   border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   width: 100%;
   max-width: 560px;
-  max-height: 90vh;
+  max-height: 100%;
+  margin: auto;
   overflow-y: auto;
   padding: 28px;
   box-shadow:
     0 24px 80px rgba(0, 0, 0, 0.16),
     0 8px 24px rgba(0, 0, 0, 0.08);
-  animation: slideUp 0.32s var(--spring);
+  animation: scaleIn 0.25s var(--ease);
 }
 .modal h2 {
   margin-bottom: 22px;
@@ -1294,7 +1293,7 @@ tr:active td {
   .modal {
     padding: 22px 18px;
     border-radius: var(--radius);
-    max-height: 95vh;
+    max-height: 100%;
   }
   .stats-grid {
     gap: 10px;
@@ -1610,4 +1609,100 @@ input {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* ─── Global AI Center Styles ─── */
+.global-ai-overlay-container {
+  position: fixed;
+  bottom: 90px;
+  left: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.global-ai-modal {
+  pointer-events: auto;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border-radius: 32px;
+  width: 100%;
+  max-width: 500px;
+  height: 60vh;
+  max-height: 600px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+[data-theme="dark"] .global-ai-modal {
+  background: rgba(30, 30, 30, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.global-ai-header {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] .global-ai-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.global-ai-chat-feed {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.global-ai-empty {
+  text-align: center;
+  color: var(--text3);
+  font-size: 14px;
+  font-weight: 600;
+  margin: auto;
+  padding: 0 20px;
+  line-height: 1.5;
+}
+
+.global-ai-command-wrapper {
+  position: fixed;
+  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  right: 0;
+  padding: 12px 20px 24px;
+  background: linear-gradient(to top, var(--bg-cream) 70%, transparent);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+[data-theme="dark"] .global-ai-command-wrapper {
+  background: linear-gradient(to top, var(--bg-dark) 70%, transparent);
+}
+
+.global-ai-command-wrapper .ai-command-bar {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 500px;
+}
+
+@media (min-width: 768px) {
+  .global-ai-command-wrapper {
+    bottom: 0;
+    padding-left: 280px; /* Offset for desktop sidebar if needed, or just center it */
+  }
 }

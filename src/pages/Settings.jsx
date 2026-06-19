@@ -23,6 +23,7 @@ import {
   ExternalLink,
   Lock,
   Sparkles,
+  LayoutGrid,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -154,6 +155,8 @@ export default function Settings() {
   const { t, i18n } = useTranslation();
   const [theme, setThemeState] = useState(() => localStorage.getItem('theme') || 'light');
   const [appLang, setAppLang] = useState(() => localStorage.getItem('cc_appLang') || 'en');
+  const [uiSounds, setUiSounds] = useState(() => localStorage.getItem('uiSounds') !== 'off');
+  const [dashboardTheme, setDashboardTheme] = useState(() => localStorage.getItem('dashboardTheme') || 'classic');
   const [notifs, setNotifs] = useState({ email: true, orders: true, whatsapp: false });
   const [clearing, setClearing] = useState(false);
   const [menuPublished, setMenuPublished] = useState(false);
@@ -228,6 +231,20 @@ export default function Settings() {
       t('toast.languageChanged', { lang: LANGUAGES.find((l) => l.code === code)?.label || code }),
       'success'
     );
+  };
+
+  const toggleUiSounds = () => {
+    const next = !uiSounds;
+    setUiSounds(next);
+    localStorage.setItem('uiSounds', next ? 'on' : 'off');
+    if (next) triggerHaptic('success');
+  };
+
+  const handleDashboardThemeChange = (val) => {
+    setDashboardTheme(val);
+    localStorage.setItem('dashboardTheme', val);
+    window.dispatchEvent(new Event('dashboardThemeChanged'));
+    triggerHaptic('medium');
   };
 
   const toggleNotif = (key) => {
@@ -350,9 +367,14 @@ export default function Settings() {
         <motion.button
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          onClick={() => {
+          onClick={async () => {
             if (menuPublished) {
-              window.open(menuUrl, '_blank');
+              try {
+                const { openLink } = await import('../utils/openLink');
+                await openLink(menuUrl);
+              } catch {
+                window.open(menuUrl, '_blank');
+              }
             } else {
               navigate('/menu-builder');
               showToast('Create and publish your menu first', 'info');
@@ -420,7 +442,7 @@ export default function Settings() {
           title={t('settings.appearance')}
           description={t('settings.appearanceDesc')}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
             {THEME_OPTIONS.map((opt) => {
               const active = theme === opt.key;
               return (
@@ -447,6 +469,42 @@ export default function Settings() {
               );
             })}
           </div>
+          <Row>
+            <LayoutGrid size={17} color="var(--text3)" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Dashboard Layout</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Choose your default home screen</div>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {['classic', 'modern'].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => handleDashboardThemeChange(t)}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: 'capitalize',
+                    border: 'none',
+                    background: dashboardTheme === t ? 'var(--accent)' : 'var(--bg2)',
+                    color: dashboardTheme === t ? 'white' : 'var(--text2)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </Row>
+          <Row last>
+            <BellRing size={17} color="var(--text3)" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>UI Sounds</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Play subtle sounds on tap and success</div>
+            </div>
+            <Toggle on={uiSounds} onToggle={toggleUiSounds} />
+          </Row>
         </Section>
 
         {/* ── Language ── */}

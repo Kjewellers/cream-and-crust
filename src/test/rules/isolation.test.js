@@ -57,7 +57,7 @@ maybe('Firestore rules — per-bakery isolation (Property 16)', () => {
     });
     const aDb = testEnv.authenticatedContext('bakeryA').firestore();
     for (const col of PRIVATE_COLLECTIONS) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await assertFails(aDb.collection(col).doc('docB').get());
     }
   });
@@ -66,9 +66,9 @@ maybe('Firestore rules — per-bakery isolation (Property 16)', () => {
     const { assertFails } = rulesModule;
     const aDb = testEnv.authenticatedContext('bakeryA').firestore();
     for (const col of PRIVATE_COLLECTIONS) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await assertFails(aDb.collection(col).doc('docB').update({ tampered: true }));
-      // eslint-disable-next-line no-await-in-loop
+       
       await assertFails(aDb.collection(col).doc('docB').delete());
     }
   });
@@ -96,7 +96,7 @@ maybe('Firestore rules — per-bakery isolation (Property 16)', () => {
     const { assertFails } = rulesModule;
     const anon = testEnv.unauthenticatedContext().firestore();
     for (const col of PRIVATE_COLLECTIONS) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await assertFails(anon.collection(col).doc('docB').get());
     }
     await assertFails(anon.collection('products').doc('p').set({ uid: 'bakeryA', name: 'x' }));
@@ -111,7 +111,7 @@ maybe('Firestore rules — per-bakery isolation (Property 16)', () => {
     });
     const anon = testEnv.unauthenticatedContext().firestore();
     for (const col of PUBLIC_COLLECTIONS) {
-      // eslint-disable-next-line no-await-in-loop
+       
       await assertSucceeds(anon.collection(col).doc('pub').get());
     }
     const aDb = testEnv.authenticatedContext('bakeryA').firestore();

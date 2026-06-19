@@ -13,11 +13,11 @@ import {
   X,
 } from 'lucide-react';
 import {
-  subscribeToCustomers,
-  subscribeToOrders,
   deleteCustomerFromDB,
   updateCustomerInDB,
+  addCustomerToDB,
 } from '../services/db';
+import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatCurrency } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
@@ -30,14 +30,13 @@ import AnimatedDemo from '../components/AnimatedDemo';
 import { customersDemoScenes } from '../components/demos/customersDemo';
 
 export default function Customers() {
-  const [customers, setCustomers] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { customers, setCustomers, orders, loading } = useData();
   const [search, setSearch] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const isSavingRef = React.useRef(false);
   const [editForm, setEditForm] = useState({ name: '', phone: '', address: '', instagram: '' });
 
   useEffect(() => {
@@ -46,31 +45,19 @@ export default function Customers() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    const handleOpenModal = () => {
+      setEditingCustomer(null);
+      setEditForm({ name: '', phone: '', address: '', instagram: '' });
+      setShowEditModal(true);
+    };
+    window.addEventListener('open-new-customer-modal', handleOpenModal);
+    return () => window.removeEventListener('open-new-customer-modal', handleOpenModal);
+  }, []);
+
   const { currentUser } = useAuth();
 
-  useEffect(() => {
-    if (!currentUser) return;
-    let custLoaded = false;
-    let ordersLoaded = false;
-    const checkDone = () => {
-      if (custLoaded && ordersLoaded) setLoading(false);
-    };
 
-    const unsubCust = subscribeToCustomers((data) => {
-      setCustomers(data || []);
-      custLoaded = true;
-      checkDone();
-    }, currentUser.uid);
-    const unsubOrders = subscribeToOrders((data) => {
-      setOrders(data || []);
-      ordersLoaded = true;
-      checkDone();
-    }, currentUser.uid);
-    return () => {
-      unsubCust();
-      unsubOrders();
-    };
-  }, [currentUser]);
 
   const handleEditClick = (c) => {
     setEditingCustomer(c);
@@ -85,40 +72,65 @@ export default function Customers() {
 
   const handleSaveCustomer = (e) => {
     e.preventDefault();
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     setSubmitting(true);
 
-    // 1. Prepare Optimistic Data
-    const optimisticCustomer = {
-      ...editingCustomer,
-      ...editForm,
-      userId: currentUser.uid,
-    };
+    if (editingCustomer) {
+      // 1. Prepare Optimistic Data
+      const optimisticCustomer = {
+        ...editingCustomer,
+        ...editForm,
+        uid: currentUser.uid,
+      };
 
-    // 2. Update Local State Immediately
-    setCustomers((prev) => prev.map((c) => (c.id === editingCustomer.id ? optimisticCustomer : c)));
+      // 2. Update Local State Immediately
+      setCustomers((prev) => prev.map((c) => (c.id === editingCustomer.id ? optimisticCustomer : c)));
 
-    // 3. Close Modal Immediately
-    setShowEditModal(false);
-    triggerHaptic('success');
+      // 3. Close Modal Immediately
+      setShowEditModal(false);
+      triggerHaptic('success');
 
-    // 4. Background Task
-    const performSave = async () => {
-      try {
-        await updateCustomerInDB(editingCustomer.id, {
-          ...editForm,
-          userId: currentUser.uid,
-        });
-        showToast('Saved ✓', 'success');
-      } catch (err) {
-        console.error(err);
-        showToast('Save failed, try again', 'error');
-        // Revert local state (subscription will handle it usually, but for consistency...)
-      } finally {
-        setSubmitting(false);
-      }
-    };
+      // 4. Background Task
+      const performSave = async () => {
+        try {
+          await updateCustomerInDB(editingCustomer.id, {
+            ...editForm,
+            uid: currentUser.uid,
+          });
+          showToast('Saved ✓', 'success');
+        } catch (err) {
+          console.error(err);
+          showToast('Save failed, try again', 'error');
+        } finally {
+          setSubmitting(false);
+          isSavingRef.current = false;
+        }
+      };
 
-    performSave();
+      performSave();
+    } else {
+      // Create new customer
+      const performCreate = async () => {
+        try {
+          await addCustomerToDB({
+            ...editForm,
+            uid: currentUser.uid,
+          });
+          setShowEditModal(false);
+          triggerHaptic('success');
+          showToast('Customer added ✓', 'success');
+        } catch (err) {
+          console.error(err);
+          showToast('Failed to add customer', 'error');
+        } finally {
+          setSubmitting(false);
+          isSavingRef.current = false;
+        }
+      };
+
+      performCreate();
+    }
   };
 
   const handleDeleteCustomer = async (c) => {
@@ -526,10 +538,12 @@ export default function Customers() {
                   </a>
                 )}
                 {c.phone && (
-                  <a
-                    href={`https://wa.me/91${c.phone.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const { openWhatsAppChat } = await import('../utils/openLink');
+                      await openWhatsAppChat(c.phone, `Hi ${c.name || ''}! 🧁`);
+                    }}
                     style={{
                       flex: 1,
                       padding: '8px 0',
@@ -545,10 +559,11 @@ export default function Customers() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: 6,
+                      cursor: 'pointer',
                     }}
                   >
                     <MessageCircle size={14} /> WhatsApp
-                  </a>
+                  </button>
                 )}
               </div>
             </div>
@@ -654,15 +669,17 @@ export default function Customers() {
                           </a>
                         )}
                         {c.phone && (
-                          <a
-                            href={`https://wa.me/91${c.phone.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const { openWhatsAppChat } = await import('../utils/openLink');
+                              await openWhatsAppChat(c.phone, `Hi ${c.name || ''}! 🧁`);
+                            }}
                             className="btn-icon"
                             title="WhatsApp"
                           >
                             <MessageCircle size={16} />
-                          </a>
+                          </button>
                         )}
                         <button
                           onClick={() => handleDeleteCustomer(c)}
@@ -707,7 +724,7 @@ export default function Customers() {
                   marginBottom: 22,
                 }}
               >
-                <h2>Edit Customer</h2>
+                <h2>{editingCustomer ? 'Edit Customer' : 'New Customer'}</h2>
                 <button className="btn-icon" onClick={() => setShowEditModal(false)}>
                   <X size={18} />
                 </button>
@@ -722,7 +739,7 @@ export default function Customers() {
         <BottomSheet
           open={showEditModal}
           onClose={() => setShowEditModal(false)}
-          title="Edit Customer"
+          title={editingCustomer ? "Edit Customer" : "New Customer"}
         >
           {editFormContent}
         </BottomSheet>

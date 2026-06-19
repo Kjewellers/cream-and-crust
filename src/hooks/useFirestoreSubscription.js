@@ -58,7 +58,6 @@ export function useFirestoreSubscription(subscribeFn, { transform } = {}) {
       clearTimeout(safetyRef.current);
       if (typeof unsub === 'function') unsub();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.uid]);
 
   return { data, loading, error };

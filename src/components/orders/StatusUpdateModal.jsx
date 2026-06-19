@@ -46,16 +46,15 @@ export default function StatusUpdateModal({ open, onClose, status, customerName,
     if (open) setTimeout(autoResize, 60);
   }, [open, autoResize]);
 
-  const send = () => {
+  const send = async () => {
     if (!draft.trim() || !phone) return;
     triggerHaptic('medium');
-    const digits = String(phone).replace(/\D/g, '');
-    const fullPhone = digits.length === 10 ? '91' + digits : digits;
-    window.open(
-      `https://wa.me/${fullPhone}?text=${encodeURIComponent(draft.trim())}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
+    try {
+      const { openWhatsAppChat } = await import('../../utils/openLink');
+      await openWhatsAppChat(phone, draft.trim());
+    } catch (e) {
+      console.warn('[CC:WhatsApp] StatusUpdate send failed:', e?.message);
+    }
     onClose();
   };
 

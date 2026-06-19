@@ -5,10 +5,39 @@ import { AlertOctagon, DownloadCloud, Loader2 } from 'lucide-react';
 export default function SystemGuard({ children }) {
   const { needsUpdate, maintenanceMode, maintenanceMessage, loading } = useAppVersion();
 
+  const [isTakingLong, setIsTakingLong] = React.useState(false);
+
+  React.useEffect(() => {
+    let timer;
+    if (loading) {
+      timer = setTimeout(() => setIsTakingLong(true), 5000);
+    } else {
+      setIsTakingLong(false);
+    }
+    return () => clearTimeout(timer);
+  }, [loading]);
+
   if (loading) {
     return (
-      <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, background: '#fffaf5' }}>
         <Loader2 className="animate-spin" color="var(--accent, #B5606A)" size={32} />
+        {isTakingLong && (
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              padding: '8px 16px',
+              background: 'var(--accent, #B5606A)',
+              color: 'white',
+              border: 'none',
+              borderRadius: 8,
+              fontSize: 13,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(181,96,106,0.2)'
+            }}
+          >
+            Reload Page
+          </button>
+        )}
       </div>
     );
   }

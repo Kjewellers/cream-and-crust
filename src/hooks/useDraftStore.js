@@ -34,7 +34,6 @@ export function useDraftStore(key, form, setForm, { debounceMs = 1000, enabled =
       setForm((prev) => ({ ...prev, ...draft }));
       setRestored(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, enabled]);
 
   // Debounced autosave on form change.
@@ -52,7 +51,7 @@ export function useDraftStore(key, form, setForm, { debounceMs = 1000, enabled =
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [form, key, debounceMs, enabled]);
 
   const clearDraft = () => {

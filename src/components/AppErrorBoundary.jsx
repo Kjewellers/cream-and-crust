@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import { logCrashToFirestore } from '../services/crashReporting.js';
+import { log } from '../utils/logger';
 
 /**
  * AppErrorBoundary — top-level fallback. Wraps the routed pages so any
@@ -16,6 +17,7 @@ export default class AppErrorBoundary extends React.Component {
     super(props);
     this.state = { hasError: false, error: null, retryKey: 0, autoRetries: 0 };
     this._retryTimer = null;
+    this._retryDelays = [1500, 3000, 5000]; // Exponential backoff
   }
 
   static getDerivedStateFromError(error) {
@@ -23,7 +25,7 @@ export default class AppErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    // eslint-disable-next-line no-console
+     
     console.error('[AppErrorBoundary] crash:', error, info);
 
     // 1. Local Firebase Analytics event (PII-free, truncated)
@@ -48,19 +50,31 @@ export default class AppErrorBoundary extends React.Component {
       /* crash reporter must never throw */
     }
 
-    // Auto-retry once for transient Firestore/permission/network errors that
-    // happen during the auth-token validation window. This eliminates the
-    // "Try again" flash on first module open.
+    // Auto-retry for transient errors that happen during auth-token
+    // validation, lazy chunk loading, or null-data access from Firestore.
+    // Up to 3 retries with exponential backoff (1.5s → 3s → 5s).
     const msg = String(error?.message || '').toLowerCase();
+    const name = String(error?.name || '').toLowerCase();
     const isTransient =
       msg.includes('permission') ||
       msg.includes('missing or insufficient') ||
       msg.includes('network') ||
       msg.includes('unavailable') ||
       msg.includes('failed to fetch') ||
-      msg.includes('load failed');
+      msg.includes('load failed') ||
+      msg.includes('loading chunk') ||
+      msg.includes('loading css chunk') ||
+      msg.includes('dynamically imported module') ||
+      msg.includes('cannot read properties of null') ||
+      msg.includes('cannot read properties of undefined') ||
+      msg.includes('undefined is not an object') ||
+      msg.includes('null is not an object') ||
+      name === 'typeerror' ||
+      name === 'chunkerror';
 
-    if (isTransient && this.state.autoRetries < 2) {
+    if (isTransient && this.state.autoRetries < 3) {
+      const delay = this._retryDelays[this.state.autoRetries] || 5000;
+      log.boundary(`Auto-retrying in ${delay}ms (attempt ${this.state.autoRetries + 1}/3):`, msg.slice(0, 100));
       this._retryTimer = setTimeout(() => {
         this.setState((s) => ({
           hasError: false,
@@ -68,7 +82,7 @@ export default class AppErrorBoundary extends React.Component {
           retryKey: s.retryKey + 1,
           autoRetries: s.autoRetries + 1,
         }));
-      }, 1500);
+      }, delay);
       return;
     }
   }
@@ -107,14 +121,24 @@ export default class AppErrorBoundary extends React.Component {
 
     // During auto-retry, show a subtle spinner instead of the full error screen.
     const msg = String(this.state.error?.message || '').toLowerCase();
+    const name = String(this.state.error?.name || '').toLowerCase();
     const isTransient =
       msg.includes('permission') ||
       msg.includes('missing or insufficient') ||
       msg.includes('network') ||
       msg.includes('unavailable') ||
       msg.includes('failed to fetch') ||
-      msg.includes('load failed');
-    if (isTransient && this.state.autoRetries < 2) {
+      msg.includes('load failed') ||
+      msg.includes('loading chunk') ||
+      msg.includes('loading css chunk') ||
+      msg.includes('dynamically imported module') ||
+      msg.includes('cannot read properties of null') ||
+      msg.includes('cannot read properties of undefined') ||
+      msg.includes('undefined is not an object') ||
+      msg.includes('null is not an object') ||
+      name === 'typeerror' ||
+      name === 'chunkerror';
+    if (isTransient && this.state.autoRetries < 3) {
       return (
         <div
           style={{

@@ -5,10 +5,11 @@ import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import MenuRenderer from '../../components/menu/MenuRenderer';
 import {
   getBusinessByUsername,
-  subscribeToMenuSettings,
+  subscribeToBusiness,
   subscribeToProducts,
 } from '../../services/db';
 import { auth } from '../../services/firebase';
+import { trackEvent } from '../../services/menuAnalytics';
 
 export default function PublishedMenu() {
   const { username } = useParams();
@@ -76,12 +77,41 @@ export default function PublishedMenu() {
 
       console.log('[PublishedMenu] Business found:', biz.id, biz.name);
       setBusiness(biz);
+      
+      // Wait for auth to settle before tracking the menu view event.
+      // Anonymous sign-in may still be in progress from the other useEffect.
+      // We use a small delay to let it complete, then fire regardless.
+      const waitForAuthAndTrack = () => {
+        const fireEvent = () => {
+          if (!mounted) return;
+          trackEvent('menu_view', biz.id, username);
+        };
+        if (auth.currentUser) {
+          fireEvent();
+        } else {
+          // Wait up to 1.5s for anonymous auth, then fire anyway
+          const timer = setTimeout(fireEvent, 1500);
+          const unsub = onAuthStateChanged(auth, (user) => {
+            if (user && mounted) {
+              clearTimeout(timer);
+              fireEvent();
+              unsub();
+            }
+          });
+          // Cleanup if component unmounts
+          setTimeout(() => unsub(), 2000);
+        }
+      };
+      waitForAuthAndTrack();
 
-      // Real-time settings listener — updates whenever baker changes template
-      unsubSettings = subscribeToMenuSettings(biz.id, (menuSettings) => {
+      // Real-time settings listener — updates whenever baker publishes template
+      unsubSettings = subscribeToBusiness((bizData) => {
         console.log('[PublishedMenu] Menu settings updated via onSnapshot');
-        if (mounted) setSettings(menuSettings);
-      });
+        if (mounted && bizData) {
+          setBusiness(bizData);
+          setSettings(bizData.menuSettings || {});
+        }
+      }, null, biz.id);
 
       // Real-time products listener — already real-time in the old code too
       unsubProducts = subscribeToProducts(
@@ -92,7 +122,10 @@ export default function PublishedMenu() {
             setLoading(false);
           }
         },
-        null,
+        (error) => {
+          console.error('[PublishedMenu] Products error:', error);
+          if (mounted) setLoading(false);
+        },
         biz.id
       );
     };

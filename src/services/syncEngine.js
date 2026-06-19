@@ -140,7 +140,7 @@ export async function flushQueue(handler, uid) {
   let flushed = 0;
   for (const action of [...queue]) {
     try {
-      // eslint-disable-next-line no-await-in-loop
+       
       await handler(action);
       queue = reduceQueue(queue, { kind: 'complete', id: action.id });
       writeQueue(uid, queue);

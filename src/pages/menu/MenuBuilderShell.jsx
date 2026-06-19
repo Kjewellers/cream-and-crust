@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, LayoutDashboard, ListTree, Palette, PackagePlus, Send, Store, Check } from 'lucide-react';
+import { Eye, LayoutDashboard, ListTree, Palette, PackagePlus, Send, Store, Check, TrendingUp } from 'lucide-react';
 import { useMenuBuilderData } from './useMenuBuilderData';
 
 // The four build steps shown in the progress bar.
@@ -206,9 +206,10 @@ function StepProgressBar() {
   );
 }
 
-export default function MenuBuilderShell({ children, title, subtitle, action }) {
+export default function MenuBuilderShell({ children, title, subtitle, action, hideProgressBar }) {
   const location = useLocation();
   const isDashboard = location.pathname === '/menu-builder' || location.pathname === '/menu-builder/';
+  const isAnalytics = location.pathname === '/menu-builder/analytics';
 
   return (
     <motion.div
@@ -256,12 +257,39 @@ export default function MenuBuilderShell({ children, title, subtitle, action }) 
             </h1>
             <p style={{ margin: '5px 0 0', fontSize: '0.85rem', color: 'var(--text2)', lineHeight: 1.45 }}>{subtitle}</p>
           </div>
-          {action && <div style={{ flexShrink: 0 }}>{action}</div>}
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+            {!isAnalytics && (
+              <NavLink
+                to="/menu-builder/analytics"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  height: 38,
+                  padding: '0 14px',
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(52,211,153,0.05) 100%)',
+                  border: '1px solid rgba(16,185,129,0.25)',
+                  color: '#047857',
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  boxShadow: '0 2px 8px rgba(16,185,129,0.1)',
+                  transition: 'transform 0.15s',
+                }}
+                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(0.97)'}
+                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <TrendingUp size={14} strokeWidth={2.5} /> Analytics
+              </NavLink>
+            )}
+            {action && <div>{action}</div>}
+          </div>
         </div>
       </div>
 
       {/* Step progress bar */}
-      <StepProgressBar />
+      {!hideProgressBar && !isAnalytics && <StepProgressBar />}
 
       {children}
     </motion.div>

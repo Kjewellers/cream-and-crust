@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Globe, Instagram, MessageCircle, X } from 'lucide-react';
 import { addInquiryToDB, addNotificationToDB } from '../../services/db';
 import { normalizePhone } from '../../utils/whatsappLink';
+import { trackEvent } from '../../services/menuAnalytics';
 
 export default function OrderChannelPicker({
   open,
@@ -76,7 +77,7 @@ export default function OrderChannelPicker({
       }).catch((e) => console.warn(`notify (${channel}) failed:`, e?.code || e?.message)));
   };
 
-  const handleWhatsapp = () => {
+  const handleWhatsapp = async () => {
     if (!whatsappNumber) return;
     let message;
     if (product && product.selectedWeight) {
@@ -87,25 +88,34 @@ export default function OrderChannelPicker({
       message = `Hi ${bakeryName}, I'd like to place an order from your menu.`;
     }
 
-    // Always use https://wa.me/ (NOT whatsapp:// — unreliable on Android Chrome,
-    // Samsung Internet, and in-app WebViews). Must open synchronously in same
-    // click tick so Android popup blocker doesn't intercept it.
+    // Use cross-platform link opener instead of window.open
     const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
-    console.log('[OrderChannelPicker] Opening WhatsApp:', url);
-    window.open(url, '_blank', 'noopener,noreferrer');
+    try {
+      const { openLink } = await import('../../utils/openLink');
+      await openLink(url);
+    } catch (e) {
+      // Fallback if import fails
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
 
     // Background logging — fire-and-forget, never blocks the redirect
     const logMsg = product && product.selectedWeight
       ? `Someone wants ${product.name} (${product.selectedWeightLabel}) \u2014 \u20B9${product.price}`
       : product ? `Someone wants ${product.name}` : 'Someone is interested in your menu.';
     logChannelEvent('whatsapp', `\u{1F389} New WhatsApp order click`, logMsg);
+    trackEvent('whatsapp_click', bakeryUid, data?.username || 'default', product?.id, { categoryId: product?.category });
     onClose();
   };
 
-  const handleInstagram = () => {
+  const handleInstagram = async () => {
     if (!instagramHandle) return;
     const url = `https://instagram.com/${instagramHandle}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+    try {
+      const { openLink } = await import('../../utils/openLink');
+      await openLink(url);
+    } catch (e) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
     logChannelEvent(
       'instagram',
       'Customer visited your Instagram',
@@ -113,6 +123,7 @@ export default function OrderChannelPicker({
         ? `Someone tapped "${product.name}" and went to your Instagram.`
         : 'Someone went to your Instagram from your menu.',
     );
+    trackEvent('instagram_click', bakeryUid, data?.username || 'default', product?.id, { categoryId: product?.category });
     onClose();
   };
 

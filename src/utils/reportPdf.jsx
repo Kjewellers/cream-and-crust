@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import ReportPdfTemplate from '../components/reports/ReportPdfTemplate';
+import { saveFileToDocuments } from '../services/nativeShare';
 
 const cleanPart = (v, fallback = 'report') =>
   String(v || fallback)
@@ -87,13 +88,7 @@ export async function generateReportPdf(report, bakery = {}) {
 
 /** Generate + trigger a download. */
 export async function downloadReportPdf(report, bakery = {}) {
-  const { objectUrl, fileName } = await generateReportPdf(report, bakery);
-  const link = document.createElement('a');
-  link.href = objectUrl;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+  const { blob, fileName } = await generateReportPdf(report, bakery);
+  await saveFileToDocuments({ blob, fileName });
   return fileName;
 }

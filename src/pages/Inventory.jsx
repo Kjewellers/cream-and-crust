@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  subscribeToInventory,
+
   addInventoryToDB,
   updateInventoryStockInDB,
   updateInventoryFieldsInDB,
@@ -27,8 +27,9 @@ import {
   deleteInventoryFromDB,
   addExpenseToDB,
 } from '../services/db';
+import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { Skeleton, showToast, triggerHaptic, EmptyState, PressButton } from '../components/iOS';
+import { Skeleton, showToast, triggerHaptic, EmptyState, PressButton, BottomSheet } from '../components/iOS';
 import { IndianRupee, Store, Calendar as CalendarIcon } from 'lucide-react';
 import ModuleTour from '../components/ModuleTour';
 import { inventoryTourSteps } from '../components/tours/inventoryTour';
@@ -106,19 +107,28 @@ const QuickOrderApps = () => (
           key={app.name}
           whileTap={{ scale: 0.93 }}
           whileHover={{ scale: 1.04, y: -2 }}
-          onClick={() => window.open(app.webUrl, '_blank')}
+          onClick={async () => {
+            try {
+              const { openLink } = await import('../utils/openLink');
+              await openLink(app.webUrl);
+            } catch {
+              window.open(app.webUrl, '_blank');
+            }
+          }}
           style={{
             background: app.color,
-            border: 'none',
-            borderRadius: 16,
-            padding: '14px 6px 12px',
+            border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: 18,
+            padding: '16px 8px 14px',
             cursor: 'pointer',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             gap: 6,
-            boxShadow: `0 4px 14px ${app.color}55`,
-            transition: 'all 0.2s',
+            boxShadow: `0 8px 24px ${app.color}40`,
+            transition: 'all 0.2s var(--spring)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
           }}
         >
           <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>{app.emoji}</span>
@@ -136,10 +146,15 @@ const QuickOrderApps = () => (
 
 export default function Inventory() {
   const { currentUser } = useAuth();
-  const [inventory, setInventory] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { inventory, loading } = useData();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All'); // All, Low, Healthy
+
+  useEffect(() => {
+    const handleOpenModal = () => setShowAddModal(true);
+    window.addEventListener('open-new-inventory-modal', handleOpenModal);
+    return () => window.removeEventListener('open-new-inventory-modal', handleOpenModal);
+  }, []);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -177,18 +192,7 @@ export default function Inventory() {
     return days <= 7 && days >= 0;
   };
 
-  useEffect(() => {
-    if (!currentUser) return;
-    const unsubscribe = subscribeToInventory(
-      (items) => {
-        setInventory(items);
-        setLoading(false);
-      },
-      null,
-      currentUser.uid
-    );
-    return () => unsubscribe();
-  }, [currentUser]);
+
 
   const filteredItems = useMemo(() => {
     let list = inventory.filter((i) => (i.item || '').toLowerCase().includes(search.toLowerCase()));
@@ -522,16 +526,16 @@ export default function Inventory() {
                       )}
                       {expired && (
                         <span
-                          className="badge"
-                          style={{ fontSize: 10, background: '#FF3B30', color: 'white' }}
+                          className="badge pulse"
+                          style={{ fontSize: 10, background: 'rgba(255,59,48,0.15)', color: '#FF3B30', border: '1px solid rgba(255,59,48,0.3)' }}
                         >
                           EXPIRED
                         </span>
                       )}
                       {!expired && expiring && (
                         <span
-                          className="badge"
-                          style={{ fontSize: 10, background: '#FF9500', color: 'white' }}
+                          className="badge pulse"
+                          style={{ fontSize: 10, background: 'rgba(255,149,0,0.15)', color: '#E68600', border: '1px solid rgba(255,149,0,0.3)' }}
                         >
                           EXPIRING SOON
                         </span>
@@ -565,9 +569,9 @@ export default function Inventory() {
                         marginBottom: 8,
                       }}
                     >
-                      <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>
+                      <span style={{ fontSize: '1.6rem', fontWeight: 800, fontFamily: 'var(--font-serif)' }}>
                         {item.stock}{' '}
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text3)' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text3)', fontFamily: 'var(--font)' }}>
                           {item.unit}
                         </span>
                       </span>
@@ -589,7 +593,9 @@ export default function Inventory() {
                         animate={{ width: `${health}%` }}
                         style={{
                           height: '100%',
-                          background: isLow ? '#FF3B30' : '#22C55E',
+                          background: isLow 
+                            ? 'linear-gradient(90deg, #FF3B30, #FF6B6B)' 
+                            : 'linear-gradient(90deg, #34D399, #10B981)',
                           borderRadius: 3,
                         }}
                       />
@@ -651,39 +657,63 @@ export default function Inventory() {
       )}
 
       {/* Add Modal */}
-      <AnimatePresence>
-        {showAddModal && (
-          <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-            <motion.div
-              initial={{ y: 50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 50, opacity: 0 }}
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 480, padding: 32, borderRadius: 24 }}
-            >
-              <h2 style={{ fontWeight: 800, marginBottom: 8, fontSize: '1.6rem' }}>
-                New Inventory Item
-              </h2>
-              <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginBottom: 24 }}>
-                Define stock levels and initial cost
-              </p>
+      <BottomSheet open={showAddModal} onClose={() => setShowAddModal(false)} title="New Inventory Item">
+        <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginTop: -10, marginBottom: 24 }}>
+          Define stock levels and initial cost
+        </p>
 
-              <form onSubmit={handleAddItem}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  <div className="form-group full">
+        <form onSubmit={handleAddItem}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                  <div className="form-group">
                     <label className="form-label">Item Name</label>
                     <input
                       required
                       autoFocus
-                      placeholder="e.g. Belgian Chocolate"
+                      placeholder="e.g. Premium Butter"
                       value={addForm.item}
                       onChange={(e) => setAddForm({ ...addForm, item: e.target.value })}
-                      style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}
+                      style={{
+                        height: 56,
+                        borderRadius: 16,
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
+                        fontSize: '1.1rem',
+                        fontWeight: 600,
+                      }}
                     />
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Category</label>
+                    <div
+                      style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}
+                      className="no-scrollbar"
+                    >
+                      {CATS.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setAddForm({ ...addForm, category: c })}
+                          style={{
+                            padding: '10px 18px',
+                            borderRadius: 12,
+                            fontSize: 13,
+                            fontWeight: 700,
+                            whiteSpace: 'nowrap',
+                            background: addForm.category === c ? 'var(--text)' : 'var(--bg)',
+                            color: addForm.category === c ? 'white' : 'var(--text2)',
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Current Stock</label>
                       <input
@@ -691,9 +721,17 @@ export default function Inventory() {
                         inputMode="decimal"
                         step="0.01"
                         required
+                        placeholder="0"
                         value={addForm.stock}
                         onChange={(e) => setAddForm({ ...addForm, stock: e.target.value })}
-                        style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}
+                        style={{
+                          height: 50,
+                          borderRadius: 14,
+                          background: 'var(--bg)',
+                          border: '1px solid var(--border)',
+                          textAlign: 'center',
+                          fontWeight: 800,
+                        }}
                       />
                     </div>
                     <div className="form-group">
@@ -703,71 +741,67 @@ export default function Inventory() {
                         inputMode="decimal"
                         step="0.01"
                         required
+                        placeholder="0"
                         value={addForm.minStock}
                         onChange={(e) => setAddForm({ ...addForm, minStock: e.target.value })}
-                        style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}
+                        style={{
+                          height: 50,
+                          borderRadius: 14,
+                          background: 'var(--bg)',
+                          border: '1px solid var(--border)',
+                          textAlign: 'center',
+                          fontWeight: 800,
+                        }}
                       />
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div className="form-group">
-                      <label className="form-label">Category</label>
-                      <select
-                        value={addForm.category}
-                        onChange={(e) => setAddForm({ ...addForm, category: e.target.value })}
-                        style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}
-                      >
-                        {CATS.map((c) => (
-                          <option key={c}>{c}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Unit</label>
                       <select
                         value={addForm.unit}
                         onChange={(e) => setAddForm({ ...addForm, unit: e.target.value })}
-                        style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}
+                        style={{ height: 50, borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--border)' }}
                       >
                         {UNITS.map((u) => (
                           <option key={u}>{u}</option>
                         ))}
                       </select>
                     </div>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Expiry Date (Optional)</label>
-                    <div style={{ position: 'relative' }}>
-                      <CalendarIcon
-                        size={16}
-                        style={{ position: 'absolute', left: 14, top: 16, color: 'var(--text3)' }}
-                      />
-                      <input
-                        type="date"
-                        value={addForm.expiryDate}
-                        onChange={(e) => setAddForm({ ...addForm, expiryDate: e.target.value })}
-                        style={{
-                          paddingLeft: 40,
-                          height: 50,
-                          borderRadius: 12,
-                          background: 'var(--bg)',
-                          border: '1px solid var(--border)',
-                          width: '100%',
-                        }}
-                      />
+                    <div className="form-group">
+                      <label className="form-label">Expiry Date (Optional)</label>
+                      <div style={{ position: 'relative' }}>
+                        <CalendarIcon
+                          size={16}
+                          style={{ position: 'absolute', left: 14, top: 16, color: 'var(--text3)' }}
+                        />
+                        <input
+                          type="date"
+                          value={addForm.expiryDate}
+                          onChange={(e) => setAddForm({ ...addForm, expiryDate: e.target.value })}
+                          style={{
+                            paddingLeft: 40,
+                            height: 50,
+                            borderRadius: 14,
+                            background: 'var(--bg)',
+                            border: '1px solid var(--border)',
+                            width: '100%',
+                            fontSize: 13,
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <div style={{ height: 1, background: 'var(--border)', margin: '8px 0' }} />
+                  <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
                   <div
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 8,
                       color: 'var(--accent)',
-                      marginBottom: 4,
+                      marginBottom: -8,
                     }}
                   >
                     <IndianRupee size={14} />
@@ -776,16 +810,16 @@ export default function Inventory() {
                     </span>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
-                      <label className="form-label">Initial Cost (₹)</label>
+                      <label className="form-label">Initial Cost</label>
                       <input
                         type="number"
                         inputMode="decimal"
-                        placeholder="0"
+                        placeholder="₹ 0"
                         value={addForm.cost}
                         onChange={(e) => setAddForm({ ...addForm, cost: e.target.value })}
-                        style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}
+                        style={{ height: 50, borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--border)' }}
                       />
                     </div>
                     <div className="form-group">
@@ -794,91 +828,45 @@ export default function Inventory() {
                         placeholder="e.g. Amazon"
                         value={addForm.vendor}
                         onChange={(e) => setAddForm({ ...addForm, vendor: e.target.value })}
-                        style={{ height: 50, borderRadius: 12, background: 'var(--bg)' }}
+                        style={{ height: 50, borderRadius: 14, background: 'var(--bg)', border: '1px solid var(--border)' }}
                       />
                     </div>
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{
-                    width: '100%',
-                    height: 54,
-                    borderRadius: 16,
-                    marginTop: 24,
-                    fontSize: '1rem',
-                    fontWeight: 800,
-                  }}
-                >
-                  Create Item & Record Cost
-                </button>
+                <div style={{ marginTop: 32 }}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{
+                      width: '100%',
+                      height: 60,
+                      borderRadius: 20,
+                      fontSize: '1.1rem',
+                      fontWeight: 800,
+                      boxShadow: 'var(--shadow-accent)',
+                    }}
+                  >
+                    Create Item & Record Cost
+                  </button>
+                </div>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </BottomSheet>
 
       {/* Restock Modal */}
-      <AnimatePresence>
-        {showRestockModal && selectedItem && (
-          <div className="modal-overlay" onClick={() => setShowRestockModal(false)}>
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 440, padding: 0, borderRadius: 28, overflow: 'hidden' }}
-            >
-              <div
-                style={{
-                  padding: '32px 32px 24px',
-                  background: 'linear-gradient(135deg, var(--bg2), var(--cream))',
-                  borderBottom: '1px solid var(--border)',
-                  textAlign: 'center',
-                }}
-              >
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: '20px',
-                    background: 'var(--accent)',
-                    color: 'white',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 16px',
-                    boxShadow: 'var(--shadow-accent)',
-                  }}
-                >
-                  <RefreshCcw size={32} />
-                </div>
-                <h2
-                  style={{
-                    fontWeight: 900,
-                    marginBottom: 4,
-                    fontSize: '1.6rem',
-                    letterSpacing: '-0.03em',
-                  }}
-                >
-                  Restock {selectedItem.item}
-                </h2>
-                <p style={{ color: 'var(--text3)', fontSize: '0.9rem' }}>
-                  Current balance: {selectedItem.stock} {selectedItem.unit}
-                </p>
-              </div>
+      <BottomSheet open={showRestockModal && selectedItem != null} onClose={() => setShowRestockModal(false)} title={`Restock ${selectedItem?.item}`}>
+        <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginTop: -10, marginBottom: 24 }}>
+          Current balance: {selectedItem?.stock} {selectedItem?.unit}
+        </p>
 
-              <form onSubmit={handleRestock} style={{ padding: 32 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <form onSubmit={handleRestock}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   <div className="form-group">
-                    <label className="form-label">Quantity to Add ({selectedItem.unit})</label>
+                    <label className="form-label">Quantity to Add ({selectedItem?.unit})</label>
                     <div style={{ position: 'relative' }}>
                       <Package
                         size={18}
-                        style={{ position: 'absolute', left: 16, top: 16, color: 'var(--text3)' }}
+                        style={{ position: 'absolute', left: 16, top: 18, color: 'var(--text3)' }}
                       />
                       <input
                         type="number"
@@ -889,9 +877,9 @@ export default function Inventory() {
                         value={restockForm.amount}
                         onChange={(e) => setRestockForm({ ...restockForm, amount: e.target.value })}
                         style={{
-                          height: 50,
+                          height: 56,
                           paddingLeft: 48,
-                          borderRadius: 14,
+                          borderRadius: 16,
                           background: 'var(--bg)',
                           border: '1px solid var(--border)',
                           fontSize: '1.1rem',
@@ -901,13 +889,13 @@ export default function Inventory() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Total Cost (₹)</label>
                       <div style={{ position: 'relative' }}>
                         <IndianRupee
                           size={16}
-                          style={{ position: 'absolute', left: 14, top: 14, color: 'var(--text3)' }}
+                          style={{ position: 'absolute', left: 14, top: 16, color: 'var(--text3)' }}
                         />
                         <input
                           type="number"
@@ -915,9 +903,9 @@ export default function Inventory() {
                           value={restockForm.cost}
                           onChange={(e) => setRestockForm({ ...restockForm, cost: e.target.value })}
                           style={{
-                            height: 46,
+                            height: 50,
                             paddingLeft: 36,
-                            borderRadius: 12,
+                            borderRadius: 14,
                             background: 'var(--bg)',
                             border: '1px solid var(--border)',
                             fontWeight: 700,
@@ -932,23 +920,23 @@ export default function Inventory() {
                         value={restockForm.date}
                         onChange={(e) => setRestockForm({ ...restockForm, date: e.target.value })}
                         style={{
-                          height: 46,
-                          borderRadius: 12,
+                          height: 50,
+                          borderRadius: 14,
                           background: 'var(--bg)',
                           border: '1px solid var(--border)',
-                          fontSize: 12,
+                          fontSize: 13,
                         }}
                       />
                     </div>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="form-group">
                       <label className="form-label">Vendor (Optional)</label>
                       <div style={{ position: 'relative' }}>
                         <Store
                           size={16}
-                          style={{ position: 'absolute', left: 14, top: 14, color: 'var(--text3)' }}
+                          style={{ position: 'absolute', left: 14, top: 16, color: 'var(--text3)' }}
                         />
                         <input
                           placeholder="Where did you buy this?"
@@ -957,9 +945,9 @@ export default function Inventory() {
                             setRestockForm({ ...restockForm, vendor: e.target.value })
                           }
                           style={{
-                            height: 46,
+                            height: 50,
                             paddingLeft: 36,
-                            borderRadius: 12,
+                            borderRadius: 14,
                             background: 'var(--bg)',
                             border: '1px solid var(--border)',
                             fontSize: 13,
@@ -972,7 +960,7 @@ export default function Inventory() {
                       <div style={{ position: 'relative' }}>
                         <CalendarIcon
                           size={16}
-                          style={{ position: 'absolute', left: 14, top: 14, color: 'var(--text3)' }}
+                          style={{ position: 'absolute', left: 14, top: 16, color: 'var(--text3)' }}
                         />
                         <input
                           type="date"
@@ -981,9 +969,9 @@ export default function Inventory() {
                             setRestockForm({ ...restockForm, expiryDate: e.target.value })
                           }
                           style={{
-                            height: 46,
+                            height: 50,
                             paddingLeft: 36,
-                            borderRadius: 12,
+                            borderRadius: 14,
                             background: 'var(--bg)',
                             border: '1px solid var(--border)',
                             fontSize: 13,
@@ -994,26 +982,24 @@ export default function Inventory() {
                   </div>
                 </div>
 
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{
-                    width: '100%',
-                    height: 56,
-                    borderRadius: 16,
-                    marginTop: 24,
-                    fontSize: '1rem',
-                    fontWeight: 800,
-                    boxShadow: 'var(--shadow-accent)',
-                  }}
-                >
-                  Update Stock & Record Expense
-                </button>
+                <div style={{ marginTop: 32 }}>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{
+                      width: '100%',
+                      height: 60,
+                      borderRadius: 20,
+                      fontSize: '1.1rem',
+                      fontWeight: 800,
+                      boxShadow: 'var(--shadow-accent)',
+                    }}
+                  >
+                    Update Stock & Record Expense
+                  </button>
+                </div>
               </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      </BottomSheet>
       <AnimatedDemo moduleId="inventory" title="Track Your Stock" scenes={inventoryDemoScenes} />
     </motion.div>
   );

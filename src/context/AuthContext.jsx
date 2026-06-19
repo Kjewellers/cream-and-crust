@@ -1,7 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../services/firebase';
-import { getUserRole, logoutUser, getOnboardingStatus, completeOnboarding } from '../services/auth';
+import {
+  getUserRole,
+  logoutUser,
+  getOnboardingStatus,
+  completeOnboarding,
+  handleGoogleRedirectResult,
+} from '../services/auth';
+import { withAuthTimeout } from '../utils/authTimeout';
+import { clearAIPrivacyState } from '../ai/auditLog';
 
 const AuthContext = createContext();
 
@@ -26,21 +34,34 @@ export function AuthProvider({ children }) {
   const lastLoadedUid = useRef(null);
 
   useEffect(() => {
-    // ── Timeout helper ─────────────────────────────────────────────────────────
     // Wrap a promise with a max-wait timeout so a hung Firestore read
     // (App Check rejection, no network) never freezes the splash screen.
-    // Reduced to 4s because reads now run in PARALLEL, not sequentially.
-    const withTimeout = (promise, ms = 4000, fallback) =>
+    // Reduced to 3s because reads now run in PARALLEL, not sequentially,
+    // and splash hard timeout is 3.5s.
+    const withTimeout = (promise, ms = 3000, fallback) =>
       Promise.race([
         promise,
         new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
       ]);
 
-    console.log('[AuthContext] Attaching onAuthStateChanged listener');
+    console.warn('[CC:Auth] Attaching onAuthStateChanged listener');
+    handleGoogleRedirectResult().catch((error) => {
+      console.warn('[CC:Auth] Google redirect result skipped:', error?.code || error?.message);
+    });
+
+    let initFailsafe = setTimeout(() => {
+      console.warn('[CC:Auth] onAuthStateChanged failsafe triggered (8s)! Forcing loading = false.');
+      setLoading(false);
+    }, 8000);
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (initFailsafe) {
+        clearTimeout(initFailsafe);
+        initFailsafe = null;
+      }
+      
       const t0 = Date.now();
-      console.log('[AuthContext] onAuthStateChanged fired:', user ? `uid=${user.uid}` : 'null (signed out)');
+      console.warn('[CC:Auth] onAuthStateChanged fired:', user ? `uid=${user.uid}` : 'null (signed out)');
 
       try {
         const onPublicRoute =
@@ -50,8 +71,9 @@ export function AuthProvider({ children }) {
 
         // ── Anonymous user cleanup ─────────────────────────────────────────────
         if (user?.isAnonymous && !onPublicRoute) {
-          console.log('[AuthContext] Cleaning up anonymous user');
+          console.warn('[CC:Auth] Cleaning up anonymous user');
           try { await user.delete?.(); } catch (_) { /* ignore */ }
+          clearAIPrivacyState();
           localStorage.removeItem('cc_currentUser');
           localStorage.removeItem('cc_userRole');
           setCurrentUser(null);
@@ -68,8 +90,9 @@ export function AuthProvider({ children }) {
           // If a DIFFERENT user than the previously cached one just signed in,
           // purge all state atoms immediately so no stale data is shown.
           if (lastLoadedUid.current && lastLoadedUid.current !== user.uid) {
-            console.warn('[AuthContext] Account switch detected! Purging stale state.',
+            console.warn('[CC:Auth] Account switch detected! Purging stale state.',
               'old:', lastLoadedUid.current, '→ new:', user.uid);
+            clearAIPrivacyState();
             setBusiness(null);
             setUserDetails(null);
             setUserRole(null);
@@ -90,18 +113,18 @@ export function AuthProvider({ children }) {
           // ── Parallel Firestore reads ───────────────────────────────────────────
           // OLD: 4 sequential awaits with 6s each = up to 24s splash screen hang
           // NEW: all 4 fire simultaneously — total wait = max(r1, r2, r3, r4) ≈ 4s
-          console.log('[AuthContext] Starting parallel Firestore reads for uid:', user.uid);
+          console.warn('[CC:Auth] Starting parallel Firestore reads for uid:', user.uid);
           const { doc, getDoc } = await import('firebase/firestore');
           const { db } = await import('../services/firebase');
 
           const [roleResult, uDoc, bizDoc, onboardingResult] = await Promise.all([
-            withTimeout(getUserRole(user.uid), 4000, 'admin'),
-            withTimeout(getDoc(doc(db, 'users', user.uid)), 4000, { exists: () => false }),
-            withTimeout(getDoc(doc(db, 'business', user.uid)), 4000, { exists: () => false }),
-            withTimeout(getOnboardingStatus(user.uid), 4000, true),
+            withTimeout(getUserRole(user.uid), 3000, 'admin'),
+            withTimeout(getDoc(doc(db, 'users', user.uid)), 3000, { exists: () => false }),
+            withTimeout(getDoc(doc(db, 'business', user.uid)), 3000, { exists: () => false }),
+            withTimeout(getOnboardingStatus(user.uid), 3000, true),
           ]);
 
-          console.log('[AuthContext] Parallel reads done in', Date.now() - t0, 'ms — role:', roleResult);
+          console.warn('[CC:Auth] Parallel reads done in', Date.now() - t0, 'ms — role:', roleResult);
 
           setUserRole(roleResult);
           localStorage.setItem('cc_userRole', roleResult);
@@ -132,7 +155,8 @@ export function AuthProvider({ children }) {
 
         } else {
           // ── Signed-out ────────────────────────────────────────────────────────
-          console.log('[AuthContext] Signed out — clearing all state');
+          console.warn('[CC:Auth] Signed out — clearing all state');
+          clearAIPrivacyState();
           lastLoadedUid.current = null;
           localStorage.removeItem('cc_currentUser');
           localStorage.removeItem('cc_userRole');
@@ -143,7 +167,7 @@ export function AuthProvider({ children }) {
           setUserDetails(null);
         }
       } catch (error) {
-        console.error('[AuthContext] onAuthStateChanged error:', error);
+        console.error('[CC:Auth] onAuthStateChanged error:', error);
         // Graceful degradation — show app in limited state rather than hanging
         if (user) {
           setCurrentUser(user);
@@ -152,7 +176,7 @@ export function AuthProvider({ children }) {
         }
       } finally {
         const elapsed = Date.now() - t0;
-        console.log('[AuthContext] setLoading(false) — total init time:', elapsed, 'ms');
+        console.warn('[CC:Auth] setLoading(false) — total init time:', elapsed, 'ms');
         setLoading(false);
       }
     });
@@ -169,15 +193,28 @@ export function AuthProvider({ children }) {
     let unsubBiz = () => {};
     import('firebase/firestore').then(({ doc, onSnapshot }) => {
       import('../services/firebase').then(({ db }) => {
-        unsubBiz = onSnapshot(doc(db, 'business', currentUser.uid), (docSnap) => {
-          if (docSnap.exists()) {
-            setBusiness({ id: docSnap.id, ...docSnap.data() });
-          } else {
-            setBusiness({ id: currentUser.uid, name: '', logo: '' });
+        unsubBiz = onSnapshot(
+          doc(db, 'business', currentUser.uid),
+          (docSnap) => {
+            try {
+              if (docSnap.exists()) {
+                setBusiness({ id: docSnap.id, ...docSnap.data() });
+              } else {
+                setBusiness({ id: currentUser.uid, name: '', logo: '' });
+              }
+            } catch (e) {
+              console.warn('[CC:Auth] Business snapshot parse error:', e?.message);
+              setBusiness({ id: currentUser.uid, name: '', logo: '' });
+            }
+          },
+          (error) => {
+            // Listener error (e.g. permission denied) — use fallback
+            console.warn('[CC:Auth] Business listener error:', error?.code);
+            setBusiness((prev) => prev || { id: currentUser.uid, name: '', logo: '' });
           }
-        });
-      });
-    });
+        );
+      }).catch(() => {});
+    }).catch(() => {});
 
     return () => unsubBiz();
   }, [currentUser, userRole]);
@@ -190,7 +227,8 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    console.log('[AuthContext] logout() called');
+    console.warn('[CC:Auth] logout() called');
+    clearAIPrivacyState();
     // Optimistically clear React state for instant UI response (no flicker)
     setCurrentUser(null);
     setUserRole(null);
@@ -199,7 +237,12 @@ export function AuthProvider({ children }) {
     setOnboardingCompleted(true);
     lastLoadedUid.current = null;
     // Full async cleanup (storage + IndexedDB + Firebase signOut)
-    await logoutUser();
+    try {
+      await withAuthTimeout(logoutUser(), 10000, 'Logout');
+    } catch (e) {
+      console.warn('[CC:Auth] Logout timed out, forcing reload:', e);
+      window.location.replace('/login');
+    }
   };
 
   const finishOnboarding = async () => {

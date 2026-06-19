@@ -2,8 +2,10 @@
 // For direct Firestore access, use src/services/db.js instead.
 import { getAuth } from 'firebase/auth';
 
-const BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
-
+let BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+if (typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.()) {
+  BASE = 'https://www.creamandcrust.online/api';
+}
 async function getAuthToken() {
   const auth = getAuth();
   const user = auth.currentUser;
@@ -26,7 +28,7 @@ async function req(method, path, body) {
   if (!res.ok) {
     const text = await res.text();
     let msg = text;
-    try { msg = JSON.parse(text).message || text; } catch(e) {}
+    try { const parsed = JSON.parse(text); msg = parsed.error || parsed.message || parsed.response || text; } catch(e) {}
     throw new Error(msg);
   }
   return res.json();
@@ -55,4 +57,9 @@ export const api = {
 
   // Recipe scraper
   scrapeRecipe: (url) => req('POST', '/scrape-recipe', { url }),
+
+  // AI Chat Proxy
+  chatAI: (data) => req('POST', '/ai/chat', data),
+  describeProduct: (data) => req('POST', '/ai/describe', data),
 };
+

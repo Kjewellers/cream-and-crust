@@ -18,13 +18,13 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  subscribeToExpenses,
   addExpenseToDB,
   deleteExpenseFromDB,
   uploadReceiptToStorage,
 } from '../services/db';
+import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { showToast, triggerHaptic } from '../components/iOS';
+import { showToast, triggerHaptic, PullToRefresh, CardSkeleton, SwipeRow, BottomSheet } from '../components/iOS';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { formatCurrency, toISODate } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
@@ -68,8 +68,7 @@ const emptyForm = {
 };
 
 export default function Expenses() {
-  const [expenses, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { expenses, setExpenses, loading } = useData();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [receiptFile, setReceiptFile] = useState(null);
@@ -79,17 +78,10 @@ export default function Expenses() {
   const { currentUser } = useAuth();
 
   useEffect(() => {
-    if (!currentUser) return;
-    const unsub = subscribeToExpenses(
-      (data) => {
-        setExpenses(data);
-        setLoading(false);
-      },
-      () => setLoading(false),
-      currentUser.uid
-    );
-    return () => unsub();
-  }, [currentUser]);
+    const handleOpenModal = () => setShowModal(true);
+    window.addEventListener('open-new-expense-modal', handleOpenModal);
+    return () => window.removeEventListener('open-new-expense-modal', handleOpenModal);
+  }, []);
 
   const filtered = useMemo(() => {
     return expenses.filter((e) => {
@@ -386,19 +378,16 @@ export default function Expenses() {
       </div>
 
       {/* Expenses List */}
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <PullToRefresh onRefresh={async () => await new Promise(r => setTimeout(r, 600))}>
+      <div style={{ padding: 0, overflow: 'hidden', background: 'transparent' }}>
         {loading ? (
-          <div style={{ padding: 80, textAlign: 'center' }}>
-            <Loader2
-              className="animate-spin"
-              size={32}
-              color="var(--accent)"
-              style={{ margin: '0 auto 12px' }}
-            />
-            <span style={{ color: 'var(--text3)' }}>Fetching records...</span>
+          <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <CardSkeleton lines={2} />
+            <CardSkeleton lines={2} />
+            <CardSkeleton lines={2} />
           </div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: 80, textAlign: 'center' }}>
+          <div className="card" style={{ padding: 80, textAlign: 'center' }}>
             <div style={{ fontSize: '4rem', marginBottom: 20 }}>💰</div>
             <h3 style={{ fontSize: '1.4rem', fontWeight: 700 }}>Clean slate!</h3>
             <p style={{ color: 'var(--text3)', maxWidth: 300, margin: '8px auto 0' }}>
@@ -407,235 +396,174 @@ export default function Expenses() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {filtered.map((e, idx) => (
-              <motion.div
-                key={e.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '18px 24px',
-                  borderBottom: '1px solid var(--border)',
-                  background: 'var(--card)',
-                }}
-              >
-                <div
-                  style={{ display: 'flex', alignItems: 'center', gap: 18, flex: 1, minWidth: 0 }}
+            <AnimatePresence mode="popLayout">
+              {filtered.map((e, idx) => (
+                <SwipeRow key={e.id} onDelete={() => handleDelete(e.id)}>
+                <motion.div
+                  layout
+                  initial={{ opacity: 0, y: 15, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                  whileHover={{ scale: 1.01, boxShadow: '0 4px 14px rgba(0,0,0,0.06)' }}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '18px 24px',
+                    background: 'var(--card)',
+                    borderRadius: '16px',
+                    margin: '0 0 12px 0',
+                    border: '1px solid var(--border)',
+                    transition: 'box-shadow 0.3s',
+                  }}
                 >
                   <div
-                    style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: 16,
-                      background: `${CAT_COLORS[e.category] || '#888'}15`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 22,
-                      flexShrink: 0,
-                    }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 18, flex: 1, minWidth: 0 }}
                   >
-                    {e.category === 'Ingredients'
-                      ? '🌾'
-                      : e.category === 'Packaging'
-                        ? '📦'
-                        : e.category === 'Utilities'
-                          ? '💡'
-                          : e.category === 'Staff'
-                            ? '👤'
-                            : e.category === 'Equipment'
-                              ? '🔧'
-                              : e.category === 'Marketing'
-                                ? '📣'
-                                : e.category === 'Rent'
-                                  ? '🏠'
-                                  : '💰'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div
                       style={{
-                        fontWeight: 700,
-                        fontSize: '1rem',
-                        color: 'var(--text)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
-                      {e.description}
-                    </div>
-                    <div
-                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: 16,
+                        background: `${CAT_COLORS[e.category] || '#888'}15`,
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
-                        fontSize: 12,
-                        color: 'var(--text3)',
-                        marginTop: 4,
-                        flexWrap: 'wrap',
+                        justifyContent: 'center',
+                        fontSize: 22,
+                        flexShrink: 0,
                       }}
                     >
-                      <span
+                      {e.category === 'Ingredients'
+                        ? '🌾'
+                        : e.category === 'Packaging'
+                          ? '📦'
+                          : e.category === 'Utilities'
+                            ? '💡'
+                            : e.category === 'Staff'
+                              ? '👤'
+                              : e.category === 'Equipment'
+                                ? '🔧'
+                                : e.category === 'Marketing'
+                                  ? '📣'
+                                  : e.category === 'Rent'
+                                    ? '🏠'
+                                    : '💰'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
                         style={{
-                          color: CAT_COLORS[e.category],
                           fontWeight: 700,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.04em',
+                          fontSize: '1rem',
+                          color: 'var(--text)',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
                         }}
                       >
-                        {e.category}
-                      </span>
-                      <span>•</span>
-                      <span
+                        {e.description}
+                      </div>
+                      <div
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: 4,
-                          whiteSpace: 'nowrap',
+                          gap: 8,
+                          fontSize: 12,
+                          color: 'var(--text3)',
+                          marginTop: 4,
+                          flexWrap: 'wrap',
                         }}
                       >
-                        <Calendar size={12} /> {e.date || e.createdAt?.slice(0, 10)}
-                      </span>
-                      {e.vendor && (
-                        <>
-                          <span>•</span>
-                          <span
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: '120px',
-                            }}
-                          >
-                            <Store size={12} style={{ flexShrink: 0 }} />{' '}
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                              {e.vendor}
+                        <span
+                          style={{
+                            color: CAT_COLORS[e.category],
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.04em',
+                          }}
+                        >
+                          {e.category}
+                        </span>
+                        <span>•</span>
+                        <span
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <Calendar size={12} /> {e.date || e.createdAt?.slice(0, 10)}
+                        </span>
+                        {e.vendor && (
+                          <>
+                            <span>•</span>
+                            <span
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '120px',
+                              }}
+                            >
+                              <Store size={12} style={{ flexShrink: 0 }} />{' '}
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {e.vendor}
+                              </span>
                             </span>
-                          </span>
-                        </>
-                      )}
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 20,
-                    flexShrink: 0,
-                    marginLeft: 12,
-                  }}
-                >
-                  {e.receiptUrl && (
-                    <a
-                      href={e.receiptUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn-icon"
-                      style={{
-                        color: 'var(--accent)',
-                        background: 'var(--cream)',
-                        width: 36,
-                        height: 36,
-                        borderRadius: 12,
-                      }}
-                    >
-                      <ExternalLink size={16} />
-                    </a>
-                  )}
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--text)' }}>
-                      {formatCurrency(e.amount)}
-                    </div>
-                  </div>
-                  <button
-                    className="btn-icon"
-                    onClick={() => handleDelete(e.id)}
+                  <div
                     style={{
-                      background: 'rgba(255, 59, 48, 0.08)',
-                      color: '#FF3B30',
-                      width: 36,
-                      height: 36,
-                      borderRadius: 12,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 20,
+                      flexShrink: 0,
+                      marginLeft: 12,
                     }}
                   >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                    {e.receiptUrl && (
+                      <a
+                        href={e.receiptUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-icon"
+                        style={{
+                          color: 'var(--accent)',
+                          background: 'var(--cream)',
+                          width: 36,
+                          height: 36,
+                          borderRadius: 12,
+                        }}
+                      >
+                        <ExternalLink size={16} />
+                      </a>
+                    )}
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--text)' }}>
+                        {formatCurrency(e.amount)}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+                </SwipeRow>
+              ))}
+            </AnimatePresence>
           </div>
         )}
       </div>
+      </PullToRefresh>
 
-      <AnimatePresence>
-        {showModal && (
-          <div className="modal-overlay" onClick={() => setShowModal(false)}>
-            <motion.div
-              initial={{ y: '100%', opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: '100%', opacity: 0 }}
-              transition={{ type: 'spring', damping: 30, stiffness: 350 }}
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                maxWidth: 520,
-                padding: 0,
-                borderRadius: 28,
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
-              {/* Premium Modal Header */}
-              <div
-                style={{
-                  padding: '32px 32px 24px',
-                  background: 'linear-gradient(135deg, var(--bg2), var(--cream))',
-                  borderBottom: '1px solid var(--border)',
-                }}
-              >
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <div>
-                    <h2
-                      style={{
-                        margin: 0,
-                        fontSize: '1.8rem',
-                        fontWeight: 900,
-                        letterSpacing: '-0.04em',
-                      }}
-                    >
-                      Record Expense
-                    </h2>
-                    <p style={{ color: 'var(--text3)', fontSize: '0.95rem', marginTop: 4 }}>
-                      Financial intelligence starts here
-                    </p>
-                  </div>
-                  <button
-                    className="btn-icon"
-                    onClick={() => setShowModal(false)}
-                    style={{
-                      background: 'rgba(0,0,0,0.05)',
-                      borderRadius: '50%',
-                      width: 40,
-                      height: 40,
-                    }}
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-              </div>
-
-              <form onSubmit={handleAdd} style={{ padding: 32 }}>
+      <BottomSheet open={showModal} onClose={() => setShowModal(false)} title="Record Expense">
+        <p style={{ color: 'var(--text3)', fontSize: '0.95rem', marginTop: -10, marginBottom: 20 }}>
+          Financial intelligence starts here
+        </p>
+        <form onSubmit={handleAdd}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
                   {/* Amount Entry - Hero Focus */}
                   <div style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -892,11 +820,8 @@ export default function Expenses() {
                     )}
                   </button>
                 </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+        </form>
+      </BottomSheet>
       <AnimatedDemo moduleId="expenses" title="Track Your Spending" scenes={expensesDemoScenes} />
     </motion.div>
   );

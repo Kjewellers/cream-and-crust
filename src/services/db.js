@@ -38,6 +38,56 @@ const removeUndefined = (obj) => {
 };
 
 // ==========================================
+// RECYCLE BIN HELPERS
+// ==========================================
+
+export const restoreFromDB = async (collectionName, id) => {
+  try {
+    await updateDoc(doc(db, collectionName, id), { deleted: false });
+    const uid = auth.currentUser?.uid;
+    auditLog(AUDIT.ITEM_RESTORED, uid, { collectionName, id });
+  } catch (e) {
+    console.error('Error restoring item:', e);
+    throw e;
+  }
+};
+
+export const permanentlyDeleteFromDB = async (collectionName, id) => {
+  try {
+    await deleteDoc(doc(db, collectionName, id));
+    const uid = auth.currentUser?.uid;
+    auditLog(AUDIT.ITEM_PERMANENTLY_DELETED, uid, { collectionName, id });
+  } catch (e) {
+    console.error('Error permanently deleting item:', e);
+    throw e;
+  }
+};
+
+export const fetchDeletedItems = async (userId) => {
+  const uid = userId || auth.currentUser?.uid;
+  if (!uid) return [];
+  const collections = ['orders', 'customers', 'products', 'recipes', 'inventory', 'expenses', 'shoppingList'];
+  let allDeleted = [];
+  try {
+    for (const col of collections) {
+      const q = query(collection(db, col), where('uid', '==', uid));
+      const snap = await getDocs(q);
+      snap.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.deleted === true) {
+          allDeleted.push({ id: docSnap.id, _collection: col, ...data });
+        }
+      });
+    }
+    // Sort by deletedAt desc
+    return allDeleted.sort((a, b) => new Date(b.deletedAt || 0) - new Date(a.deletedAt || 0));
+  } catch (e) {
+    console.error('Error fetching deleted items:', e);
+    return [];
+  }
+};
+
+// ==========================================
 // NOTIFICATIONS
 // ==========================================
 
@@ -476,7 +526,7 @@ export const deleteOrderFromDB = async (orderId) => {
   try {
     const uid = auth.currentUser?.uid;
     const orderRef = doc(db, 'orders', orderId);
-    await deleteDoc(orderRef);
+    await updateDoc(orderRef, { deleted: true, deletedAt: new Date().toISOString() });
     // Audit log — fire-and-forget
     auditLog(AUDIT.ORDER_DELETED, uid, { orderId });
   } catch (e) {
@@ -515,7 +565,7 @@ export const subscribeToOrders = (callback, userId, errorCallback) => {
         };
       });
       const orders = await Promise.all(ordersPromises);
-      callback(orders);
+      callback(orders.filter(o => !o.deleted));
     },
     (error) => {
       console.error('Orders subscription error:', error);
@@ -557,7 +607,7 @@ export const deleteProductFromDB = async (productId) => {
   try {
     const uid = auth.currentUser?.uid;
     const prodRef = doc(db, 'products', productId);
-    await deleteDoc(prodRef);
+    await updateDoc(prodRef, { deleted: true, deletedAt: new Date().toISOString() });
     auditLog(AUDIT.PRODUCT_DELETED, uid, { productId });
   } catch (e) {
     console.error('Error deleting product: ', e);
@@ -576,7 +626,8 @@ export const subscribeToProducts = (callback, errorCallback, userId) => {
     (snapshot) => {
       const products = [];
       snapshot.forEach((doc) => {
-        products.push({ id: doc.id, ...doc.data() });
+        const data = doc.data();
+        if (!data.deleted) products.push({ id: doc.id, ...data });
       });
       callback(products);
     },
@@ -617,7 +668,7 @@ export const deleteRecipeFromDB = async (recipeId) => {
   try {
     const uid = auth.currentUser?.uid;
     const recipeRef = doc(db, 'recipes', recipeId);
-    await deleteDoc(recipeRef);
+    await updateDoc(recipeRef, { deleted: true, deletedAt: new Date().toISOString() });
     auditLog(AUDIT.RECIPE_DELETED, uid, { recipeId });
   } catch (e) {
     console.error('Error deleting recipe: ', e);
@@ -634,7 +685,12 @@ export const subscribeToRecipes = (callback, errorCallback, userId) => {
   return onSnapshot(
     q,
     (snapshot) => {
-      callback(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      const valid = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (!data.deleted) valid.push({ id: doc.id, ...data });
+      });
+      callback(valid);
     },
     (error) => {
       console.error('Recipes subscription error:', error);
@@ -683,8 +739,10 @@ export const updateInventoryFieldsInDB = async (itemId, fields) => {
 
 export const deleteInventoryFromDB = async (itemId) => {
   try {
+    const uid = auth.currentUser?.uid;
     const itemRef = doc(db, 'inventory', itemId);
-    await deleteDoc(itemRef);
+    await updateDoc(itemRef, { deleted: true, deletedAt: new Date().toISOString() });
+    auditLog(AUDIT.INVENTORY_DELETED, uid, { itemId });
   } catch (e) {
     console.error('Error deleting inventory item: ', e);
     throw e;
@@ -700,7 +758,12 @@ export const subscribeToInventory = (callback, errorCallback, userId) => {
   return onSnapshot(
     q,
     (snapshot) => {
-      callback(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+      const valid = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (!data.deleted) valid.push({ id: doc.id, ...data });
+      });
+      callback(valid);
     },
     (error) => {
       console.error('Inventory subscription error:', error);
@@ -726,6 +789,7 @@ export const subscribeToCustomers = (callback, errorCallback, userId) => {
     async (snapshot) => {
       const customersPromises = snapshot.docs.map(async (doc) => {
         const data = doc.data();
+        if (data.deleted) return null;
         return {
           id: doc.id,
           ...data,
@@ -734,7 +798,8 @@ export const subscribeToCustomers = (callback, errorCallback, userId) => {
           address: await decryptData(data.address),
         };
       });
-      const customers = await Promise.all(customersPromises);
+      const resolved = await Promise.all(customersPromises);
+      const customers = resolved.filter(c => c !== null);
       callback(customers);
     },
     (error) => {
@@ -782,8 +847,10 @@ export const updateCustomerInDB = async (customerId, customerData) => {
 
 export const deleteCustomerFromDB = async (customerId) => {
   try {
+    const uid = auth.currentUser?.uid;
     const custRef = doc(db, 'customers', customerId);
-    await deleteDoc(custRef);
+    await updateDoc(custRef, { deleted: true, deletedAt: new Date().toISOString() });
+    auditLog(AUDIT.CUSTOMER_DELETED, uid, { customerId });
   } catch (e) {
     console.error('Error deleting customer: ', e);
     throw e;
@@ -928,7 +995,11 @@ export const publishMenuSettings = async (uid, settings) => {
   try {
     const publishedAt = new Date().toISOString();
     await updateMenuSettings(uid, { ...settings, published: true, publishedAt });
-    await updateBusinessInDB(uid, { menuPublished: true, menuPublishedAt: publishedAt });
+    await updateBusinessInDB(uid, { 
+      menuPublished: true, 
+      menuPublishedAt: publishedAt,
+      menuSettings: settings 
+    });
   } catch (e) {
     console.error('Error publishing menu:', e);
     throw e;
@@ -1003,7 +1074,9 @@ export const addExpenseToDB = async (expenseData) => {
 
 export const deleteExpenseFromDB = async (expenseId) => {
   try {
-    await deleteDoc(doc(db, 'expenses', expenseId));
+    const uid = auth.currentUser?.uid;
+    await updateDoc(doc(db, 'expenses', expenseId), { deleted: true, deletedAt: new Date().toISOString() });
+    auditLog(AUDIT.EXPENSE_DELETED, uid, { expenseId });
   } catch (e) {
     console.error('Error deleting expense:', e);
     throw e;
@@ -1019,7 +1092,11 @@ export const subscribeToExpenses = (callback, errorCallback, userId) => {
   return onSnapshot(
     q,
     (snapshot) => {
-      const expenses = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      let expenses = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (!data.deleted) expenses.push({ id: doc.id, ...data });
+      });
       // Sort in memory to avoid index requirements
       expenses.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       callback(expenses);
@@ -1063,7 +1140,9 @@ export const toggleShoppingItemInDB = async (itemId, bought) => {
 
 export const deleteShoppingItemFromDB = async (itemId) => {
   try {
-    await deleteDoc(doc(db, 'shoppingList', itemId));
+    const uid = auth.currentUser?.uid;
+    await updateDoc(doc(db, 'shoppingList', itemId), { deleted: true, deletedAt: new Date().toISOString() });
+    auditLog(AUDIT.SHOPPING_DELETED, uid, { itemId });
   } catch (e) {
     console.error('Error deleting shopping item:', e);
     throw e;
@@ -1079,7 +1158,11 @@ export const subscribeToShoppingList = (callback, errorCallback, userId) => {
   return onSnapshot(
     q,
     (snapshot) => {
-      const items = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      let items = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (!data.deleted) items.push({ id: doc.id, ...data });
+      });
       // Sort in memory to avoid index requirements
       items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       callback(items);
@@ -1320,3 +1403,53 @@ export const subscribeToCommunityPosts = (callback) => {
     callback(data);
   });
 };
+
+// ==========================================
+// AI MEMORIES (BRAIN)
+// ==========================================
+
+export const aiMemoriesCollection = collection(db, 'ai_memories');
+
+export const addMemoryToDB = async (note) => {
+  if (!auth.currentUser) throw new Error('User not authenticated');
+  const uid = auth.currentUser.uid;
+  try {
+    const docRef = await addDoc(aiMemoriesCollection, {
+      uid,
+      note,
+      timestamp: new Date().toISOString(),
+      deleted: false
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error adding memory:', error);
+    throw error;
+  }
+};
+
+export const deleteMemoryFromDB = async (memoryId) => {
+  try {
+    await deleteDoc(doc(db, 'ai_memories', memoryId));
+  } catch (error) {
+    console.error('Error deleting memory:', error);
+    throw error;
+  }
+};
+
+export const getMemoriesFromDB = async () => {
+  if (!auth.currentUser) return [];
+  const uid = auth.currentUser.uid;
+  try {
+    const q = query(aiMemoriesCollection, where('uid', '==', uid));
+    const snap = await getDocs(q);
+    const list = [];
+    snap.forEach((docSnap) => {
+      list.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    return list;
+  } catch (error) {
+    console.error('Error fetching memories:', error);
+    return [];
+  }
+};
+

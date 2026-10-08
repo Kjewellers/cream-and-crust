@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "357779803337-cbkbf0ro36e2lsl2g858hd2nl8oba4q4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.creamandcrust.app",
+            "certificate_hash": "4a4cdb2bd84a961064485eebec6d4323881436df"
+          }
+        },
+        {
           "client_id": "357779803337-igdqc9grisrhsdtnkijmo6ojvdhrmt31.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

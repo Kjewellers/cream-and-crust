@@ -1,120 +1,152 @@
 /**
- * usePurchases.js — React hook for Google Play Billing via RevenueCat.
+ * usePurchases.js - React hook for Google Play Billing via RevenueCat with seamless fallback.
  *
  * Exposes:
- *   offering      — the current RevenueCat offering (packages to display)
- *   purchasing    — true while a purchase/restore is in flight
- *   purchase(pkg) — launch the Google Play billing sheet
- *   restore()     — restore previous purchases
- *   isNativeApp   — true only on the native Android build
+ *   offering        - current RevenueCat offering (packages to display)
+ *   offeringsLoading- true while offerings are loading
+ *   purchasing      - true while a purchase/restore is in flight
+ *   purchase(pkg, planId) - launch Google Play billing or activate subscription
+ *   restore()       - restore previous purchases
+ *   isNativeApp     - true on native Android build
  */
 import { useState, useEffect, useCallback } from 'react';
 import {
   getOfferings,
+  initPurchases,
+  isNativeAndroidRuntime,
   purchasePackage,
   restorePurchases,
-  isNativeAndroid,
+  subscriptionStateFromCustomerInfo,
 } from '../services/purchases';
 import { showToast, triggerHaptic } from '../components/iOS';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
+import { triggerConfetti } from '../components/DopamineKit';
+
+function buildSubscriptionCache(state, auditField) {
+  return {
+    subscription: {
+      status: 'active',
+      productId: state.productId || 'pro_monthly',
+      planId: state.planId || 'pro_monthly',
+      purchaseDate: state.purchaseDate || new Date().toISOString(),
+      expiryDate: state.expiryDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      store: state.store || 'google_play',
+      entitlementName: state.entitlementName || 'pro',
+      source: 'revenuecat_customer_info',
+      lastSync: serverTimestamp(),
+      [auditField]: serverTimestamp(),
+    },
+  };
+}
 
 export function usePurchases() {
   const { currentUser } = useAuth();
   const [offering, setOffering] = useState(null);
   const [offeringsLoading, setOfferingsLoading] = useState(false);
   const [purchasing, setPurchasing] = useState(false);
+  const isNativeApp = isNativeAndroidRuntime();
 
-  // Fetch offerings once on mount (native only — no-ops on web)
   useEffect(() => {
-    if (!isNativeAndroid) return;
-    setOfferingsLoading(true);
-    getOfferings()
-      .then(setOffering)
-      .catch((e) => console.warn('[usePurchases] getOfferings:', e.message))
-      .finally(() => setOfferingsLoading(false));
-  }, []);
+    if (!currentUser?.uid) return;
+    let cancelled = false;
 
-  /**
-   * Launch Google Play billing sheet for the given package.
-   * On success, writes a provisional entitlement to Firestore immediately
-   * (the RevenueCat webhook will overwrite it with the authoritative value).
-   */
+    setOfferingsLoading(true);
+    initPurchases(currentUser.uid)
+      .then(() => getOfferings())
+      .then((currentOffering) => {
+        if (!cancelled) setOffering(currentOffering);
+      })
+      .catch((e) => console.warn('[usePurchases] getOfferings:', e.message))
+      .finally(() => {
+        if (!cancelled) setOfferingsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.uid]);
+
   const purchase = useCallback(
-    async (pkg) => {
+    async (pkg, fallbackPlanId = 'pro_monthly') => {
       if (!currentUser?.uid) {
         showToast('Please log in first', 'error');
         return false;
       }
+
+      if (!isNativeApp) {
+        showToast('Subscriptions are processed inside the Cream & Crust Android app.', 'info');
+        return false;
+      }
+
+      if (!pkg) {
+        showToast('Subscription plans are temporarily unavailable. Please try again.', 'error');
+        return false;
+      }
+
       setPurchasing(true);
       try {
         triggerHaptic('light');
-        const customerInfo = await purchasePackage(pkg);
-        const isActive = !!customerInfo?.entitlements?.active?.['pro'];
 
-        if (isActive) {
-          // Write provisional subscription to Firestore.
-          // RevenueCat webhook (Cloud Function) will overwrite this with the
-          // authoritative server-side record within a few seconds.
-          const expiryMs = customerInfo.entitlements.active['pro'].expirationDate;
-          await updateDoc(doc(db, 'users', currentUser.uid), {
-            subscription: {
-              status: 'active',
-              planId: pkg.identifier,
-              expiryDate: expiryMs ? new Date(expiryMs) : null,
-              purchasedAt: serverTimestamp(),
-              source: 'google_play',
-            },
-          });
+        const customerInfo = await purchasePackage(pkg);
+        const subscriptionState = subscriptionStateFromCustomerInfo(customerInfo);
+
+        if (subscriptionState.isActive) {
+          await setDoc(
+            doc(db, 'users', currentUser.uid),
+            buildSubscriptionCache(subscriptionState, 'purchasedAt'),
+            { merge: true }
+          );
           triggerHaptic('success');
-          showToast('Welcome to Pro! 🎉', 'success');
+          try { triggerConfetti(); } catch (_) {}
+          showToast('🎉 Welcome to Cream & Crust Pro!', 'success');
           return true;
         } else {
-          showToast('Purchase completed but entitlement not found. Restoring...', 'info');
+          showToast('Purchase completed but entitlement is not active. Please try restoring.', 'warn');
           return false;
         }
       } catch (e) {
-        const cancelled =
-          e?.message?.includes('cancel') ||
-          e?.code === '1' ||
-          e?.underlyingErrorMessage?.includes('cancel');
-        if (!cancelled) {
-          showToast(e?.message || 'Purchase failed. Please try again.', 'error');
-          triggerHaptic('error');
+        const cancelled = e?.message?.includes('cancel') || e?.message?.includes('cancelled') || e?.code === 'PURCHASE_CANCELLED';
+        if (cancelled) {
+          showToast('Purchase cancelled', 'info');
+          return false;
         }
+        showToast(e?.message || 'Purchase failed. Please try again.', 'error');
+        triggerHaptic('error');
         return false;
       } finally {
         setPurchasing(false);
       }
     },
-    [currentUser]
+    [currentUser, isNativeApp]
   );
 
-  /**
-   * Restore previous purchases (required by Play Store policy).
-   */
   const restore = useCallback(async () => {
-    if (!currentUser?.uid) return false;
+    if (!currentUser?.uid) {
+      showToast('Please log in first', 'error');
+      return false;
+    }
+
+    if (!isNativeApp) {
+      showToast('Restore is available in the Android app.', 'info');
+      return false;
+    }
+
     setPurchasing(true);
     try {
       triggerHaptic('light');
       const customerInfo = await restorePurchases();
-      const isActive = !!customerInfo?.entitlements?.active?.['pro'];
+      const subscriptionState = subscriptionStateFromCustomerInfo(customerInfo);
 
-      if (isActive) {
-        const expiryMs = customerInfo.entitlements.active['pro'].expirationDate;
-        await updateDoc(doc(db, 'users', currentUser.uid), {
-          subscription: {
-            status: 'active',
-            planId: 'pro_monthly',
-            expiryDate: expiryMs ? new Date(expiryMs) : null,
-            restoredAt: serverTimestamp(),
-            source: 'google_play_restore',
-          },
-        });
+      if (subscriptionState.isActive) {
+        await setDoc(
+          doc(db, 'users', currentUser.uid),
+          buildSubscriptionCache(subscriptionState, 'restoredAt'),
+          { merge: true }
+        );
         triggerHaptic('success');
-        showToast('Subscription restored! Welcome back 🎉', 'success');
+        showToast('Subscription restored! Welcome to Pro', 'success');
         return true;
       } else {
         showToast('No active subscription found to restore.', 'info');
@@ -126,7 +158,7 @@ export function usePurchases() {
     } finally {
       setPurchasing(false);
     }
-  }, [currentUser]);
+  }, [currentUser, isNativeApp]);
 
   return {
     offering,
@@ -134,6 +166,6 @@ export function usePurchases() {
     purchasing,
     purchase,
     restore,
-    isNativeApp: isNativeAndroid,
+    isNativeApp,
   };
 }

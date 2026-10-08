@@ -25,7 +25,9 @@ import {
 } from '../services/db';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { showToast, triggerHaptic, PullToRefresh, CardSkeleton, SwipeRow, BottomSheet } from '../components/iOS';
+import { showToast, triggerHaptic, PullToRefresh, CardSkeleton, SwipeRow } from '../components/iOS';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
+import NativeModal from '../components/ui/NativeModal';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { FileText } from 'lucide-react';
 
@@ -209,15 +211,7 @@ const ProcessItemModal = ({ item, inventory, onClose, onProcess }) => {
   const [amount, setAmount] = useState('');
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 300 }} onClick={onClose}>
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: 400, padding: 32 }}
-      >
+    <NativeModal open={true} onClose={onClose} showClose={false}>
         <div style={{ textAlign: 'center' }}>
           <div
             style={{
@@ -380,8 +374,7 @@ const ProcessItemModal = ({ item, inventory, onClose, onProcess }) => {
             Close
           </button>
         </div>
-      </motion.div>
-    </div>
+    </NativeModal>
   );
 };
 
@@ -1017,7 +1010,7 @@ export default function ShoppingList() {
         </div>
       )}
 
-      <BottomSheet open={showModal} onClose={() => setShowModal(false)} title="Add Item">
+      <NativeBottomSheet open={showModal} onClose={() => setShowModal(false)} title="Add Item">
         <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginTop: -10, marginBottom: 24 }}>
           What are we missing today?
         </p>
@@ -1165,7 +1158,7 @@ export default function ShoppingList() {
                   </button>
                 </div>
               </form>
-      </BottomSheet>
+      </NativeBottomSheet>
 
       {/* Process Action Prompt */}
       <AnimatePresence>

@@ -24,7 +24,7 @@ function dispatchAI(message, featureId) {
 }
 
 /* ── Priority Feed ── */
-function PriorityFeed({ orders, inventory, expenses }) {
+function PriorityFeed({ orders, inventory, expenses, customers }) {
   const today = new Date().toISOString().split('T')[0];
 
   const items = useMemo(() => {
@@ -88,6 +88,18 @@ function PriorityFeed({ orders, inventory, expenses }) {
       });
     }
 
+    // End of Day Reconciliation (after 6 PM)
+    const currentHour = new Date().getHours();
+    if (currentHour >= 18 && todayDeliveries.length === 0 && orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length > 0) {
+      feed.push({
+        urgency: 'info',
+        icon: '🌙',
+        text: 'End of day: You have active orders. Run a reconciliation check.',
+        action: 'Run EOD Check',
+        featureId: 'run_bakery',
+      });
+    }
+
     // Weekly revenue insight
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
@@ -104,6 +116,26 @@ function PriorityFeed({ orders, inventory, expenses }) {
       });
     }
 
+    // VIP Churn Risk (Customers with 3+ orders but no order in last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const vipChurn = customers.filter(c => c.totalOrders >= 3);
+    const churnRisks = vipChurn.filter(c => {
+      const lastOrder = orders.find(o => (o.customerName === c.name || o.phone === c.phone) && o.createdAt);
+      if (!lastOrder) return false;
+      return new Date(lastOrder.createdAt) < thirtyDaysAgo;
+    });
+
+    if (churnRisks.length > 0) {
+      feed.push({
+        urgency: 'warning',
+        icon: '👥',
+        text: `${churnRisks.length} VIP customer(s) haven't ordered in 30+ days.`,
+        action: 'Retention Campaign',
+        featureId: 'customer_retention',
+      });
+    }
+
     // Empty state
     if (feed.length === 0) {
       feed.push({
@@ -117,7 +149,7 @@ function PriorityFeed({ orders, inventory, expenses }) {
     }
 
     return feed;
-  }, [orders, inventory, expenses, today]);
+  }, [orders, inventory, expenses, customers, today]);
 
   return (
     <div className="ai-priority-feed">
@@ -150,7 +182,7 @@ function PriorityFeed({ orders, inventory, expenses }) {
 
 /* ── Main Component ── */
 export default function AIAssistantHub() {
-  const { orders = [], inventory = [], expenses = [], products = [] } = useData();
+  const { orders = [], inventory = [], expenses = [], products = [], customers = [] } = useData();
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
 
@@ -349,7 +381,7 @@ export default function AIAssistantHub() {
               <h3 className="glass-panel-header" style={{ paddingLeft: 8, marginBottom: 12 }}>
                 AI Priority Feed
               </h3>
-              <PriorityFeed orders={orders} inventory={inventory} expenses={expenses} />
+              <PriorityFeed orders={orders} inventory={inventory} expenses={expenses} customers={customers} />
 
               {/* Stats summary */}
               <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

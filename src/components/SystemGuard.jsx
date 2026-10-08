@@ -63,7 +63,7 @@ export default function SystemGuard({ children }) {
           You are using an older version of Cream & Crust that is no longer supported. Please update to the latest version to continue.
         </p>
         <button
-          onClick={() => window.location.reload(true)}
+          onClick={() => window.location.reload()}
           style={{
             background: '#2D1B14',
             color: '#FFF',

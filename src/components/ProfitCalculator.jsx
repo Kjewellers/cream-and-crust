@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { X, Calculator, IndianRupee } from 'lucide-react';
+import { Calculator, IndianRupee } from 'lucide-react';
 import { formatCurrency } from '../utils/date';
-import { modalVariants } from '../utils/animations';
+import NativeModal from './ui/NativeModal';
 
 export default function ProfitCalculator({ open, onClose }) {
   const [cost, setCost] = useState('');
@@ -14,21 +13,20 @@ export default function ProfitCalculator({ open, onClose }) {
   const margin = numPrice > 0 ? (profit / numPrice) * 100 : 0;
   const markup = numCost > 0 ? (profit / numCost) * 100 : 0;
 
-  if (!open) return null;
-
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 1200 }}>
-      <motion.div variants={modalVariants} initial="hidden" animate="show" exit="exit" className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ background: 'rgba(181,96,106,0.1)', padding: 8, borderRadius: 10 }}>
-              <Calculator size={20} color="var(--accent)" />
-            </div>
-            <h3 style={{ margin: 0 }}>ROI / Profit Calculator</h3>
+    <NativeModal
+      open={open}
+      onClose={onClose}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ background: 'rgba(181,96,106,0.1)', padding: 8, borderRadius: 10 }}>
+            <Calculator size={20} color="var(--accent)" />
           </div>
-          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
+          <span style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>ROI / Profit Calculator</span>
         </div>
-        
+      }
+    >
+      <div>
         <div className="form-group full">
           <label className="form-label">Total Cost (Ingredients + Packaging)</label>
           <div style={{ position: 'relative' }}>
@@ -63,7 +61,7 @@ export default function ProfitCalculator({ open, onClose }) {
         <div style={{ marginTop: 24, fontSize: '0.85rem', color: 'var(--text3)', textAlign: 'center', fontWeight: 500 }}>
           💡 Tip: Industry standard profit margin for home bakers is 30% - 50%.
         </div>
-      </motion.div>
-    </div>
+      </div>
+    </NativeModal>
   );
 }

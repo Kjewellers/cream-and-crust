@@ -6,7 +6,7 @@
  * Requirements: 1.7 (rejections surface a message, view stays interactive),
  * 1.8 / 1.10 (resolve to success/error within 15s), 20.6, 20.7.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export class TimeoutError extends Error {
   constructor(ms) {
@@ -41,6 +41,12 @@ export function useAsyncOperation({ timeoutMs = 15000 } = {}) {
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
   const mounted = useRef(true);
+
+  // Properly track mount state to prevent state updates after unmount
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const run = useCallback(
     async (fn) => {

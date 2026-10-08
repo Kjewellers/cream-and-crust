@@ -16,12 +16,14 @@ import {
   deleteCustomerFromDB,
   updateCustomerInDB,
   addCustomerToDB,
+  autoDeduplicateCustomers,
 } from '../services/db';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { formatDate, formatCurrency } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
-import { Skeleton, showToast, triggerHaptic, BottomSheet } from '../components/iOS';
+import { Skeleton, showToast, triggerHaptic } from '../components/iOS';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { modalVariants } from '../utils/animations';
 import ModuleTour from '../components/ModuleTour';
@@ -57,6 +59,16 @@ export default function Customers() {
 
   const { currentUser } = useAuth();
 
+  // Run deduplication once on mount (background)
+  useEffect(() => {
+    if (customers.length > 0 && orders.length > 0 && !loading) {
+      // Small delay to ensure it doesn't block the main thread render
+      const t = setTimeout(() => {
+        autoDeduplicateCustomers(customers, orders);
+      }, 2000);
+      return () => clearTimeout(t);
+    }
+  }, [customers.length, orders.length, loading]);
 
 
   const handleEditClick = (c) => {
@@ -704,46 +716,13 @@ export default function Customers() {
         </div>
       )}
 
-      {/* Edit Customer Modal */}
-      <AnimatePresence>
-        {showEditModal && (
-          <div className="modal-overlay desktop-only" onClick={() => setShowEditModal(false)}>
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="show"
-              exit="exit"
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 22,
-                }}
-              >
-                <h2>{editingCustomer ? 'Edit Customer' : 'New Customer'}</h2>
-                <button className="btn-icon" onClick={() => setShowEditModal(false)}>
-                  <X size={18} />
-                </button>
-              </div>
-              {editFormContent}
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <div className="mobile-only">
-        <BottomSheet
-          open={showEditModal}
-          onClose={() => setShowEditModal(false)}
-          title={editingCustomer ? "Edit Customer" : "New Customer"}
-        >
-          {editFormContent}
-        </BottomSheet>
-      </div>
+      <NativeBottomSheet
+        open={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title={editingCustomer ? "Edit Customer" : "New Customer"}
+      >
+        {editFormContent}
+      </NativeBottomSheet>
       <AnimatedDemo moduleId="customers" title="Manage Customers" scenes={customersDemoScenes} />
     </div>
   );

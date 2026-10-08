@@ -1,23 +1,23 @@
 import { useEffect } from 'react';
-import { Capacitor } from '@capacitor/core';
+import Platform from '../platform/Platform';
 import { App } from '@capacitor/app';
 import { LocalNotifications } from '@capacitor/local-notifications';
 
 export function useAppRetention() {
   useEffect(() => {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!Platform.isAndroid()) return;
 
     let stateChangeListener;
 
     const setupAppRetention = async () => {
+      const { globalRequirePermission } = await import('../context/PermissionContext');
+      const { PERMISSION_TYPES } = await import('../services/PermissionManager');
+      
       // Make sure we have permission to show local notifications
-      let permStatus = await LocalNotifications.checkPermissions();
-      if (permStatus.display === 'prompt') {
-        permStatus = await LocalNotifications.requestPermissions();
-      }
+      const granted = await globalRequirePermission(PERMISSION_TYPES.NOTIFICATIONS);
 
       // If permissions are not granted, we can't schedule local notifications
-      if (permStatus.display !== 'granted') return;
+      if (!granted) return;
 
       stateChangeListener = await App.addListener('appStateChange', async ({ isActive }) => {
         try {

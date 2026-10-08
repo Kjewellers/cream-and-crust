@@ -3,7 +3,10 @@ import { createPortal } from 'react-dom';
 import { ArrowDown, ArrowUp, Eye, X, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { showToast } from '../../components/iOS';
+import { useNavigate } from 'react-router-dom';
 import { useMenuBuilderData } from './useMenuBuilderData';
+import { useSubscription } from '../../hooks/useSubscription';
+import { useSubscriptionContext } from '../../context/SubscriptionContext';
 import MenuBuilderShell, { SaveBar } from './MenuBuilderShell';
 import MenuRenderer from '../../components/menu/MenuRenderer';
 
@@ -90,6 +93,9 @@ const TEMPLATE_OPTIONS = [
 
 export default function MenuThemeCustomizer() {
   const { business, menu, products, loading, publishMenu } = useMenuBuilderData();
+  const { isActive } = useSubscription();
+  const { openPaywall } = useSubscriptionContext();
+  const navigate = useNavigate();
   const [theme, setTheme] = useState(menu.theme);
   const [saving, setSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState(null); // template id being previewed
@@ -150,7 +156,14 @@ export default function MenuThemeCustomizer() {
                   key={tpl.id}
                   whileTap={{ scale: 0.97 }}
                   whileHover={{ y: -2 }}
-                  onClick={() => setPreviewTemplate(tpl.id)}
+                  onClick={() => {
+                    if (!isActive && tpl.id !== 'classic') {
+                      showToast('Premium template. Upgrade to Pro to unlock!', 'info');
+                      openPaywall('menu_premium_theme');
+                      return;
+                    }
+                    setPreviewTemplate(tpl.id);
+                  }}
                   style={{
                     textAlign: 'left',
                     padding: 14,

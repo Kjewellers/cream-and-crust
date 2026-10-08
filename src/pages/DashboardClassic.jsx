@@ -56,6 +56,7 @@ import {
   triggerHaptic,
   SwipeRow,
 } from '../components/iOS';
+import BakeryStoriesBar from '../components/stories/BakeryStoriesBar';
 import { shareToWhatsApp } from '../services/whatsapp';
 import { listContainer, listItem, statCard } from '../utils/animations';
 import ProfitCalculator from '../components/ProfitCalculator';
@@ -64,7 +65,7 @@ import WebsiteOrdersCard from '../components/dashboard/WebsiteOrdersCard';
 import { triggerConfetti, triggerSuccessBurst } from '../components/DopamineKit';
 import BusinessReportModal from '../components/reports/BusinessReportModal';
 import { buildReport, weekKey, monthKey, previousPeriodRange } from '../utils/businessReport';
-import PremiumBottomSheet from '../components/PremiumBottomSheet';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { useAchievements } from '../utils/achievements';
 
 export default function DashboardClassic() {
@@ -735,6 +736,9 @@ export default function DashboardClassic() {
             setPaymentNudgeSnoozedDay(todayStr);
           }}
         />
+
+        {/* ── Instagram / X Style Stories Highlights Bar ── */}
+        <BakeryStoriesBar />
 
         {/* ── Gradient Hero Card ─────────── */}
         <AnimatePresence mode="wait">
@@ -2709,7 +2713,7 @@ export default function DashboardClassic() {
         currentUser={currentUser}
         userDoc={userDetails}
       />
-      <PremiumBottomSheet
+      <NativeBottomSheet
         open={showCustomizer}
         onClose={() => setShowCustomizer(false)}
         title="Customize Quick Actions"
@@ -2792,7 +2796,7 @@ export default function DashboardClassic() {
             );
           })}
         </div>
-      </PremiumBottomSheet>
+      </NativeBottomSheet>
 
       <AnimatedDemo
         moduleId="dashboard"

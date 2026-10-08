@@ -178,7 +178,8 @@ export default function RecipeInventoryLinkage({ onClose }) {
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
           onClick={() => {
             onClose();
-            window.location.href = '/inventory';
+            // Use hash navigation — compatible with HashRouter on Android
+            window.location.hash = '/inventory';
           }}
         >
           <ExternalLink size={18} /> Manage Inventory

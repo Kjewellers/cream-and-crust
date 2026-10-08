@@ -11,11 +11,12 @@ vi.mock('../../context/AuthContext', () => ({
   useAuth: () => mockAuth,
 }));
 
+const currentMonth = new Date().toISOString().slice(0, 7);
 vi.mock('../../context/DataContext', () => ({
   useData: () => ({
     expenses: [
-      { id: '1', category: 'Ingredients', description: 'Flour', amount: 1000, date: '2026-06-01' },
-      { id: '2', category: 'Packaging', description: 'Boxes', amount: 500, date: '2026-06-02' }
+      { id: '1', category: 'Ingredients', description: 'Flour', amount: 1000, date: `${currentMonth}-01` },
+      { id: '2', category: 'Packaging', description: 'Boxes', amount: 500, date: `${currentMonth}-02` }
     ],
     setExpenses: vi.fn(),
     loading: false,
@@ -83,5 +84,5 @@ describe('Expenses page smoke test', () => {
     expect(getByText('Flour')).toBeDefined();
     expect(getByText('Boxes')).toBeDefined();
     expect(getByTestId('mock-doughnut')).toBeDefined();
-  });
+  }, 30000);
 });

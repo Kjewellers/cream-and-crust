@@ -206,25 +206,13 @@ export async function saveFileToCache({ blob, fileName }) {
 export async function saveFileToDocuments({ blob, fileName }) {
   if (isNative()) {
     try {
-      const { requestStoragePermission } = await import('./permissions');
-      const perm = await requestStoragePermission();
-      if (perm !== 'granted') {
-        throw new Error('Storage permission denied');
-      }
-
-      const { Filesystem, Directory } = await import('@capacitor/filesystem');
-      const base64 = await blobToBase64(blob);
-
-      // Write to Directory.Documents
-      const writeResult = await Filesystem.writeFile({
-        path: fileName,
-        data: base64,
-        directory: Directory.Documents,
-        recursive: true,
+      log.share('saveFileToDocuments: routing to native share sheet to bypass scoped storage');
+      const shareResult = await nativeShareFile({ 
+        blob, 
+        fileName, 
+        title: `Save or share ${fileName}` 
       });
-
-      log.share('saveFileToDocuments: saved to', writeResult.uri);
-      return { success: true, uri: writeResult.uri };
+      return { success: shareResult.shared, uri: shareResult.uri };
     } catch (e) {
       log.share.error('saveFileToDocuments failed:', e?.message);
       return { success: false, error: e?.message };

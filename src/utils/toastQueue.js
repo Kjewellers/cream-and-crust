@@ -8,7 +8,7 @@
  * 13.7 (FIFO overflow queue).
  */
 
-export const MAX_VISIBLE = 3;
+export const MAX_VISIBLE = 1;
 
 /** Empty toast state. */
 export function initToastState() {

@@ -371,3 +371,31 @@ export async function getAnalyticsHealth(bakeryId) {
 
   return health;
 }
+
+export async function getAnalyticsEvents(bakeryId, limitCount = 20) {
+  try {
+    const q = query(
+      collection(db, 'analytics_events'),
+      where('bakeryId', '==', bakeryId),
+      orderBy('timestamp', 'desc'),
+      limit(limitCount)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (err) {
+    console.error('Error fetching analytics events:', err);
+    return [];
+  }
+}
+
+export async function getAnalyticsSummary(bakeryId) {
+  try {
+    const sumRef = doc(db, 'analytics_summary', bakeryId);
+    const sumSnap = await getDoc(sumRef);
+    return sumSnap.exists() ? sumSnap.data() : null;
+  } catch (err) {
+    console.error('Error fetching analytics summary:', err);
+    return null;
+  }
+}
+

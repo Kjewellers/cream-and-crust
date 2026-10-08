@@ -31,6 +31,9 @@ export const INTENTS = Object.freeze({
   CHANGE_THEME: 'change_theme',
   OPEN_MODAL: 'open_modal',
   BATCH_UPDATE: 'batch_update',
+  MARK_PAID: 'mark_paid',
+  BATCH_STATUS_UPDATE: 'batch_status_update',
+  MULTI_ACTION: 'multi_action',
 });
 
 export const READ_ONLY_INTENTS = Object.freeze([
@@ -232,6 +235,17 @@ export const ACTION_SCHEMAS = Object.freeze({
   [INTENTS.BATCH_UPDATE]: {
     label: 'Batch Update',
     required: ['target', 'filters', 'updates'], 
+    confirmationRequired: true,
+  },
+  [INTENTS.BATCH_STATUS_UPDATE]: {
+    label: 'Batch Status Update',
+    required: ['orderIds', 'status'],
+    optional: ['paymentStatus'],
+    confirmationRequired: true,
+  },
+  [INTENTS.MULTI_ACTION]: {
+    label: 'Run Multiple Actions',
+    required: ['actions'], // Array of action objects { intent, data }
     confirmationRequired: true,
   },
 });

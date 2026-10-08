@@ -15,7 +15,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { formatTime } from '../utils/date';
-import { BottomSheet, EmptyState, Skeleton, triggerHaptic } from '../components/iOS';
+import { EmptyState, Skeleton, triggerHaptic } from '../components/iOS';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import ModuleTour from '../components/ModuleTour';
 import { calendarTourSteps } from '../components/tours/calendarTour';
 import AnimatedDemo from '../components/AnimatedDemo';
@@ -894,7 +895,7 @@ export default function Calendar() {
 
       {/* Mobile Bottom Sheet */}
       <div className="mobile-only">
-        <BottomSheet
+        <NativeBottomSheet
           open={showSheet}
           onClose={() => setShowSheet(false)}
           title={friendlyDate(selectedDate)}
@@ -902,7 +903,7 @@ export default function Calendar() {
           <div style={{ marginTop: 8 }}>
             {loading ? <Skeleton height={80} radius={18} /> : <DayDetail />}
           </div>
-        </BottomSheet>
+        </NativeBottomSheet>
       </div>
       <AnimatedDemo moduleId="calendar" title="Plan Your Deliveries" scenes={calendarDemoScenes} />
     </motion.div>

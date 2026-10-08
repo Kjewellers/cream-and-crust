@@ -119,7 +119,8 @@ export default function RecipeOrderIntegration({ onClose }) {
           className="rv-btn-primary"
           onClick={() => {
             onClose();
-            window.location.href = '/orders';
+            // Use hash navigation — compatible with HashRouter on Android
+            window.location.hash = '/orders';
           }}
         >
           View Orders →

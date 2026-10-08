@@ -1,16 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Camera, Plus, Trash2, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { showToast, triggerHaptic } from '../iOS';
 import { uploadToCloudinary } from '../../services/cloudinary';
+import { pickMultiplePhotos } from '../../utils/photoPicker';
 import { addCaptureToDB, updateCaptureInDB, deleteCaptureFromDB, subscribeToCaptures } from '../../services/userCaptures';
 import { useAuth } from '../../context/AuthContext';
+import { usePermissions } from '../../context/PermissionContext';
+import { PERMISSION_TYPES } from '../../services/PermissionManager';
 
 const CATEGORIES = ['Bakes', 'Cakes', 'Breads', 'Desserts', 'Drinks', 'Other'];
 
 function UploadSheet({ onClose, editItem }) {
   const { currentUser } = useAuth();
-  const fileRef = useRef();
   const [previews, setPreviews] = useState(editItem?.photos?.map(u => ({ url: u, uploaded: true })) || []);
   const [files, setFiles] = useState([]);
   const [title, setTitle] = useState(editItem?.title || '');
@@ -21,11 +23,15 @@ function UploadSheet({ onClose, editItem }) {
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const handleFiles = (e) => {
-    const picked = Array.from(e.target.files || []).slice(0, 5 - previews.length);
-    const newPreviews = picked.map(f => ({ url: URL.createObjectURL(f), uploaded: false, file: f }));
-    setPreviews(p => [...p, ...newPreviews].slice(0, 5));
-    setFiles(fls => [...fls, ...picked].slice(0, 5));
+  const handlePhotosPick = async () => {
+    const limit = 5 - previews.length;
+    if (limit <= 0) return;
+    const photos = await pickMultiplePhotos(limit);
+    if (photos && photos.length > 0) {
+      const newPreviews = photos.map(p => ({ url: p.previewUrl, uploaded: false, file: p.file }));
+      setPreviews(p => [...p, ...newPreviews].slice(0, 5));
+      setFiles(fls => [...fls, ...photos.map(p => p.file)].slice(0, 5));
+    }
   };
 
   const removePhoto = (idx) => {
@@ -88,14 +94,13 @@ function UploadSheet({ onClose, editItem }) {
         ))}
         {previews.length < 5 && (
           <button 
-            onClick={() => fileRef.current?.click()}
+            onClick={handlePhotosPick}
             style={{ width: 100, height: 100, borderRadius: 16, flexShrink: 0, background: 'var(--rv-pink-light)', color: 'var(--accent)', border: '1px dashed var(--accent)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', gap: 6 }}>
             <Camera size={24} />
             <span style={{ fontSize: 12, fontWeight: 700 }}>Add</span>
           </button>
         )}
       </div>
-      <input ref={fileRef} type="file" accept="image/*" multiple capture="environment" style={{ display: 'none' }} onChange={handleFiles} />
 
       {saving && (
         <div style={{ marginBottom: 20 }}>

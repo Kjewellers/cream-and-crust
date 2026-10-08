@@ -63,12 +63,11 @@ import {
   showToast,
   SegmentedControl,
   SwipeRow,
-  BottomSheet,
   PullToRefresh,
-  shareContent,
   triggerHaptic,
   OnboardingTutorial,
 } from '../components/iOS';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { listContainer, listItem, modalVariants } from '../utils/animations';
 
 const statusFlow = ['inquiry', 'confirmed', 'delivered'];
@@ -131,21 +130,44 @@ function OrderRow({
         </div>
       </td>
       <td>
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onCustomerClick(o);
-          }}
-          style={{
-            fontWeight: 600,
-            fontSize: 14,
-            cursor: 'pointer',
-            color: 'var(--text)',
-            borderBottom: '1px dashed var(--border)',
-            display: 'inline-block',
-          }}
-        >
-          {cName}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onCustomerClick(o);
+            }}
+            style={{
+              fontWeight: 700,
+              fontSize: 14,
+              cursor: 'pointer',
+              color: 'var(--text)',
+            }}
+          >
+            {cName}
+          </div>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onCustomerClick(o);
+            }}
+            title="View Customer Profile & History"
+            style={{
+              background: 'rgba(181, 96, 106, 0.1)',
+              color: 'var(--accent, #B5606A)',
+              border: 'none',
+              borderRadius: 6,
+              padding: '2px 6px',
+              fontSize: 10,
+              fontWeight: 750,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+            }}
+          >
+            <User size={10} /> Profile
+          </button>
         </div>
         {cPhone && (
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 1 }}>{cPhone}</div>
@@ -217,6 +239,26 @@ function OrderRow({
       </td>
       <td>
         <div style={{ display: 'flex', gap: 6 }}>
+          <motion.button
+            whileTap={{ scale: 0.86 }}
+            className="btn-icon"
+            title="View Invoice & PDF"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOrderClick(o);
+            }}
+            style={{
+              background: 'rgba(181, 96, 106, 0.12)',
+              color: 'var(--accent, #B5606A)',
+              width: 34,
+              height: 34,
+              borderRadius: 10,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <FileText size={15} />
+          </motion.button>
           {!isDelivered && (
             <motion.button
               whileTap={{ scale: 0.86 }}
@@ -288,6 +330,41 @@ function OrderRow({
       </td>
     </motion.tr>
   );
+}
+
+function getDeliveryCountdown(dateStr, timeStr) {
+  if (!dateStr) return null;
+  try {
+    const target = new Date(`${dateStr} ${timeStr || '12:00 PM'}`);
+    if (isNaN(target.getTime())) return null;
+
+    const diffMs = target.getTime() - Date.now();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    if (diffMs < 0) {
+      const overdueMins = Math.abs(Math.round(diffMs / (1000 * 60)));
+      if (overdueMins > 1440) return { label: 'Overdue', color: '#EF4444', bg: '#FEF2F2' };
+      const h = Math.floor(overdueMins / 60);
+      const m = overdueMins % 60;
+      return { label: `🚨 Overdue ${h > 0 ? `${h}h ` : ''}${m}m`, color: '#EF4444', bg: '#FEF2F2' };
+    }
+
+    if (diffHours <= 4) {
+      const totalMins = Math.round(diffMs / (1000 * 60));
+      const h = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      return { label: `⏱️ ${h > 0 ? `${h}h ` : ''}${m}m left`, color: '#D97706', bg: '#FEF3C7' };
+    }
+
+    if (diffHours <= 24) {
+      return { label: `📅 Due Today`, color: '#2563EB', bg: '#EFF6FF' };
+    }
+
+    const days = Math.ceil(diffHours / 24);
+    return { label: `📅 Due in ${days}d`, color: '#4B5563', bg: '#F3F4F6' };
+  } catch {
+    return null;
+  }
 }
 
 function MobileOrderCard({
@@ -404,20 +481,63 @@ function MobileOrderCard({
                   >
                     {statusStr}
                   </span>
+                  {(() => {
+                    const cd = getDeliveryCountdown(o.date, o.time);
+                    if (!cd || isDelivered) return null;
+                    return (
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          fontWeight: 800,
+                          padding: '2px 7px',
+                          borderRadius: 99,
+                          background: cd.bg,
+                          color: cd.color,
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        {cd.label}
+                      </span>
+                    );
+                  })()}
                 </div>
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCustomerClick(o);
-                  }}
-                  style={{
-                    fontWeight: 900,
-                    fontSize: '0.96rem',
-                    color: 'var(--text)',
-                    marginTop: 2,
-                  }}
-                >
-                  {cName}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCustomerClick(o);
+                    }}
+                    style={{
+                      fontWeight: 900,
+                      fontSize: '0.96rem',
+                      color: 'var(--text)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {cName}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCustomerClick(o);
+                    }}
+                    style={{
+                      background: 'rgba(181, 96, 106, 0.1)',
+                      color: 'var(--accent, #B5606A)',
+                      border: '1px solid rgba(181, 96, 106, 0.2)',
+                      borderRadius: 6,
+                      padding: '2px 6px',
+                      fontSize: 10,
+                      fontWeight: 750,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                    }}
+                  >
+                    <User size={10} /> Profile
+                  </button>
                 </div>
               </div>
             </div>
@@ -587,6 +707,68 @@ function MobileOrderCard({
               <span>Ready</span>
               <span>Deliver</span>
             </div>
+          </div>
+
+          {/* Explicit Quick Action Buttons: View Invoice & Customer Profile */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 8,
+              marginTop: 12,
+              marginBottom: 12,
+            }}
+          >
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOrderClick(o);
+              }}
+              style={{
+                flex: 1,
+                background: 'linear-gradient(135deg, var(--accent, #B5606A) 0%, #9A4C56 100%)',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 12,
+                padding: '10px 12px',
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                boxShadow: '0 3px 10px rgba(181, 96, 106, 0.2)',
+              }}
+            >
+              <FileText size={13} /> View Invoice & PDF
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCustomerClick(o);
+              }}
+              style={{
+                flex: 1,
+                background: '#FFFFFF',
+                color: 'var(--text, #1C1917)',
+                border: '1.5px solid var(--border-md, rgba(0,0,0,0.12))',
+                borderRadius: 12,
+                padding: '10px 12px',
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+              }}
+            >
+              <User size={13} color="var(--accent, #B5606A)" /> Customer Profile
+            </motion.button>
           </div>
 
           {/* Payment toggle — manual mark Paid / Pending (animated) */}
@@ -908,42 +1090,46 @@ export default function Orders() {
     }
   };
 
-  const filtered = (orders || []).filter((o) => {
-    if (!o) return false;
-    const searchLower = search.toLowerCase();
-    const c = o.customer;
-    const customerName = typeof c === 'object' ? c?.name || '' : String(c || '');
-    const matchesSearch =
-      !search ||
-      customerName.toLowerCase().includes(searchLower) ||
-      String(o.orderId || o.id || '')
-        .toLowerCase()
-        .includes(searchLower) ||
-      (o.product || '').toLowerCase().includes(searchLower);
-    const matchesFilter = filter === 'all' || String(o.status).toLowerCase() === filter;
-    // Payment filter — uses the shared finance logic so it matches the
-    // Payments module and respects the explicit isPaid flag.
-    let matchesPayment = true;
-    if (paymentFilter === 'pending') {
-      matchesPayment = isOrderPendingPayment(o);
-    } else if (paymentFilter === 'paid') {
-      matchesPayment = !isOrderPendingPayment(o);
-    }
-    return matchesSearch && matchesFilter && matchesPayment;
-  });
+  const filtered = React.useMemo(() => {
+    return (orders || []).filter((o) => {
+      if (!o) return false;
+      const searchLower = search.toLowerCase();
+      const c = o.customer;
+      const customerName = typeof c === 'object' ? c?.name || '' : String(c || '');
+      const matchesSearch =
+        !search ||
+        customerName.toLowerCase().includes(searchLower) ||
+        String(o.orderId || o.id || '')
+          .toLowerCase()
+          .includes(searchLower) ||
+        (o.product || '').toLowerCase().includes(searchLower);
+      const matchesFilter = filter === 'all' || String(o.status).toLowerCase() === filter;
+      // Payment filter — uses the shared finance logic so it matches the
+      // Payments module and respects the explicit isPaid flag.
+      let matchesPayment = true;
+      if (paymentFilter === 'pending') {
+        matchesPayment = isOrderPendingPayment(o);
+      } else if (paymentFilter === 'paid') {
+        matchesPayment = !isOrderPendingPayment(o);
+      }
+      return matchesSearch && matchesFilter && matchesPayment;
+    });
+  }, [orders, search, filter, paymentFilter]);
 
-  const pipelineCounts = (orders || []).reduce((acc, o) => {
-    if (o && o.status) {
-      const s = String(o.status).toLowerCase();
-      acc[s] = (acc[s] || 0) + 1;
-    }
-    return acc;
-  }, {});
+  const pipelineCounts = React.useMemo(() => {
+    return (orders || []).reduce((acc, o) => {
+      if (o && o.status) {
+        const s = String(o.status).toLowerCase();
+        acc[s] = (acc[s] || 0) + 1;
+      }
+      return acc;
+    }, {});
+  }, [orders]);
 
-  const statsData = [
+  const statsData = React.useMemo(() => [
     {
       label: 'Total Orders',
-      value: orders.length,
+      value: (orders || []).length,
       icon: Plus,
       bg: 'rgba(181, 96, 106, 0.1)',
       color: 'var(--accent)',
@@ -971,7 +1157,7 @@ export default function Orders() {
       bg: 'rgba(46, 122, 90, 0.1)',
       color: '#2E7A5A',
     },
-  ];
+  ], [orders]);
 
   useEffect(() => {
     const hasSeenOnboarding = localStorage.getItem('cc_onboarding_completed');
@@ -1395,7 +1581,8 @@ export default function Orders() {
       }
     }
 
-    const customerFirstName = (o.customer || o.customerName || 'Dear').split(' ')[0];
+    const customerStringName = typeof o.customer === 'object' ? (o.customer?.name || '') : String(o.customer || o.customerName || 'Dear');
+    const customerFirstName = customerStringName.split(' ')[0] || 'Dear';
     const customMessage = o.notes ? o.notes : 'Thank you for choosing Cream & Crust!';
 
     return (
@@ -1892,43 +2079,69 @@ export default function Orders() {
                       {formatTime(o.time) || '3:40 PM'}
                     </span>
                   </div>
-                  {/* Row 3: Customer Name — stacked layout for long names */}
+                  {/* Row 3: Customer Name with explicit action button */}
                   <div
                     style={{
                       display: 'flex',
-                      flexDirection: 'column',
-                      gap: 3,
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
                       marginTop: 4,
                       padding: '8px 10px',
                       background: 'rgba(181, 96, 106, 0.04)',
                       borderRadius: 10,
+                      gap: 8,
                     }}
                   >
-                    <span
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}>
+                      <span
+                        style={{
+                          color: '#9E8E85',
+                          fontWeight: 650,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 11,
+                        }}
+                      >
+                        <User size={12} color="#B5606A" strokeWidth={2.5} /> Customer
+                      </span>
+                      <span
+                        style={{
+                          color: '#4A3B32',
+                          fontWeight: 800,
+                          fontSize: 13,
+                          lineHeight: 1.4,
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {typeof o.customer === 'object'
+                          ? o.customer?.name || ''
+                          : String(o.customer || o.customerName || 'Valued Customer')}
+                      </span>
+                    </div>
+                    <motion.button
+                      whileTap={{ scale: 0.94 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openCustomerProfile(o);
+                      }}
                       style={{
-                        color: '#9E8E85',
-                        fontWeight: 650,
+                        background: 'rgba(181, 96, 106, 0.1)',
+                        color: 'var(--accent, #B5606A)',
+                        border: '1px solid rgba(181, 96, 106, 0.25)',
+                        borderRadius: 8,
+                        padding: '5px 9px',
+                        fontSize: 11,
+                        fontWeight: 750,
+                        cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6,
-                        fontSize: 11,
+                        gap: 4,
+                        flexShrink: 0,
                       }}
                     >
-                      <User size={12} color="#B5606A" strokeWidth={2.5} /> Customer
-                    </span>
-                    <span
-                      style={{
-                        color: '#4A3B32',
-                        fontWeight: 800,
-                        fontSize: 13,
-                        lineHeight: 1.4,
-                        wordBreak: 'break-word',
-                      }}
-                    >
-                      {typeof o.customer === 'object'
-                        ? o.customer?.name || ''
-                        : String(o.customer || o.customerName || 'Valued Customer')}
-                    </span>
+                      Profile & History <ChevronRight size={12} />
+                    </motion.button>
                   </div>
                   {/* Row 4: Delivery Address — stacked layout for long addresses */}
                   {o.deliveryAddress && (
@@ -2160,6 +2373,70 @@ export default function Orders() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Explicit Action Buttons: Invoice & Customer History */}
+            <div
+              style={{
+                display: 'flex',
+                gap: 10,
+                marginTop: 10,
+                marginBottom: 10,
+                position: 'relative',
+                zIndex: 3,
+              }}
+            >
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openEditOrder(o);
+                }}
+                style={{
+                  flex: 1,
+                  background: 'linear-gradient(135deg, var(--accent, #B5606A) 0%, #9A4C56 100%)',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: 14,
+                  padding: '11px 14px',
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  boxShadow: '0 4px 14px rgba(181, 96, 106, 0.22)',
+                }}
+              >
+                <FileText size={14} /> View Invoice & PDF
+              </motion.button>
+
+              <motion.button
+                whileTap={{ scale: 0.96 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openCustomerProfile(o);
+                }}
+                style={{
+                  flex: 1,
+                  background: '#FFFFFF',
+                  color: 'var(--text, #1C1917)',
+                  border: '1.5px solid var(--border-md, rgba(0,0,0,0.12))',
+                  borderRadius: 14,
+                  padding: '11px 14px',
+                  fontSize: 12.5,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.03)',
+                }}
+              >
+                <User size={14} color="var(--accent, #B5606A)" /> Customer Profile
+              </motion.button>
             </div>
 
             {/* Customizations horizontal pill bar */}
@@ -3535,82 +3812,27 @@ export default function Orders() {
         </>
       )}
 
-      <AnimatePresence>
-        {showModal && (
-          <div
-            className="modal-overlay desktop-only"
-            onClick={() => {
-              setShowModal(false);
-              setEditingOrderId(null);
-            }}
-          >
-            <motion.div
-              variants={modalVariants}
-              initial="hidden"
-              animate="show"
-              exit="exit"
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 22,
-                }}
-              >
-                <h2>{editingOrderId ? 'Edit Order' : 'New Order'}</h2>
-                <button
-                  className="btn-icon"
-                  onClick={() => {
-                    setShowModal(false);
-                    setEditingOrderId(null);
-                  }}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <OrderForm
-                form={form}
-                setForm={setForm}
-                onSubmit={handleSaveOrder}
-                editingOrderId={editingOrderId}
-                savedCategories={savedCategories}
-                setSavedCategories={setSavedCategories}
-                currentUser={currentUser}
-                showToast={showToast}
-                hasOrders={orders.length > 0}
-                recipeList={recipeList}
-              />
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <div className="mobile-only">
-        <BottomSheet
-          open={showModal}
-          onClose={() => {
-            setShowModal(false);
-            setEditingOrderId(null);
-          }}
-          title={editingOrderId ? 'Edit Order' : 'New Order'}
-        >
-          <OrderForm
-            form={form}
-            setForm={setForm}
-            onSubmit={handleSaveOrder}
-            editingOrderId={editingOrderId}
-            savedCategories={savedCategories}
-            setSavedCategories={setSavedCategories}
-            currentUser={currentUser}
-            showToast={showToast}
-            hasOrders={orders.length > 0}
-            recipeList={recipeList}
-          />
-        </BottomSheet>
-      </div>
+      <NativeBottomSheet
+        open={showModal}
+        onClose={() => {
+          setShowModal(false);
+          setEditingOrderId(null);
+        }}
+        title={editingOrderId ? 'Edit Order' : 'New Order'}
+      >
+        <OrderForm
+          form={form}
+          setForm={setForm}
+          onSubmit={handleSaveOrder}
+          editingOrderId={editingOrderId}
+          savedCategories={savedCategories}
+          setSavedCategories={setSavedCategories}
+          currentUser={currentUser}
+          showToast={showToast}
+          hasOrders={orders.length > 0}
+          recipeList={recipeList}
+        />
+      </NativeBottomSheet>
 
       <CustomerProfileSheet
         open={Boolean(selectedCustomerProfile)}

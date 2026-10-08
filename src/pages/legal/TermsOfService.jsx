@@ -1,7 +1,7 @@
 import React from 'react';
 import LegalLayout, { H2, P, UL } from './LegalLayout';
 
-const UPDATED = 'June 2026';
+const UPDATED = 'July 2026';
 
 export default function TermsOfService() {
   return (

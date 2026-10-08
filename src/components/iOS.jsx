@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useScroll, useTransform, useDragControls } from 'framer-motion';
 import {
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Info,
   X,
   Loader2,
@@ -152,7 +153,7 @@ export function PullToRefresh({ onRefresh, children }) {
       lastRefreshTime.current = now;
       setRefreshing(true);
       triggerHaptic('medium');
-      onRefresh().finally(() => {
+      Promise.resolve(onRefresh()).catch((e) => console.error('Refresh error:', e)).finally(() => {
         setRefreshing(false);
         setPulling(false);
       });
@@ -367,19 +368,27 @@ export function EmptyState({ icon = '📦', title, subtitle, action, actionLabel
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   TOAST NOTIFICATION SYSTEM  — iOS-style top toasts
-   Hardened: 4s default duration, max 3 visible + FIFO overflow queue,
-   tap-to-dismiss. Queue logic lives in utils/toastQueue.js (testable).
+   PREMIUM NOTIFICATION SYSTEM
+   ─────────────────────────────────────────────────────────────────
+   Architecture:
+   • ONE toast visible at a time — FIFO queue for the rest
+   • Swipe-up to dismiss (framer-motion drag)
+   • Keyboard-aware: moves above software keyboard on Android
+   • Safe area inset: never touches the status bar
+   • Premium glass morphism with bakery pastel palette
+   • Spring animations: slide-down entry, fade-up exit
+   • 4 types: success (green), error (soft rose), warning (amber), info (blue)
+   • Centralized API: showToast / showSuccess / showError / showWarning / showInfo
    ───────────────────────────────────────────────────────────────── */
 import { reduceToasts, initToastState } from '../utils/toastQueue.js';
+import { friendlyError } from '../utils/errorMessages.js';
 
 let toastListeners = [];
 let toastState = initToastState();
-const TOAST_DURATION = 4000;
+const TOAST_DURATION = 3500;
 const _toastTimers = new Map();
 
 function emitToasts() {
-  // Listeners receive only the currently-visible toasts.
   toastListeners.forEach((fn) => fn([...toastState.visible]));
 }
 
@@ -389,7 +398,7 @@ function scheduleAutoDismiss(id, duration) {
   _toastTimers.set(id, timer);
 }
 
-/** Remove a toast immediately (used by auto-dismiss and the tap control). */
+/** Remove a toast (auto-dismiss, tap, or swipe). */
 export function dismissToast(id) {
   if (_toastTimers.has(id)) {
     clearTimeout(_toastTimers.get(id));
@@ -398,34 +407,227 @@ export function dismissToast(id) {
   const before = toastState.visible.map((t) => t.id);
   toastState = reduceToasts(toastState, { kind: 'remove', id });
   emitToasts();
-  // If a queued toast was just promoted into view, start its timer.
   const promoted = toastState.visible.find((t) => !before.includes(t.id));
   if (promoted) scheduleAutoDismiss(promoted.id, promoted.duration);
 }
 
 export function showToast(message, type = 'success', duration = TOAST_DURATION) {
+  let displayMessage = message;
+  if (type === 'error') {
+    const friendly = friendlyError(message);
+    if (friendly === null) return null; // silent error
+    displayMessage = friendly;
+  }
+
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const toast = { id, message, type, duration };
+  const toast = { id, message: displayMessage, type, duration };
 
   const wasVisible = toastState.visible.length;
   toastState = reduceToasts(toastState, { kind: 'add', toast });
   emitToasts();
 
-  // Trigger appropriate haptic based on type
   if (type === 'success') triggerHaptic('success');
   else if (type === 'error') triggerHaptic('error');
+  else if (type === 'warning') triggerHaptic('warning');
   else triggerHaptic('light');
 
-  // Only start the auto-dismiss timer once the toast is actually visible.
-  // Queued (overflow) toasts get their timer when promoted in dismissToast().
   if (toastState.visible.length > wasVisible && toastState.visible.some((t) => t.id === id)) {
     scheduleAutoDismiss(id, duration);
   }
   return id;
 }
 
+/** Convenience helpers — centralized notification API */
+export const showSuccess = (msg, duration) => showToast(msg, 'success', duration);
+export const showError = (err, duration) => showToast(err, 'error', duration);
+export const showWarning = (msg, duration) => showToast(msg, 'warning', duration);
+export const showInfo = (msg, duration) => showToast(msg, 'info', duration);
+
+/* ── Keyboard height tracker (Android / iOS) ────────────────────── */
+function useKeyboardHeight() {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    // visualViewport API: works on Android Chrome, Capacitor WebView, iOS Safari 13+
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const kbH = window.innerHeight - vv.height;
+      setHeight(kbH > 60 ? kbH : 0); // ignore tiny viewport shifts from URL bar
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+  return height;
+}
+
+/* ── Single Toast Card ──────────────────────────────────────────── */
+const TOAST_STYLES = {
+  success: {
+    bg: 'rgba(240, 253, 244, 0.92)',
+    border: 'rgba(74, 167, 116, 0.28)',
+    color: '#1A3C28',
+    iconBg: 'rgba(74, 167, 116, 0.14)',
+    iconColor: '#2D8F54',
+    icon: CheckCircle2,
+    title: 'Success!',
+  },
+  error: {
+    bg: 'rgba(254, 242, 242, 0.92)',
+    border: 'rgba(205, 92, 92, 0.25)',
+    color: '#4A1C1C',
+    iconBg: 'rgba(205, 92, 92, 0.12)',
+    iconColor: '#C0504D',
+    icon: AlertCircle,
+    title: 'Oops!',
+  },
+  warning: {
+    bg: 'rgba(255, 251, 235, 0.92)',
+    border: 'rgba(202, 160, 56, 0.25)',
+    color: '#3D2E06',
+    iconBg: 'rgba(202, 160, 56, 0.14)',
+    iconColor: '#B8860B',
+    icon: AlertTriangle,
+    title: 'Heads up!',
+  },
+  info: {
+    bg: 'rgba(239, 246, 255, 0.92)',
+    border: 'rgba(96, 132, 200, 0.25)',
+    color: '#1A2744',
+    iconBg: 'rgba(96, 132, 200, 0.12)',
+    iconColor: '#4A7AC7',
+    icon: Info,
+    title: 'Info',
+  },
+};
+
+function ToastCard({ toast, onDismiss }) {
+  const s = TOAST_STYLES[toast.type] || TOAST_STYLES.success;
+  const IconComponent = s.icon;
+
+  return (
+    <motion.div
+      layout
+      drag="y"
+      dragConstraints={{ top: 0, bottom: 0 }}
+      dragElastic={{ top: 0.6, bottom: 0 }}
+      onDragEnd={(_, info) => {
+        // Swipe up to dismiss (threshold: 40px or fast flick)
+        if (info.offset.y < -40 || info.velocity.y < -300) {
+          onDismiss();
+        }
+      }}
+      initial={{ opacity: 0, y: -60, scale: 0.92 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -50, scale: 0.95, transition: { duration: 0.22, ease: 'easeIn' } }}
+      transition={{ type: 'spring', stiffness: 340, damping: 28, mass: 0.8 }}
+      onClick={onDismiss}
+      style={{
+        width: '100%',
+        maxWidth: 380,
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 12,
+        background: s.bg,
+        border: `1px solid ${s.border}`,
+        borderRadius: 20,
+        padding: '14px 16px 14px 14px',
+        boxShadow:
+          '0 12px 40px rgba(0,0,0,0.08), ' +
+          '0 4px 12px rgba(0,0,0,0.04), ' +
+          '0 1px 3px rgba(0,0,0,0.06)',
+        pointerEvents: 'auto',
+        cursor: 'pointer',
+        backdropFilter: 'blur(24px) saturate(1.6)',
+        WebkitBackdropFilter: 'blur(24px) saturate(1.6)',
+        wordBreak: 'break-word',
+        overflowWrap: 'break-word',
+        touchAction: 'pan-x',
+        userSelect: 'none',
+      }}
+    >
+      {/* Icon with tinted background circle */}
+      <div
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 12,
+          background: s.iconBg,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+        }}
+      >
+        <IconComponent size={18} color={s.iconColor} strokeWidth={2.2} />
+      </div>
+
+      {/* Content: title + message */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: 13.5,
+            fontWeight: 700,
+            color: s.color,
+            lineHeight: 1.2,
+            letterSpacing: '-0.01em',
+            marginBottom: 2,
+          }}
+        >
+          {s.title}
+        </div>
+        <div
+          style={{
+            fontSize: 12.5,
+            fontWeight: 500,
+            color: s.color,
+            opacity: 0.78,
+            lineHeight: 1.45,
+            letterSpacing: '-0.005em',
+          }}
+        >
+          {toast.message}
+        </div>
+      </div>
+
+      {/* Dismiss × button */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDismiss();
+        }}
+        aria-label="Dismiss notification"
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 4,
+          cursor: 'pointer',
+          color: s.color,
+          opacity: 0.35,
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginTop: 2,
+          borderRadius: 8,
+          transition: 'opacity 0.15s',
+        }}
+        onPointerEnter={(e) => { e.currentTarget.style.opacity = '0.7'; }}
+        onPointerLeave={(e) => { e.currentTarget.style.opacity = '0.35'; }}
+      >
+        <X size={15} strokeWidth={2.5} />
+      </button>
+    </motion.div>
+  );
+}
+
+/* ── Container (portal) ─────────────────────────────────────────── */
 export function ToastContainer() {
   const [toasts, setToasts] = useState([]);
+  const keyboardHeight = useKeyboardHeight();
 
   useEffect(() => {
     toastListeners.push(setToasts);
@@ -435,81 +637,51 @@ export function ToastContainer() {
     };
   }, []);
 
-  const icons = {
-    success: <CheckCircle2 size={18} />,
-    error: <AlertCircle size={18} />,
-    info: <Info size={18} />,
-  };
-  const colors = {
-    success: {
-      bg: 'rgba(240, 250, 246, 0.85)',
-      border: '#A8D8C8',
-      color: '#2E7A5A',
-      icon: '#4A9A80',
-    },
-    error: {
-      bg: 'rgba(253, 242, 242, 0.85)',
-      border: '#F0B8B3',
-      color: '#B04040',
-      icon: '#C45050',
-    },
-    info: { bg: 'rgba(245, 242, 252, 0.85)', border: '#C2B0E0', color: '#6040A8', icon: '#8060B8' },
-  };
+  // When keyboard is open, position toast above keyboard instead of at top
+  const isKeyboardOpen = keyboardHeight > 60;
 
-  return (
-    <div
-      style={{
+  const containerStyle = isKeyboardOpen
+    ? {
         position: 'fixed',
-        top: 'calc(20px + env(safe-area-inset-top, 0px))',
+        bottom: keyboardHeight + 12,
         left: '50%',
         transform: 'translateX(-50%)',
-        zIndex: 9999,
+        zIndex: 99999,
         display: 'flex',
         flexDirection: 'column',
-        gap: 10,
         alignItems: 'center',
+        width: 'calc(100vw - 40px)',
+        maxWidth: 400,
         pointerEvents: 'none',
-      }}
-    >
-      <AnimatePresence>
-        {toasts.map((t) => {
-          const c = colors[t.type] || colors.success;
-          return (
-            <motion.div
-              key={t.id}
-              onClick={() => dismissToast(t.id)}
-              initial={{ opacity: 0, y: -20, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -12, scale: 0.93 }}
-              transition={{ type: 'spring', stiffness: 420, damping: 26 }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                background: c.bg,
-                border: `1px solid ${c.border}`,
-                color: c.color,
-                borderRadius: 'var(--radius)',
-                padding: '12px 20px',
-                fontSize: 14,
-                fontWeight: 600,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-                pointerEvents: 'auto',
-                cursor: 'pointer',
-                letterSpacing: '-0.01em',
-                backdropFilter: 'blur(20px)',
-                maxWidth: 380,
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span style={{ color: c.icon }}>{icons[t.type]}</span>
-              {t.message}
-            </motion.div>
-          );
-        })}
+      }
+    : {
+        position: 'fixed',
+        top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 99999,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        width: 'calc(100vw - 40px)',
+        maxWidth: 400,
+        pointerEvents: 'none',
+      };
+
+  const content = (
+    <div style={containerStyle}>
+      <AnimatePresence mode="wait">
+        {toasts.map((t) => (
+          <ToastCard key={t.id} toast={t} onDismiss={() => dismissToast(t.id)} />
+        ))}
       </AnimatePresence>
     </div>
   );
+
+  // Use portal so the toast is always above everything including modals
+  return typeof document !== 'undefined'
+    ? createPortal(content, document.body)
+    : content;
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -615,127 +787,6 @@ export function PressButton({ children, onClick, className, style }) {
 
 /* ─────────────────────────────────────────────────────────────────
    BOTTOM SHEET  — Full-screen mobile takeover (app-native feel)
-   On mobile: slides up and fills the entire viewport so forms feel
-   like a dedicated screen, not a floating card on a big website.
-   ───────────────────────────────────────────────────────────────── */
-export function BottomSheet({ open, onClose, title, children }) {
-  // Lock body scroll when open
-  React.useEffect(() => {
-    if (!open) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
-
-  const content = (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              background: 'rgba(0, 0, 0, 0.65)',
-              zIndex: 200,
-            }}
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
-            style={{
-              position: 'fixed',
-              top: 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              margin: 'auto',
-              width: 'calc(100% - 40px)',
-              maxWidth: 560,
-              height: 'fit-content',
-              maxHeight: '92dvh',
-              background: 'var(--bg)',
-              borderRadius: '24px',
-              zIndex: 201,
-              boxShadow: '0 24px 80px rgba(0,0,0,0.16), 0 8px 24px rgba(0,0,0,0.08)',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-            }}
-          >
-            {/* Sticky header with title + close */}
-            <div
-              style={{
-                flexShrink: 0,
-                padding: '14px 20px',
-                borderBottom: '1px solid var(--border)',
-                background: 'var(--card)',
-              }}
-            >
-              {title && (
-                <div
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                >
-                  <h2
-                    style={{
-                      fontSize: '1.15rem',
-                      fontWeight: 800,
-                      letterSpacing: '-0.02em',
-                      margin: 0,
-                    }}
-                  >
-                    {title}
-                  </h2>
-                  <motion.button
-                    whileTap={{ scale: 0.9 }}
-                    onClick={onClose}
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      background: 'var(--bg2)',
-                      border: '1px solid var(--border)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      cursor: 'pointer',
-                      color: 'var(--text2)',
-                    }}
-                  >
-                    <X size={15} strokeWidth={2.5} />
-                  </motion.button>
-                </div>
-              )}
-            </div>
-
-            {/* Scrollable content area */}
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                WebkitOverflowScrolling: 'touch',
-                padding: '20px 20px calc(20px + env(safe-area-inset-bottom, 20px))',
-              }}
-            >
-              {children}
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  );
-
-  if (typeof document === 'undefined') return null;
-  return createPortal(content, document.body);
-}
-
 /* ─────────────────────────────────────────────────────────────────
    SWIPE ROW  — iOS-style swipe-to-reveal actions
    ───────────────────────────────────────────────────────────────── */

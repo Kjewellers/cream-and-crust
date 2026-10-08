@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { getCrashReports, getAuditLogs } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 import { ShieldAlert, Activity, Users, DollarSign, Bug, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -23,14 +22,12 @@ export default function SuperAdmin() {
       try {
         setLoading(true);
         // Fetch last 10 crashes
-        const qCrashes = query(collection(db, 'crash_reports'), orderBy('timestamp', 'desc'), limit(10));
-        const crashSnap = await getDocs(qCrashes);
-        setCrashes(crashSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const crashData = await getCrashReports(10);
+        setCrashes(crashData);
 
         // Fetch last 15 audit logs
-        const qAudits = query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'), limit(15));
-        const auditSnap = await getDocs(qAudits);
-        setAudits(auditSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const auditData = await getAuditLogs(15);
+        setAudits(auditData);
         setError(null);
       } catch (err) {
         console.error('Admin fetch error:', err);

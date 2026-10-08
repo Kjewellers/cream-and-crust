@@ -25,6 +25,13 @@ export default function SafeImage({
   const [errored, setErrored] = useState(false);
   const ref = useRef(null);
 
+  // Reset error/loaded state when the image source changes so a new item
+  // never shows the previous item's fallback (M4 fix).
+  useEffect(() => {
+    setErrored(false);
+    setLoaded(false);
+  }, [src]);
+
   useEffect(() => {
     if (inView) return undefined;
     const el = ref.current;

@@ -45,6 +45,7 @@ function createTagLogger(tag) {
 
 export const log = {
   auth: createTagLogger('Auth'),
+  otp: createTagLogger('OTP'),
   share: createTagLogger('Share'),
   invoice: createTagLogger('Invoice'),
   whatsapp: createTagLogger('WhatsApp'),
@@ -54,6 +55,16 @@ export const log = {
   startup: createTagLogger('Startup'),
   boundary: createTagLogger('Boundary'),
   dashboard: createTagLogger('Dashboard'),
+  db: createTagLogger('DB'),
+  purchase: createTagLogger('Purchase'),
+  pdf: createTagLogger('PDF'),
+  recaptcha: createTagLogger('Recaptcha'),
+  context: createTagLogger('Context'),
+  ai: createTagLogger('AI'),
+  api: createTagLogger('API'),
+  monitor: createTagLogger('Monitor'),
+  plugin: createTagLogger('Plugin'),
+  network: createTagLogger('Network'),
 };
 
 /**

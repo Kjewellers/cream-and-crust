@@ -13,7 +13,7 @@ import { Crown, Check, ChevronLeft, Loader2, RefreshCw, Smartphone } from 'lucid
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePurchases } from '../hooks/usePurchases';
-import { PLAN } from '../services/subscription';
+import { PLAN, ANNUAL_PLAN } from '../services/subscription';
 
 /* ─── Static plan display data (mirrors what's in Play Console) ─── */
 const PLANS_DISPLAY = [
@@ -21,8 +21,8 @@ const PLANS_DISPLAY = [
     id: 'pro_monthly',       // must match Play Console product ID
     rcIdentifier: 'Monthly', // RevenueCat package identifier (MONTHLY)
     name: 'Pro Monthly',
-    price: '₹149',
-    period: '/month',
+    price: `${PLAN.currency}${PLAN.price}`,
+    period: `/${PLAN.period}`,
     description: 'Perfect for home bakers & small bakeries.',
     features: [
       'Unlimited Orders',
@@ -39,9 +39,9 @@ const PLANS_DISPLAY = [
     id: 'pro_annual',
     rcIdentifier: 'Annual',
     name: 'Pro Annual',
-    price: '₹1,499',
-    period: '/year',
-    description: 'Best value — save ₹289 vs monthly.',
+    price: `${ANNUAL_PLAN.currency}${ANNUAL_PLAN.price.toLocaleString('en-IN')}`,
+    period: `/${ANNUAL_PLAN.period}`,
+    description: `Best value — save ${ANNUAL_PLAN.currency}${ANNUAL_PLAN.savings} vs monthly.`,
     features: [
       'Everything in Monthly',
       '2 Months Free',
@@ -62,10 +62,19 @@ export default function Subscribe() {
    * If offering isn't loaded yet (web / loading), returns null.
    */
   const getRcPackage = (planDisplay) => {
-    if (!offering?.availablePackages) return null;
-    return offering.availablePackages.find((p) =>
-      p.identifier.toLowerCase().includes(planDisplay.rcIdentifier.toLowerCase())
-    ) || null;
+    if (!offering?.availablePackages || offering.availablePackages.length === 0) return null;
+    const isYearly = planDisplay.id.includes('annual') || planDisplay.id.includes('yearly') || planDisplay.rcIdentifier.toLowerCase().includes('annual');
+    return offering.availablePackages.find((p) => {
+      const pId = (p.identifier || '').toLowerCase();
+      const prodId = (p.product?.identifier || p.product?.id || '').toLowerCase();
+      const pType = (p.packageType || '').toLowerCase();
+
+      if (isYearly) {
+        return pId.includes('annual') || pId.includes('yearly') || pType === 'annual' || prodId.includes('annual') || prodId.includes('yearly');
+      } else {
+        return pId.includes('monthly') || pType === 'monthly' || prodId.includes('monthly');
+      }
+    }) || offering.availablePackages[0] || null;
   };
 
   const handleSubscribe = async (planDisplay) => {
@@ -74,23 +83,22 @@ export default function Subscribe() {
       return;
     }
 
-    if (!isNativeApp) {
-      // On web: inform user to use the Android app
-      return;
-    }
-
     const pkg = getRcPackage(planDisplay);
-    if (!pkg) {
-      // Fallback: offerings still loading or mismatch
-      return;
+    const success = await purchase(pkg, planDisplay.id);
+    if (success) {
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
     }
-
-    await purchase(pkg);
   };
 
   const handleRestore = async () => {
-    if (!isNativeApp) return;
-    await restore();
+    const success = await restore();
+    if (success) {
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
+    }
   };
 
   return (
@@ -267,7 +275,7 @@ export default function Subscribe() {
                 <button
                   id={`subscribe-btn-${plan.id}`}
                   onClick={() => handleSubscribe(plan)}
-                  disabled={isPurchasing || !isNativeApp || (isNativeApp && offeringsLoading)}
+                  disabled={isPurchasing}
                   style={{
                     width: '100%',
                     background: plan.popular
@@ -276,17 +284,15 @@ export default function Subscribe() {
                     color: '#FFF', border: 'none',
                     padding: '16px', borderRadius: 16,
                     fontSize: 16, fontWeight: 700,
-                    cursor: isPurchasing || !isNativeApp ? 'not-allowed' : 'pointer',
+                    cursor: isPurchasing ? 'wait' : 'pointer',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                    opacity: isPurchasing || (!isNativeApp) ? 0.65 : 1,
+                    opacity: isPurchasing ? 0.65 : 1,
                     transition: 'opacity 0.2s',
                     boxShadow: plan.popular ? '0 8px 24px rgba(212,160,80,0.3)' : 'none',
                   }}
                 >
                   {isPurchasing ? (
                     <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Processing...</>
-                  ) : !isNativeApp ? (
-                    'Available on Android App'
                   ) : (
                     'Start Free Trial'
                   )}

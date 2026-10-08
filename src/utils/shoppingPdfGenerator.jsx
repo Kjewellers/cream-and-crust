@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import ShoppingListPdfTemplate from '../components/shopping/ShoppingListPdfTemplate';
 import { nativeShareFile, saveFileToDocuments, saveFileToCache } from '../services/nativeShare';
+import { log } from '../utils/logger';
 
 const cleanFilePart = (value, fallback = 'List') =>
   String(value || fallback)
@@ -100,22 +101,22 @@ export const generateShoppingListPdf = async (items, bakeryProfile, options = {}
 };
 
 export const downloadShoppingPdf = async (items, bakeryProfile) => {
-  console.log('[PDF] downloadShoppingPdf: generating...');
+  log.pdf('downloadShoppingPdf: generating...');
   const result = await generateShoppingListPdf(items, bakeryProfile);
-  console.log('[PDF] downloadShoppingPdf: saving file:', result.fileName);
+  log.pdf('downloadShoppingPdf: saving file:', result.fileName);
 
   await saveFileToDocuments({ blob: result.blob, fileName: result.fileName });
 
-  console.log('[PDF] downloadShoppingPdf: done');
+  log.pdf('downloadShoppingPdf: done');
   return result;
 };
 
 export const shareShoppingListPdf = async (items, bakeryProfile) => {
-  console.log('[PDF] shareShoppingListPdf: generating...');
+  log.pdf('shareShoppingListPdf: generating...');
   const result = await generateShoppingListPdf(items, bakeryProfile);
   const bakeryName = getBakeryName(bakeryProfile);
 
-  console.log('[PDF] shareShoppingListPdf: sharing file:', result.fileName);
+  log.pdf('shareShoppingListPdf: sharing file:', result.fileName);
 
   try {
     const shareResult = await nativeShareFile({
@@ -125,10 +126,10 @@ export const shareShoppingListPdf = async (items, bakeryProfile) => {
       text: `Here is the shopping list from ${bakeryName}`,
       mimeType: 'application/pdf',
     });
-    console.log('[PDF] shareShoppingListPdf: share result:', shareResult);
+    log.pdf('shareShoppingListPdf: share result:', shareResult);
     return { ...result, shared: shareResult.shared };
   } catch (e) {
-    console.error('[PDF] shareShoppingListPdf: share failed:', e?.message || e);
+    log.pdf.error('shareShoppingListPdf: share failed:', e?.message || e);
     // Last-resort: trigger download
     await saveFileToCache({ blob: result.blob, fileName: result.fileName });
     return { ...result, shared: false };

@@ -28,6 +28,12 @@ export const AUDIT = Object.freeze({
   LOGIN_SUCCESS: 'login_success',
   LOGIN_FAILED: 'login_failed',
   SETTINGS_CHANGED: 'settings_changed',
+  NEW_DEVICE_LOGIN: 'new_device_login',
+  TOKEN_REFRESH: 'token_refresh',
+  FAILED_AUTHORIZATION: 'failed_authorization',
+  SUSPICIOUS_ACCESS: 'suspicious_access',
+  SESSION_REVOCATION: 'session_revocation',
+  UNAUTHORIZED_ACCESS_ATTEMPT: 'unauthorized_access_attempt',
 });
 
 /**

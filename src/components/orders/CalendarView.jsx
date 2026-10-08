@@ -223,98 +223,56 @@ export default function CalendarView({ orders, onOrderClick, onWhatsApp, onCusto
           );
         })}
       </div>
-
-      <AnimatePresence>
-        {selectedDayString && (
-          <div
-            className="modal-overlay"
-            onClick={() => setSelectedDayString(null)}
-            style={{ zIndex: 1100 }}
-          >
-            <motion.div
-              initial={{ y: 50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 50, opacity: 0 }}
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 420, padding: 22 }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: 20,
-                }}
-              >
-                <h3 style={{ margin: 0, fontFamily: 'var(--font-serif)' }}>
-                  Deliveries: {formatDate(selectedDayString)}
-                </h3>
-                <button className="btn-icon" onClick={() => setSelectedDayString(null)}>
-                  ✕
-                </button>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 12,
-                  maxHeight: '60vh',
-                  overflowY: 'auto',
-                }}
-              >
-                {selectedDayOrders.map((o) => (
+      <NativeModal
+        open={Boolean(selectedDayString)}
+        onClose={() => setSelectedDayString(null)}
+        title={selectedDayString ? new Date(selectedDayString).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) : ''}
+      >
+        <div>
+          {selectedDayOrders.length === 0 ? (
+            <p style={{ color: 'var(--text3)' }}>No orders for this day.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {selectedDayOrders.map((o) => {
+                const s = String(o.status || 'inquiry').toLowerCase();
+                const isComplete = ['delivered', 'cancelled'].includes(s);
+                return (
                   <div
                     key={o.id}
                     onClick={() => {
                       setSelectedDayString(null);
-                      onOrderClick(o);
+                      if (onOrderClick) onOrderClick(o);
                     }}
                     style={{
-                      background: 'var(--bg)',
+                      background: 'var(--surface-sunken)',
+                      padding: 16,
                       borderRadius: 16,
-                      padding: 14,
-                      border: '1px solid rgba(74, 59, 50, 0.05)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
                       cursor: 'pointer',
-                      transition: '0.15s',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'flex-start',
-                        marginBottom: 6,
-                      }}
-                    >
-                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text)' }}>
-                      {safeDisplayValue(o.customerName || o.customer, 'Customer')}
-                      </div>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent2)' }}>
+                      opacity: isComplete ? 0.7 : 1,
+                      border: '1px solid var(--border)',
+                    }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ fontWeight: 800 }}>{safeDisplayValue(o.customerName || o.customer, 'Unknown Customer')}</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text2)' }}>
                         {formatCurrency(o.total || o.totalAmount)}
                       </div>
                     </div>
-                    <div
-                      style={{
-                        fontSize: '0.78rem',
-                        color: 'var(--text2)',
-                        fontWeight: 600,
-                        marginBottom: 8,
-                      }}
-                    >
-                      🎂 {o.product} {o.size ? `(${o.size})` : ''}
+                    <div style={{ fontSize: '0.9rem', color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: s === 'delivered' ? '#A8D8C8' : s === 'ready' ? '#3B82F6' : 'var(--accent)',
+                        }}
+                      />
+                      {o.product} {o.size ? `(${o.size})` : ''}
                     </div>
-                    <div
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontSize: '0.7rem',
-                      }}
-                    >
-                      <span style={{ color: 'var(--text3)' }}>
-                        🕑 Delivery: {formatTime(o.time || o.deliveryTime)}
-                      </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.7rem' }}>
+                      <span style={{ color: 'var(--text3)' }}>🕑 Delivery: {formatTime(o.time || o.deliveryTime)}</span>
                       <span
                         style={{
                           padding: '2px 8px',
@@ -330,12 +288,12 @@ export default function CalendarView({ orders, onOrderClick, onWhatsApp, onCusto
                       </span>
                     </div>
                   </div>
-                ))}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </NativeModal>
     </div>
   );
 }

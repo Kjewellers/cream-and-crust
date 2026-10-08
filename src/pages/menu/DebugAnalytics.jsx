@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { db } from '../../services/firebase';
-import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, limit, where, doc, getDoc } from 'firebase/firestore';
+import { getAnalyticsEvents, getAnalyticsSummary } from '../../services/menuAnalytics';
 
 export default function DebugAnalytics() {
   const { currentUser } = useAuth();
@@ -14,18 +13,11 @@ export default function DebugAnalytics() {
       if (!currentUser?.uid) return;
       setLoading(true);
       try {
-        const q = query(
-          collection(db, 'analytics_events'),
-          where('bakeryId', '==', currentUser.uid),
-          orderBy('timestamp', 'desc'),
-          limit(20)
-        );
-        const snap = await getDocs(q);
-        setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const eventsData = await getAnalyticsEvents(currentUser.uid, 20);
+        setEvents(eventsData);
 
-        const sumRef = doc(db, 'analytics_summary', currentUser.uid);
-        const sumSnap = await getDoc(sumRef);
-        setSummary(sumSnap.exists() ? sumSnap.data() : null);
+        const summaryData = await getAnalyticsSummary(currentUser.uid);
+        setSummary(summaryData);
       } catch (err) {
         console.error(err);
       }

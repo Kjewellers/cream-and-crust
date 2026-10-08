@@ -1,73 +1,90 @@
 import { useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { log } from '../utils/logger';
+import { setupNotificationChannels } from '../services/notifications/NotificationChannels';
+import { loadNotificationPreferences, shouldDeliverNotification } from '../services/notifications/NotificationPreferences';
+import { handleNotificationTap } from '../services/notifications/DeepLinkRouter';
+import { useNavigate } from 'react-router-dom';
 
 export function usePushNotifications() {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
-    // Only run on native Android/iOS
-    if (!Capacitor.isNativePlatform()) return;
     if (!currentUser?.uid) return;
 
     let isSubscribed = true;
 
     const setupPush = async () => {
       try {
+        // Load preferences
+        await loadNotificationPreferences(currentUser.uid);
+
+        if (!Capacitor.isNativePlatform()) return;
+
         const { PushNotifications } = await import('@capacitor/push-notifications');
+        const { globalRequirePermission } = await import('../context/PermissionContext');
+        const { PERMISSION_TYPES } = await import('../services/PermissionManager');
 
-        // Request permission to use push notifications
-        let permStatus = await PushNotifications.checkPermissions();
-        
-        if (permStatus.receive === 'prompt') {
-          permStatus = await PushNotifications.requestPermissions();
-        }
+        // Setup Android 13-16 Notification Channels
+        await setupNotificationChannels();
 
-        if (permStatus.receive !== 'granted') {
+        // Request permission via premium permission dialog
+        const granted = await globalRequirePermission(PERMISSION_TYPES.NOTIFICATIONS);
+        if (!granted) {
           log.warn('Push notification permission denied');
           return;
         }
 
-        // Register with Apple / Google to receive push via APNS/FCM
+        // Register with APNS / FCM
         await PushNotifications.register();
 
-        // Listen for registration success
+        // Registration Success: save to user fcmTokens array for multi-device push
         PushNotifications.addListener('registration', async (token) => {
           if (!isSubscribed) return;
-          log.info('Push registration success, token: ' + token.value);
-          
+          log.info('Push registration token: ' + token.value);
+
           try {
-            // Save the token to the user's Firestore document
             const userRef = doc(db, 'users', currentUser.uid);
-            // We use arrayUnion in a real app, but for simplicity we'll just save fcmToken string
             await updateDoc(userRef, {
-              fcmToken: token.value,
-              lastTokenUpdate: new Date().toISOString()
+              fcmToken: token.value, // primary
+              fcmTokens: arrayUnion(token.value), // multi-device array
+              lastTokenUpdate: new Date().toISOString(),
             });
-            log.info('FCM Token saved to Firestore for user: ' + currentUser.uid);
+            log.info('FCM Token array updated in Firestore for user: ' + currentUser.uid);
           } catch (e) {
-            log.error('Failed to save FCM token to Firestore', e);
+            log.error('Failed to save FCM token array to Firestore', e);
           }
         });
 
-        // Listen for registration error
         PushNotifications.addListener('registrationError', (error) => {
-          log.error('Error on registration: ' + JSON.stringify(error));
+          log.error('Error on push registration: ' + JSON.stringify(error));
         });
 
-        // Listen for notifications received while app is in foreground
+        // Foreground notification handling (Silent sync & in-app live banner)
         PushNotifications.addListener('pushNotificationReceived', (notification) => {
-          log.info('Push received: ' + JSON.stringify(notification));
+          log.info('Push notification received in foreground: ' + JSON.stringify(notification));
+
+          const data = notification.data || {};
+          const category = data.category || data.type;
+
+          if (shouldDeliverNotification(category, data.priority)) {
+            // Trigger 60 FPS floating Cream & Crust live activity banner
+            if (window.showCreamCrustBanner) {
+              window.showCreamCrustBanner(notification);
+            }
+          }
         });
 
-        // Listen for notification taps
-        PushNotifications.addListener('pushNotificationActionPerformed', (notification) => {
-          log.info('Push action performed: ' + JSON.stringify(notification));
+        // Push tap deep link handling
+        PushNotifications.addListener('pushNotificationActionPerformed', (notificationAction) => {
+          log.info('Push notification action performed: ' + JSON.stringify(notificationAction));
+          const data = notificationAction.notification?.data || {};
+          handleNotificationTap(data, navigate);
         });
-
       } catch (e) {
         log.error('Failed to setup Push Notifications', e);
       }
@@ -77,8 +94,6 @@ export function usePushNotifications() {
 
     return () => {
       isSubscribed = false;
-      // We don't remove listeners here because we want them to stay active
-      // as long as the user is logged in. 
     };
-  }, [currentUser]);
+  }, [currentUser, navigate]);
 }

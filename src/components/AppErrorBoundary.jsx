@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertCircle, RefreshCw, Home } from 'lucide-react';
 import { logCrashToFirestore } from '../services/crashReporting.js';
+import { captureReactCrash } from '../services/ErrorMonitor.js';
 import { log } from '../utils/logger';
 
 /**
@@ -27,6 +28,13 @@ export default class AppErrorBoundary extends React.Component {
   componentDidCatch(error, info) {
      
     console.error('[AppErrorBoundary] crash:', error, info);
+
+    // 0. Report to production ErrorMonitor (Crashlytics + Firestore queue)
+    try {
+      captureReactCrash(error, info, this.props.uid || null);
+    } catch {
+      /* monitor must never throw */
+    }
 
     // 1. Local Firebase Analytics event (PII-free, truncated)
     import('../services/analytics.js').then(({ logError }) => {
@@ -60,17 +68,27 @@ export default class AppErrorBoundary extends React.Component {
       msg.includes('missing or insufficient') ||
       msg.includes('network') ||
       msg.includes('unavailable') ||
+      msg.includes('cannot read properties of null') ||
+      msg.includes('cannot read properties of undefined') ||
+      msg.includes('undefined is not an object') ||
+      msg.includes('null is not an object') ||
+      name === 'typeerror';
+
+    const isChunkError =
       msg.includes('failed to fetch') ||
       msg.includes('load failed') ||
       msg.includes('loading chunk') ||
       msg.includes('loading css chunk') ||
       msg.includes('dynamically imported module') ||
-      msg.includes('cannot read properties of null') ||
-      msg.includes('cannot read properties of undefined') ||
-      msg.includes('undefined is not an object') ||
-      msg.includes('null is not an object') ||
-      name === 'typeerror' ||
       name === 'chunkerror';
+
+    if (isChunkError) {
+      log.boundary('Chunk error detected, forcing hard reload to fetch new assets');
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+      return;
+    }
 
     if (isTransient && this.state.autoRetries < 3) {
       const delay = this._retryDelays[this.state.autoRetries] || 5000;
@@ -127,17 +145,37 @@ export default class AppErrorBoundary extends React.Component {
       msg.includes('missing or insufficient') ||
       msg.includes('network') ||
       msg.includes('unavailable') ||
+      msg.includes('cannot read properties of null') ||
+      msg.includes('cannot read properties of undefined') ||
+      msg.includes('undefined is not an object') ||
+      msg.includes('null is not an object') ||
+      name === 'typeerror';
+
+    const isChunkError =
       msg.includes('failed to fetch') ||
       msg.includes('load failed') ||
       msg.includes('loading chunk') ||
       msg.includes('loading css chunk') ||
       msg.includes('dynamically imported module') ||
-      msg.includes('cannot read properties of null') ||
-      msg.includes('cannot read properties of undefined') ||
-      msg.includes('undefined is not an object') ||
-      msg.includes('null is not an object') ||
-      name === 'typeerror' ||
       name === 'chunkerror';
+
+    if (isChunkError) {
+      return (
+        <div
+          style={{
+            minHeight: '60vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <RefreshCw size={24} color="var(--accent, #B5606A)" className="animate-spin" />
+          <p style={{ marginTop: 16, color: '#8C7A6B' }}>Updating app...</p>
+        </div>
+      );
+    }
+
     if (isTransient && this.state.autoRetries < 3) {
       return (
         <div

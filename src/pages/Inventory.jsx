@@ -29,7 +29,8 @@ import {
 } from '../services/db';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { Skeleton, showToast, triggerHaptic, EmptyState, PressButton, BottomSheet } from '../components/iOS';
+import { Skeleton, showToast, triggerHaptic, EmptyState, PressButton } from '../components/iOS';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { IndianRupee, Store, Calendar as CalendarIcon } from 'lucide-react';
 import ModuleTour from '../components/ModuleTour';
 import { inventoryTourSteps } from '../components/tours/inventoryTour';
@@ -657,7 +658,7 @@ export default function Inventory() {
       )}
 
       {/* Add Modal */}
-      <BottomSheet open={showAddModal} onClose={() => setShowAddModal(false)} title="New Inventory Item">
+      <NativeBottomSheet open={showAddModal} onClose={() => setShowAddModal(false)} title="New Inventory Item">
         <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginTop: -10, marginBottom: 24 }}>
           Define stock levels and initial cost
         </p>
@@ -851,10 +852,10 @@ export default function Inventory() {
                   </button>
                 </div>
               </form>
-      </BottomSheet>
+      </NativeBottomSheet>
 
       {/* Restock Modal */}
-      <BottomSheet open={showRestockModal && selectedItem != null} onClose={() => setShowRestockModal(false)} title={`Restock ${selectedItem?.item}`}>
+      <NativeBottomSheet open={showRestockModal && selectedItem != null} onClose={() => setShowRestockModal(false)} title={`Restock ${selectedItem?.item}`}>
         <p style={{ color: 'var(--text3)', fontSize: '0.9rem', marginTop: -10, marginBottom: 24 }}>
           Current balance: {selectedItem?.stock} {selectedItem?.unit}
         </p>
@@ -999,7 +1000,7 @@ export default function Inventory() {
                   </button>
                 </div>
               </form>
-      </BottomSheet>
+      </NativeBottomSheet>
       <AnimatedDemo moduleId="inventory" title="Track Your Stock" scenes={inventoryDemoScenes} />
     </motion.div>
   );

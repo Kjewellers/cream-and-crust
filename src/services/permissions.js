@@ -48,25 +48,11 @@ export async function requestStoragePermission() {
     return 'granted';
   }
 
-  try {
-    // @capacitor/filesystem 6+ exposes checkPermissions / requestPermissions
-    const { Filesystem } = await import('@capacitor/filesystem');
-
-    let status = await Filesystem.checkPermissions();
-    log.permission('Storage check result:', JSON.stringify(status));
-
-    if (status.publicStorage === 'granted') return 'granted';
-
-    // Request if not yet granted
-    const requested = await Filesystem.requestPermissions();
-    log.permission('Storage request result:', JSON.stringify(requested));
-    return requested.publicStorage;
-  } catch (e) {
-    log.permission.warn('Filesystem permission error:', e?.message || e);
-    // On Cache directory writes, no permission is needed — treat as granted
-    return 'granted';
-  }
+  // Storage permission bypassed — we use Android Photo Picker and cache directories
+  // which require no READ_MEDIA_IMAGES permission on Android 13+.
+  return 'granted';
 }
+
 
 // ─── Camera Permissions ───────────────────────────────────────────────────────
 
@@ -88,18 +74,14 @@ export async function requestCameraPermission() {
     let status = await Camera.checkPermissions();
     log.permission('Camera check result:', JSON.stringify(status));
 
-    const allGranted =
-      status.camera === 'granted' && status.photos === 'granted';
-    if (allGranted) return 'granted';
+    if (status.camera === 'granted') return 'granted';
 
     const requested = await Camera.requestPermissions({
-      permissions: ['camera', 'photos'],
+      permissions: ['camera'],
     });
     log.permission('Camera request result:', JSON.stringify(requested));
 
-    const granted =
-      requested.camera === 'granted' && requested.photos === 'granted';
-    return granted ? 'granted' : 'denied';
+    return requested.camera === 'granted' ? 'granted' : 'denied';
   } catch (e) {
     log.permission.warn('Camera permission error:', e?.message || e);
     return 'denied';

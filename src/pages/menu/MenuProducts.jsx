@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import Platform from '../../platform/Platform';
 import {
   Camera,
   Eye,
@@ -17,7 +18,6 @@ import { useMenuBuilderData } from './useMenuBuilderData';
 import MenuBuilderShell from './MenuBuilderShell';
 
 function ProductCard({ product, categories, onUpdate, onUpload, uploadingId, dragControls }) {
-  const fileRef = useRef(null);
   const isUploading = uploadingId === product.id;
   const [expanded, setExpanded] = useState(false);
 
@@ -53,7 +53,7 @@ function ProductCard({ product, categories, onUpdate, onUpload, uploadingId, dra
         {/* Image */}
         <button
           type="button"
-          onClick={() => fileRef.current?.click()}
+          onClick={() => onUpload(product)}
           style={{
             width: 90,
             height: 90,
@@ -103,13 +103,6 @@ function ProductCard({ product, categories, onUpdate, onUpload, uploadingId, dra
             </div>
           )}
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          onChange={(e) => onUpload(product, e.target.files?.[0])}
-          style={{ display: 'none' }}
-        />
 
         {/* Name + price + visibility toggle */}
         <div style={{ flex: 1, padding: '10px 12px', minWidth: 0 }}>
@@ -334,11 +327,12 @@ export default function MenuProducts() {
     showToast('Saved ✓', 'success');
   };
 
-  const uploadImage = async (product, file) => {
-    if (!file) return;
+  const uploadImage = async (product) => {
     setUploadingId(product.id);
     try {
-      const imageUrl = await uploadToCloudinary(file);
+      const picked = await Platform.PhotoPicker.pickImage();
+      if (!picked) return;
+      const imageUrl = await uploadToCloudinary(picked.file);
       await updateProduct(product, { imageUrl });
     } catch {
       showToast('Image upload failed', 'error');

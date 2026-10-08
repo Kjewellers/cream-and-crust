@@ -1,8 +1,6 @@
-/**
- * StatusBadge — colored pill showing an order's current status.
- * Extracted from Orders.jsx for reuse and maintainability.
- */
 import React from 'react';
+import { motion } from 'framer-motion';
+import { SPRINGS } from '../../motion/springs.js';
 
 export const STATUS_COLORS = {
   inquiry: { bg: 'rgba(194,176,224,0.18)', color: '#7050A8' },
@@ -17,7 +15,11 @@ export default function StatusBadge({ status }) {
   const s = String(status || 'inquiry').toLowerCase();
   const { bg, color } = STATUS_COLORS[s] || STATUS_COLORS.inquiry;
   return (
-    <span
+    <motion.span
+      key={s}
+      initial={{ scale: 0.8, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={SPRINGS.snappy}
       style={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -29,9 +31,10 @@ export default function StatusBadge({ status }) {
         letterSpacing: '0.01em',
         background: bg,
         color,
+        userSelect: 'none',
       }}
     >
       {s.charAt(0).toUpperCase() + s.slice(1)}
-    </span>
+    </motion.span>
   );
 }

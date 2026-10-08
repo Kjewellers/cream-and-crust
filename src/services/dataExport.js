@@ -103,3 +103,23 @@ export function exportInventoryCSV(items) {
   const date = new Date().toISOString().split('T')[0];
   downloadFile(csv, `cream-and-crust-inventory-${date}.csv`, 'text/csv;charset=utf-8;');
 }
+
+/**
+ * Export full database JSON package across all collections (WhatsApp style).
+ * @param {string} uid
+ * @param {function} [onProgress]
+ */
+export async function exportFullDatabaseBackup(uid, onProgress) {
+  const { createBackup } = await import('./backup');
+  return createBackup(uid, { provider: 'local', onProgress });
+}
+
+/**
+ * Restore database from uploaded backup JSON file payload.
+ * @param {string} uid
+ * @param {object|string} filePayload
+ */
+export async function restoreDatabaseBackup(uid, filePayload) {
+  const { restoreFromLocal } = await import('./backup');
+  return restoreFromLocal(uid, filePayload);
+}

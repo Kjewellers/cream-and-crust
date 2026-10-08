@@ -1,20 +1,20 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import {
   subscribeToOrders,
   subscribeToCustomers,
   subscribeToInventory,
   subscribeToExpenses,
-  subscribeToBusiness,
   subscribeToProducts,
   subscribeToShoppingList
 } from '../services/db';
 import { subscribeToAnalyticsSummary } from '../services/menuAnalytics';
+import { ListenerRegistry } from '../core/listeners/ListenerRegistry';
 
 export const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { currentUser, userRole, isAdmin } = useAuth();
+  const { currentUser, userRole, isAdmin, loading: authLoading, business } = useAuth();
   
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -22,7 +22,6 @@ export function DataProvider({ children }) {
   const [expenses, setExpenses] = useState([]);
   const [shoppingItems, setShoppingItems] = useState([]);
   const [products, setProducts] = useState([]);
-  const [business, setBusiness] = useState(null);
   const [analytics, setAnalytics] = useState(null);
 
   // A global loading state that tracks if the initial data fetch is complete
@@ -36,77 +35,129 @@ export function DataProvider({ children }) {
     setExpenses([]);
     setShoppingItems([]);
     setProducts([]);
-    setBusiness(null);
     setAnalytics(null);
 
-    // Only fetch baker/admin data if they are logged in with the correct role
-    // Customers (userRole === 'customer') don't need all this global data.
     const isBakerOrAdmin = isAdmin || userRole === 'baker';
-    
-    if (!currentUser?.uid || !isBakerOrAdmin) {
+
+    if (!currentUser?.uid || !isBakerOrAdmin || authLoading) {
       setLoading(false);
       return;
     }
 
     setLoading(true);
 
-    const unsubOrders = subscribeToOrders((data) => {
-      setOrders(data || []);
-      setLoading(false); // Consider the app "loaded" once orders arrive
-    }, currentUser.uid);
+    const safetyTimer = setTimeout(() => {
+      setLoading((prev) => {
+        if (prev) console.warn('[DataContext] Safety timeout — forcing loading=false');
+        return false;
+      });
+    }, 6000);
 
-    const unsubCustomers = subscribeToCustomers((data) => {
-      setCustomers(data || []);
-    }, null, currentUser.uid);
+    let loadingCleared = false;
+    const clearLoadingOnce = () => {
+      if (!loadingCleared) {
+        loadingCleared = true;
+        clearTimeout(safetyTimer);
+        setLoading(false);
+      }
+    };
 
-    const unsubInventory = subscribeToInventory((data) => {
-      setInventory(data || []);
-    }, null, currentUser.uid);
+    const unsubs = [];
+    const uid = currentUser.uid;
 
-    const unsubExpenses = subscribeToExpenses((data) => {
-      setExpenses(data || []);
-    }, null, currentUser.uid);
+    try {
+      const rawUnsub = subscribeToOrders((data) => {
+        setOrders(data || []);
+        clearLoadingOnce();
+      }, uid);
+      unsubs.push(ListenerRegistry.register('orders', rawUnsub, { uid }));
+    } catch (e) {
+      console.error('[DataContext] Orders subscription failed:', e?.message);
+      clearLoadingOnce();
+    }
 
-    const unsubShopping = subscribeToShoppingList((data) => {
-      setShoppingItems(data || []);
-    }, null, currentUser.uid);
+    try {
+      const rawUnsub = subscribeToCustomers((data) => {
+        setCustomers(data || []);
+        clearLoadingOnce();
+      }, null, uid);
+      unsubs.push(ListenerRegistry.register('customers', rawUnsub, { uid }));
+    } catch (e) {
+      console.error('[DataContext] Customers subscription failed:', e?.message);
+    }
 
-    const unsubBusiness = subscribeToBusiness((data) => {
-      setBusiness(data);
-    }, null, currentUser.uid);
+    try {
+      const rawUnsub = subscribeToInventory((data) => {
+        setInventory(data || []);
+        clearLoadingOnce();
+      }, null, uid);
+      unsubs.push(ListenerRegistry.register('inventory', rawUnsub, { uid }));
+    } catch (e) {
+      console.error('[DataContext] Inventory subscription failed:', e?.message);
+    }
 
-    const unsubProducts = subscribeToProducts((data) => {
-      setProducts(data || []);
-    }, null, currentUser.uid);
+    try {
+      const rawUnsub = subscribeToExpenses((data) => {
+        setExpenses(data || []);
+      }, null, uid);
+      unsubs.push(ListenerRegistry.register('expenses', rawUnsub, { uid }));
+    } catch (e) {
+      console.error('[DataContext] Expenses subscription failed:', e?.message);
+    }
 
-    const unsubAnalytics = subscribeToAnalyticsSummary(currentUser.uid, (data) => {
-      setAnalytics(data);
-    });
+    try {
+      const rawUnsub = subscribeToShoppingList((data) => {
+        setShoppingItems(data || []);
+      }, null, uid);
+      unsubs.push(ListenerRegistry.register('shoppingList', rawUnsub, { uid }));
+    } catch (e) {
+      console.error('[DataContext] Shopping subscription failed:', e?.message);
+    }
+
+    try {
+      const rawUnsub = subscribeToProducts((data) => {
+        setProducts(data || []);
+        clearLoadingOnce();
+      }, null, uid);
+      unsubs.push(ListenerRegistry.register('products', rawUnsub, { uid }));
+    } catch (e) {
+      console.error('[DataContext] Products subscription failed:', e?.message);
+    }
+
+    try {
+      const rawUnsub = subscribeToAnalyticsSummary(uid, (data) => {
+        setAnalytics(data);
+      });
+      if (rawUnsub) {
+        unsubs.push(ListenerRegistry.register('analytics_summary', rawUnsub, { uid }));
+      }
+    } catch (e) {
+      console.error('[DataContext] Analytics subscription failed:', e?.message);
+    }
 
     return () => {
-      unsubOrders();
-      unsubCustomers();
-      unsubInventory();
-      unsubExpenses();
-      unsubShopping();
-      unsubBusiness();
-      unsubProducts();
-      if (unsubAnalytics) unsubAnalytics();
+      clearTimeout(safetyTimer);
+      unsubs.forEach((unsub) => {
+        try { if (typeof unsub === 'function') unsub(); } catch (_) {}
+      });
     };
-  }, [currentUser?.uid, userRole, isAdmin]);
+  }, [currentUser?.uid, userRole, isAdmin, authLoading]);
+
+  // Memoize context value to prevent unneeded child component re-renders
+  const contextValue = useMemo(() => ({
+    orders, setOrders,
+    customers, setCustomers,
+    inventory, setInventory,
+    expenses, setExpenses,
+    shoppingItems, setShoppingItems,
+    products, setProducts,
+    business,
+    analytics,
+    loading
+  }), [orders, customers, inventory, expenses, shoppingItems, products, business, analytics, loading]);
 
   return (
-    <DataContext.Provider value={{
-      orders, setOrders,
-      customers, setCustomers,
-      inventory, setInventory,
-      expenses, setExpenses,
-      shoppingItems, setShoppingItems,
-      products, setProducts,
-      business,
-      analytics,
-      loading
-    }}>
+    <DataContext.Provider value={contextValue}>
       {children}
     </DataContext.Provider>
   );

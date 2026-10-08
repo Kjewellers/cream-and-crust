@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import InvoiceTemplate from '../components/orders/InvoiceTemplate';
 import { nativeShareFile, saveFileToDocuments, saveFileToCache } from '../services/nativeShare';
+import { log } from '../utils/logger';
 
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'unsigned_preset';
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'demo';
@@ -131,23 +132,23 @@ export const generateInvoicePdf = async (order, bakeryProfile, options = {}) => 
 };
 
 export const downloadInvoicePdf = async (order, bakeryProfile) => {
-  console.log('[PDF] downloadInvoicePdf: generating...');
+  log.pdf('downloadInvoicePdf: generating...');
   const result = await generateInvoicePdf(order, bakeryProfile);
-  console.log('[PDF] downloadInvoicePdf: saving file:', result.fileName);
+  log.pdf('downloadInvoicePdf: saving file:', result.fileName);
 
   await saveFileToDocuments({ blob: result.blob, fileName: result.fileName });
 
-  console.log('[PDF] downloadInvoicePdf: done');
+  log.pdf('downloadInvoicePdf: done');
   return result;
 };
 
 export const shareInvoicePdf = async (order, bakeryProfile) => {
-  console.log('[PDF] shareInvoicePdf: generating...');
+  log.pdf('shareInvoicePdf: generating...');
   const result = await generateInvoicePdf(order, bakeryProfile);
   const customerName = getCustomerName(order);
   const bakeryName = getBakeryName(bakeryProfile);
 
-  console.log('[PDF] shareInvoicePdf: sharing file:', result.fileName);
+  log.pdf('shareInvoicePdf: sharing file:', result.fileName);
 
   try {
     const shareResult = await nativeShareFile({
@@ -157,10 +158,10 @@ export const shareInvoicePdf = async (order, bakeryProfile) => {
       text: `Invoice ${result.invoiceNumber} from ${bakeryName}`,
       mimeType: 'application/pdf',
     });
-    console.log('[PDF] shareInvoicePdf: share result:', shareResult);
+    log.pdf('shareInvoicePdf: share result:', shareResult);
     return { ...result, shared: shareResult.shared };
   } catch (e) {
-    console.error('[PDF] shareInvoicePdf: share failed:', e?.message || e);
+    log.pdf.error('shareInvoicePdf: share failed:', e?.message || e);
     // Last-resort: trigger download
     await saveFileToCache({ blob: result.blob, fileName: result.fileName });
     return { ...result, shared: false };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { printInvoice } from '../utils/invoice';
 import { useAuth } from '../context/AuthContext';
+import Platform from '../platform/Platform';
 
 export default function Admin() {
   const { business } = useAuth();
@@ -14,7 +15,7 @@ export default function Admin() {
   // Product Form State
   const [editingProduct, setEditingProduct] = useState(null);
   const [showProductForm, setShowProductForm] = useState(false);
-  const [formData, setFormData] = useState({ name: '', price: '', description: '', sizes: [{label: 'Regular', price: ''}], image: null, imageUrl: '' });
+  const [formData, setFormData] = useState({ name: '', price: '', description: '', sizes: [{label: 'Regular', price: ''}], image: null, imageUrl: '', imagePreview: '' });
 
   useEffect(() => {
     fetchData();
@@ -220,7 +221,24 @@ export default function Admin() {
             <div className="form-group" style={{ padding: '1rem', border: '1px dashed #ccc', borderRadius: '8px' }}>
               <label className="form-label">Product Image</label>
               {formData.imageUrl && <img src={formData.imageUrl} alt="Preview" style={{ width: '100px', height: '100px', objectFit: 'cover', marginBottom: '1rem', borderRadius: '8px' }} />}
-              <input type="file" accept="image/*" onChange={e => setFormData({...formData, image: e.target.files[0]})} style={{ width: '100%' }} />
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={async () => {
+                    const result = await Platform.PhotoPicker.pickImage();
+                    if (result) {
+                      setFormData({ ...formData, image: result.file, imagePreview: result.previewUrl });
+                    }
+                  }}
+                >
+                  Choose Image
+                </button>
+                <span style={{ fontSize: '0.9rem', color: '#666' }}>{formData.image ? formData.image.name : 'No file chosen'}</span>
+              </div>
+              {formData.imagePreview && (
+                <img src={formData.imagePreview} alt="Preview" style={{ width: '80px', height: '80px', objectFit: 'cover', marginTop: '0.5rem', borderRadius: '8px' }} />
+              )}
               <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}>Upload a JPEG or PNG photo of the product.</p>
             </div>
 

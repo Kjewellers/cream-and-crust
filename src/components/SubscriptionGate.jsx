@@ -2,9 +2,11 @@ import React from 'react';
 import { useSubscription } from '../hooks/useSubscription';
 import { Lock, Crown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useSubscriptionContext } from '../context/SubscriptionContext';
 
-export default function SubscriptionGate({ children, fallback }) {
+export default function SubscriptionGate({ children, fallback, featureKey = 'generic' }) {
   const { isActive, loading } = useSubscription();
+  const { openPaywall } = useSubscriptionContext();
   const navigate = useNavigate();
 
   if (loading) {
@@ -47,7 +49,7 @@ export default function SubscriptionGate({ children, fallback }) {
         This feature requires an active Cream & Crust Pro subscription.
       </p>
       <button 
-        onClick={() => navigate('/subscribe')}
+        onClick={() => openPaywall(featureKey)}
         style={{
           background: 'linear-gradient(135deg, #D4A050, #C28D3D)',
           color: '#FFF',

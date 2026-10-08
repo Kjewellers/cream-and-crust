@@ -36,8 +36,15 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 // In development (localhost), set FIREBASE_APPCHECK_DEBUG_TOKEN=true in
 // the browser console to bypass App Check.
 if (import.meta.env.DEV) {
-   
-  self.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  // Use window, not `self` — `self` throws ReferenceError in Android WebView
+  // environments where ServiceWorker globals are not available.
+  try {
+    if (typeof window !== 'undefined') {
+      window.FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+    }
+  } catch (_) {
+    // Silently ignore — debug token is best-effort in dev only
+  }
 }
 
 // ── Firebase App Check (GUARDED — re-enable safely) ───────────────

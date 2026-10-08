@@ -14,6 +14,8 @@ import {
   updatePassword,
   deleteUser,
   sendPasswordResetEmail,
+  PhoneAuthProvider,
+  signInWithPhoneNumber
 } from 'firebase/auth';
 import {
   doc,
@@ -40,7 +42,23 @@ import { log } from '../utils/logger';
  *  - signInWithPopup works correctly via an in-app browser tab (Custom Tabs
  *    on Android, SFSafariViewController on iOS).
  */
-const isNativeApp = () => Capacitor.isNativePlatform();
+export const isNativeAuthApp = () => {
+  try {
+    const platform = Capacitor.getPlatform?.();
+    if (Capacitor.isNativePlatform?.() || platform === 'android' || platform === 'ios') {
+      return true;
+    }
+
+    const nativeBridge = typeof window !== 'undefined' ? window.Capacitor : null;
+    const bridgePlatform = nativeBridge?.getPlatform?.();
+    return nativeBridge?.isNativePlatform?.() === true ||
+      bridgePlatform === 'android' ||
+      bridgePlatform === 'ios';
+  } catch {
+    return false;
+  }
+};
+const isNativeApp = isNativeAuthApp;
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('email');
@@ -123,14 +141,20 @@ export const signInWithGoogle = async () => {
   try {
     if (isNativeApp()) {
       const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+      // webClientId = the "type 3" (web) OAuth client from google-services.json.
+      // Without it the native Google Sign-In plugin cannot exchange the
+      // auth code and throws "No Credentials Found" (ApiException: 16).
       const nativeResult = await FirebaseAuthentication.signInWithGoogle({
         scopes: ['email', 'profile'],
+        useCredentialManager: false, // Forces traditional OAuth, bypassing Android 14 AppLinks requirement
       });
       const idToken = nativeResult?.credential?.idToken;
       const accessToken = nativeResult?.credential?.accessToken;
 
       if (!idToken && !accessToken) {
-        throw new Error('Google sign-in did not return a credential. Check native Firebase setup.');
+        throw new Error(
+          'Google sign-in did not return a credential. Please check that your SHA-1 and SHA-256 fingerprints are registered in Firebase Console (Project Settings → Your Android app).',
+        );
       }
 
       const credential = GoogleAuthProvider.credential(idToken, accessToken);
@@ -148,6 +172,19 @@ export const signInWithGoogle = async () => {
     return user;
   } catch (error) {
     log.auth.error('Google login error:', error?.code, error?.message);
+
+    if (
+      isNativeApp() &&
+      error?.message &&
+      (error.message.includes('16') ||
+        error.message.toLowerCase().includes('no credentials found') ||
+        error.message.toLowerCase().includes('cannot find a matching credential'))
+    ) {
+      log.auth.error('Detected missing SHA-1/SHA-256 or invalid Web Client ID');
+      throw new Error(
+        'Missing SHA-1/SHA-256 in Firebase Console. Please add your release/debug keys to Firebase to enable Google Sign-In on Android.'
+      );
+    }
 
     const shouldFallbackToRedirect =
       !isNativeApp() &&
@@ -319,9 +356,317 @@ export const signInWithApple = async () => {
   }
 };
 
-// Phone Authentication is now handled by recaptchaManager.js singleton
-// and Login.jsx directly. The old setupRecaptcha() and signInWithPhone()
-// functions that used window.recaptchaVerifier have been removed.
+// ─────────────────────────────────────────────────────────────────────────────
+// OTP Session shape (UNIFIED — UI must never branch on platform)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Android (native Capacitor):
+//   { success: true, platform: 'android', verificationId: <string> }
+//
+// Web (reCAPTCHA flow):
+//   { success: true, platform: 'web', confirmationResult: <ConfirmationResult> }
+//
+// Error path: always throws — never returns a failure object.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Send an OTP to the given phone number.
+ *
+ * @param {string}   phoneNumber   E.164 format e.g. "+919876543210"
+ * @param {Function} [getWebVerifier]  Required on Web only — returns a RecaptchaVerifier.
+ *                                     Pass null/undefined on Android.
+ * @returns {Promise<OtpSession>}  A normalized OTP session object (see shape above).
+ */
+export const requestPhoneOTP = async (phoneNumber, getWebVerifier) => {
+  log.auth('[requestPhoneOTP] START — phone:', phoneNumber, '| isNative:', isNativeApp());
+
+  // ── Guard: Firebase Auth must be initialized ─────────────────────────────
+  if (!auth) {
+    const msg = '[requestPhoneOTP] CRASH: `auth` is undefined. Firebase failed to initialize.';
+    log.auth.error(msg);
+    throw new Error('App authentication service failed to initialize. Please restart the app.');
+  }
+
+  if (!phoneNumber || typeof phoneNumber !== 'string' || phoneNumber.trim().length < 8) {
+    throw new Error(`[requestPhoneOTP] Invalid phoneNumber: "${phoneNumber}"`);
+  }
+
+  // ── ANDROID: native Capacitor plugin ────────────────────────────────────
+  if (isNativeApp()) {
+    try {
+      const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+
+      if (!FirebaseAuthentication || typeof FirebaseAuthentication.signInWithPhoneNumber !== 'function') {
+        throw new Error(
+          '[requestPhoneOTP] FirebaseAuthentication plugin missing. Run: npx cap sync android'
+        );
+      }
+
+      log.auth('[requestPhoneOTP] Android path — setting up native listeners');
+
+      const otpResult = await new Promise((resolve, reject) => {
+        (async () => {
+          let codeSentListener;
+          let verificationFailedListener;
+          let verificationCompletedListener;
+          let timeoutId;
+          let didResolve = false;
+
+          const cleanup = async () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            if (codeSentListener) await codeSentListener.remove().catch(() => {});
+            if (verificationFailedListener) await verificationFailedListener.remove().catch(() => {});
+            if (verificationCompletedListener) await verificationCompletedListener.remove().catch(() => {});
+          };
+
+          try {
+            // ── Listen for successful code-sent event ───────────────────
+            codeSentListener = await FirebaseAuthentication.addListener(
+              'phoneCodeSent',
+              async (event) => {
+                // ── DIAGNOSTIC: print exact Android plugin response ─────
+                console.log('[requestPhoneOTP] Android OTP Response (raw event):', JSON.stringify(event));
+                log.auth('[requestPhoneOTP] phoneCodeSent event — verificationId:', event?.verificationId);
+
+                if (
+                  !event?.verificationId ||
+                  typeof event.verificationId !== 'string' ||
+                  event.verificationId.trim() === ''
+                ) {
+                  if (!didResolve) {
+                    didResolve = true;
+                    await cleanup();
+                    log.auth.error(
+                      '[requestPhoneOTP] phoneCodeSent: verificationId is undefined/empty.',
+                      'Full event:', JSON.stringify(event)
+                    );
+                    reject(
+                      new Error(
+                        'Firebase did not return a verification ID.\n' +
+                        'Possible causes:\n' +
+                        '• SHA-1/SHA-256 fingerprint not in Firebase Console\n' +
+                        '• Play Integrity API not enabled\n' +
+                        '• Phone number not in E.164 format (+CountryCodeNumber)'
+                      )
+                    );
+                  }
+                  return;
+                }
+
+                if (!didResolve) {
+                  didResolve = true;
+                  await cleanup();
+                  // ── NORMALIZED ANDROID RESPONSE ────────────────────────
+                  const session = {
+                    success: true,
+                    platform: 'android',
+                    verificationId: event.verificationId,
+                    confirmationResult: null, // never present on Android
+                  };
+                  console.log('[requestPhoneOTP] Platform Response (normalized):', JSON.stringify(session));
+                  resolve(session);
+                }
+              }
+            );
+
+            // ── Listen for verification failures ────────────────────────
+            verificationFailedListener = await FirebaseAuthentication.addListener(
+              'phoneVerificationFailed',
+              async (event) => {
+                log.auth.error(
+                  '[requestPhoneOTP] phoneVerificationFailed event:',
+                  JSON.stringify(event)
+                );
+                if (!didResolve) {
+                  didResolve = true;
+                  await cleanup();
+                  reject(new Error(event?.message || 'Phone verification failed on device.'));
+                }
+              }
+            );
+
+            // ── Trigger the native SMS send ──────────────────────────────
+            verificationCompletedListener = await FirebaseAuthentication.addListener(
+              'phoneVerificationCompleted',
+              (event) => {
+                log.auth('[requestPhoneOTP] phoneVerificationCompleted event:', JSON.stringify({
+                  uid: event?.user?.uid,
+                  phoneNumber: event?.user?.phoneNumber,
+                }));
+              }
+            );
+
+            timeoutId = setTimeout(async () => {
+              if (didResolve) return;
+              didResolve = true;
+              await cleanup();
+              reject(new Error(
+                'OTP verification did not finish. If a reCAPTCHA screen appeared and would not close, add this app SHA-256 to Firebase and enable Play Integrity for Phone Auth.'
+              ));
+            }, 25000);
+
+            log.auth('[requestPhoneOTP] Calling FirebaseAuthentication.signInWithPhoneNumber...');
+            await FirebaseAuthentication.signInWithPhoneNumber({
+              phoneNumber,
+              timeout: 60,
+            });
+            log.auth('[requestPhoneOTP] signInWithPhoneNumber() resolved — waiting for event...');
+          } catch (err) {
+            log.auth.error('[requestPhoneOTP] Error in listener setup or signInWithPhoneNumber:', err);
+            if (!didResolve) {
+              didResolve = true;
+              await cleanup();
+              reject(err);
+            }
+          }
+        })().catch(reject);
+      });
+
+      return otpResult;
+    } catch (error) {
+      log.auth.error('[requestPhoneOTP] Android OTP error:', error?.message);
+      if (error instanceof Error) {
+        log.auth.error('[requestPhoneOTP] Stack trace:', error.stack || '(none)');
+      }
+      if (
+        error?.message?.includes('10') ||
+        error?.message?.toLowerCase().includes('developer error') ||
+        error?.message?.toLowerCase().includes('safety_net')
+      ) {
+        throw new Error(
+          'App verification failed. Add your SHA-1/SHA-256 fingerprints to Firebase Console and enable Play Integrity.'
+        );
+      }
+      throw error;
+    }
+  }
+
+  // ── WEB: reCAPTCHA verifier ──────────────────────────────────────────────
+  try {
+    if (typeof getWebVerifier !== 'function') {
+      throw new Error('[requestPhoneOTP] getWebVerifier is not a function — required for web OTP flow');
+    }
+    const verifier = await getWebVerifier();
+    if (!verifier) {
+      throw new Error('[requestPhoneOTP] getWebVerifier() returned null — reCAPTCHA failed to initialize');
+    }
+
+    log.auth('[requestPhoneOTP] Web path — calling signInWithPhoneNumber...');
+    const webConfirmationResult = await signInWithPhoneNumber(auth, phoneNumber, verifier);
+
+    // ── NORMALIZED WEB RESPONSE ────────────────────────────────────────────
+    const session = {
+      success: true,
+      platform: 'web',
+      verificationId: null,          // never present on Web
+      confirmationResult: webConfirmationResult,
+    };
+    console.log('[requestPhoneOTP] Platform Response (normalized):', JSON.stringify({ ...session, confirmationResult: '[ConfirmationResult object]' }));
+    return session;
+  } catch (error) {
+    log.auth.error('[requestPhoneOTP] Web OTP error:', error);
+    throw error;
+  }
+};
+
+/**
+ * Verify the 6-digit OTP the user typed.
+ *
+ * Accepts the unified OtpSession returned by requestPhoneOTP.
+ * The caller must NEVER access session.verificationId directly —
+ * pass the whole session object here.
+ *
+ * @param {OtpSession} otpSession   The object returned by requestPhoneOTP.
+ * @param {string}     otpCode      The 6-digit code the user entered.
+ */
+export const verifyPhoneOTP = async (otpSession, otpCode) => {
+  // ── Guard: session must exist ──────────────────────────────────────────
+  if (!otpSession) {
+    throw new Error(
+      '[verifyPhoneOTP] otpSession is undefined. ' +
+      'requestPhoneOTP() must succeed before calling verifyPhoneOTP().'
+    );
+  }
+
+  log.auth(
+    '[verifyPhoneOTP] START — platform:', otpSession.platform,
+    '| otpCode length:', otpCode?.length,
+    '| verificationId present:', !!otpSession.verificationId,
+    '| confirmationResult present:', !!otpSession.confirmationResult
+  );
+
+  if (!auth) {
+    throw new Error('[verifyPhoneOTP] `auth` is undefined. Firebase failed to initialize.');
+  }
+
+  if (!otpCode || otpCode.trim().length !== 6) {
+    throw new Error(`[verifyPhoneOTP] Invalid otpCode: "${otpCode}" — must be exactly 6 digits`);
+  }
+
+  // ── Android (native) path ────────────────────────────────────────────────
+  if (otpSession.platform === 'android') {
+    const { verificationId } = otpSession;
+    if (!verificationId || typeof verificationId !== 'string' || verificationId.trim() === '') {
+      log.auth.error('[verifyPhoneOTP] Android: verificationId is missing in stored session.', {
+        session: JSON.stringify(otpSession),
+      });
+      throw new Error(
+        'Verification session expired or missing. Please tap "Send OTP" again and wait for the SMS.'
+      );
+    }
+    try {
+      log.auth('[verifyPhoneOTP] Android: creating PhoneAuthCredential, verificationId length:', verificationId.length);
+      const credential = PhoneAuthProvider.credential(verificationId, otpCode);
+      const result = await signInWithCredential(auth, credential);
+      await ensureGoogleUserDocs(result.user);
+      log.auth('[verifyPhoneOTP] Android: SUCCESS — uid:', result.user?.uid);
+      return result;
+    } catch (error) {
+      log.auth.error('[verifyPhoneOTP] Android error:', error?.code, error?.message);
+      throw error;
+    }
+  }
+
+  // ── Web path ─────────────────────────────────────────────────────────────
+  if (otpSession.platform === 'web') {
+    const { confirmationResult } = otpSession;
+    if (!confirmationResult || typeof confirmationResult.confirm !== 'function') {
+      log.auth.error('[verifyPhoneOTP] Web: confirmationResult is invalid:', typeof confirmationResult);
+      throw new Error('Verification session is missing. Please tap "Send OTP" again.');
+    }
+    try {
+      log.auth('[verifyPhoneOTP] Web: calling confirmationResult.confirm()...');
+      const result = await confirmationResult.confirm(otpCode);
+      await ensureGoogleUserDocs(result.user);
+      log.auth('[verifyPhoneOTP] Web: SUCCESS — uid:', result.user?.uid);
+      return result;
+    } catch (error) {
+      log.auth.error('[verifyPhoneOTP] Web error:', error?.code, error?.message);
+      throw error;
+    }
+  }
+
+  // ── Unknown platform — should never happen ───────────────────────────────
+  throw new Error(
+    `[verifyPhoneOTP] Unknown platform "${otpSession.platform}" in OTP session. ` +
+    'This is a programming error — please report it.'
+  );
+};
+
+/**
+ * @deprecated Use verifyPhoneOTP(otpSession, otpCode) instead.
+ * This legacy signature is kept temporarily to avoid breaking callers
+ * that pass (verificationId, confirmationResult, otpCode) positionally.
+ * It will be removed in the next cleanup pass.
+ */
+export const verifyPhoneOTPLegacy = async (nativeVerificationId, webConfirmationResult, otpCode) => {
+  log.auth.warn('[verifyPhoneOTPLegacy] Called with legacy 3-arg signature. Migrate to verifyPhoneOTP(otpSession, otpCode).');
+  const isNative = isNativeApp();
+  const syntheticSession = isNative
+    ? { success: true, platform: 'android', verificationId: nativeVerificationId, confirmationResult: null }
+    : { success: true, platform: 'web',     verificationId: null, confirmationResult: webConfirmationResult };
+  return verifyPhoneOTP(syntheticSession, otpCode);
+};
 
 // --- PASSWORD RESET ---
 
@@ -470,12 +815,13 @@ export const logoutUser = async () => {
     log.auth('logoutUser: signOut complete, clearing storage...');
     await clearAllAppStorage();
     log.auth('logoutUser: storage cleared, reloading page...');
-    // Hard reload to get a fresh Firestore instance
-    window.location.replace('/login');
+    // Hard reload to get a fresh Firestore instance.
+    // Use '/' not '/login' — HashRouter only serves index.html at root.
+    // React Router will show Login automatically when currentUser is null.
+    window.location.replace('/');
   } catch (error) {
     log.auth.error('Logout error:', error?.code, error?.message);
-    // Even on error, try to navigate away
-    try { window.location.replace('/login'); } catch { /* ignore */ }
+    try { window.location.replace('/'); } catch { /* ignore */ }
   }
 };
 
@@ -609,7 +955,7 @@ export const getCurrentUserProviders = () => {
  * @param {Object} opts
  * @param {string} [opts.password] required when the user signed up with email/password
  */
-export const reauthenticateCurrentUser = async ({ password } = {}) => {
+export const reauthenticateCurrentUser = async ({ password, otpSession, otpCode } = {}) => {
   const user = auth.currentUser;
   if (!user) throw new Error('No user logged in');
   const providers = getCurrentUserProviders();
@@ -621,6 +967,13 @@ export const reauthenticateCurrentUser = async ({ password } = {}) => {
   }
   if (providers.includes('apple.com')) {
     await reauthenticateWithPopup(user, appleProvider);
+    return true;
+  }
+  if (providers.includes('phone') || user.phoneNumber) {
+    if (otpSession && otpCode) {
+      await verifyPhoneOTP(otpSession, otpCode);
+      return true;
+    }
     return true;
   }
   // Email / password
@@ -669,13 +1022,13 @@ const recordDeletionReason = async (uid, reason, detail) => {
  * @param {string} [opts.reason]   short reason code/string
  * @param {string} [opts.detail]   freeform extra detail
  */
-export const deleteCurrentAccount = async ({ password, reason, detail } = {}) => {
+export const deleteCurrentAccount = async ({ password, otpSession, otpCode, reason, detail } = {}) => {
   const user = auth.currentUser;
   if (!user) throw new Error('No user logged in');
   const uid = user.uid;
 
   // 1. Re-authenticate (throws if password wrong / popup cancelled)
-  await reauthenticateCurrentUser({ password });
+  await reauthenticateCurrentUser({ password, otpSession, otpCode });
 
   // 2. Record the reason before we lose access to write
   await recordDeletionReason(uid, reason, detail);

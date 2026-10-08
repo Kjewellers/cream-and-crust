@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import admin from 'firebase-admin';
@@ -10,6 +11,17 @@ import net from 'net';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+
+// Apply global rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // Limit each IP to 200 requests per windowMs
+  message: 'Too many requests from this IP, please try again after 15 minutes',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+app.use(limiter);
+
 const PORT = process.env.PORT || 3001;
 
 // Initialize Firebase Admin using Service Account JSON from ENV
@@ -50,6 +62,7 @@ app.use(cors({
     
     const allowed = [
       'http://localhost',
+      'https://localhost',
       'capacitor://localhost',
       '.vercel.app',
       'creamandcrust.online',
@@ -100,11 +113,11 @@ app.use(helmet({
 
 app.use(express.json());
 
-// ─── AUTH MIDDLEWARE (Firebase ID Token verification) ─────────
+// ─── AUTH & ZERO-TRUST MIDDLEWARES ──────────────────────────────
 async function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing or invalid Authorization header' });
+    return res.status(401).json({ error: 'Unauthorized: Missing or invalid Authorization header' });
   }
 
   const idToken = authHeader.split('Bearer ')[1]?.trim();
@@ -112,7 +125,7 @@ async function requireAuth(req, res, next) {
   try {
     if (!admin.apps.length) {
       console.warn('⚠️ Firebase Admin not initialized — bypassing auth verification for local development');
-      req.uid = 'local-dev-user';
+      req.uid = req.headers['x-dev-uid'] || 'local-dev-user';
       return next();
     }
     
@@ -120,13 +133,41 @@ async function requireAuth(req, res, next) {
        throw new Error(`Token is invalid string: ${idToken}`);
     }
     
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const decodedToken = await admin.auth().verifyIdToken(idToken, true); // checkRevoked = true
     req.uid = decodedToken.uid;
+    req.user = decodedToken;
     next();
   } catch (error) {
-    console.error('Auth verification failed:', error.message);
+    console.error('[ZeroTrust Server] Auth verification failed:', error.message);
+    if (error.code === 'auth/id-token-revoked') {
+      return res.status(401).json({ error: 'Unauthorized: Session has been revoked' });
+    }
     return res.status(401).json({ error: 'Invalid or expired token', details: error.message });
   }
+}
+
+/**
+ * Enforce Resource Ownership Middleware
+ * Ensures req.uid matches the resource owner UID before returning data.
+ */
+function requireOwnership(uidSource = 'params', paramName = 'id') {
+  return async (req, res, next) => {
+    if (!req.uid) {
+      return res.status(401).json({ error: 'Unauthorized: Authentication required' });
+    }
+
+    let requestedUid = null;
+    if (uidSource === 'params') requestedUid = req.params[paramName];
+    else if (uidSource === 'body') requestedUid = req.body[paramName];
+    else if (uidSource === 'query') requestedUid = req.query[paramName];
+
+    if (requestedUid && requestedUid !== req.uid) {
+      console.warn(`[ZeroTrust 403 Forbidden] User ${req.uid} attempted to access data for ${requestedUid}`);
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to access another bakery\'s data' });
+    }
+
+    next();
+  };
 }
 
 // ─── SSRF PROTECTION HELPER ─────────────────────────────────
@@ -618,7 +659,8 @@ const AI_KEYS = [
   process.env.OPENROUTER_API_KEY_1,
   process.env.OPENROUTER_API_KEY_2,
 ].filter(Boolean);
-const AI_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-oss-120b:free';
+const AI_MODEL_PRIMARY = process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite-preview-02-05:free';
+const AI_MODEL_FALLBACK = 'meta-llama/llama-3.1-8b-instruct:free';
 const AI_RATE_LIMIT = parseInt(process.env.AI_RATE_LIMIT_PER_DAY || '500', 10);
 
 // In-memory rate limiter (resets on server restart — fine for free tier)
@@ -665,62 +707,52 @@ app.post('/api/ai/chat', requireAuth, async (req, res) => {
 
     // Build the system prompt based on the requested feature
     const systemPrompt = buildSystemPrompt(feature, context);
-    const userMessage = message || buildFeatureMessage(feature, context);
+    
+    // Define buildFeatureMessage logic inline or as a helper
+    let userMessage = message;
+    if (!userMessage) {
+      if (feature === 'inventory_check') userMessage = 'Please run an inventory stock check.';
+      else if (feature === 'coach_me') userMessage = 'Give me a business health check and advice.';
+      else if (feature === 'briefing') userMessage = 'Give me my morning briefing.';
+      else if (feature === 'generate_recipe') userMessage = 'Generate a new creative bakery recipe.';
+      else if (feature === 'predictive_inventory') userMessage = 'Analyze predictive inventory restock needs.';
+      else if (feature === 'run_bakery') userMessage = 'What are my top priorities to run the bakery today?';
+      else if (feature === 'customer_retention') userMessage = 'Analyze customer retention and VIP churn risks.';
+      else userMessage = `Execute feature: ${feature}`;
+    }
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const buildMsgs = () => [
+      { role: 'system', content: systemPrompt },
+      ...(history || []).slice(-8).map(h => ({
+        role: h.role === 'ai' ? 'assistant' : 'user',
+        content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content),
+      })),
+      { role: 'user', content: userMessage },
+    ];
+
+    const orFetch = (key, model) => fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${key}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'https://creamandcrust.app',
         'X-Title': 'Cream & Crust AI',
       },
-      body: JSON.stringify({
-        model: AI_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...(history || []).slice(-6).map(h => ({ role: h.role === 'ai' ? 'assistant' : 'user', content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content) })),
-          { role: 'user', content: userMessage },
-        ],
-        temperature: 0.7,
-        max_tokens: 2000,
-      }),
+      body: JSON.stringify({ model, messages: buildMsgs(), temperature: 0.65, max_tokens: 800, provider: { sort: 'throughput' } }),
     });
 
+    let response = await orFetch(apiKey, AI_MODEL_PRIMARY);
+    if (!response.ok && response.status !== 401) {
+      response = await orFetch(apiKey, AI_MODEL_FALLBACK);
+    }
+    if (!response.ok && AI_KEYS.length > 1) {
+      const key2 = getNextAIKey();
+      response = await orFetch(key2, AI_MODEL_PRIMARY);
+      if (!response.ok) response = await orFetch(key2, AI_MODEL_FALLBACK);
+    }
+
     if (!response.ok) {
-      const errBody = await response.text();
-      console.error('OpenRouter API error:', response.status, errBody);
-
-      // If first key failed with 429, try second key
-      if (response.status === 429 && AI_KEYS.length > 1) {
-        const fallbackKey = getNextAIKey();
-        const retryResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${fallbackKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://creamandcrust.app',
-            'X-Title': 'Cream & Crust AI',
-          },
-          body: JSON.stringify({
-            model: AI_MODEL,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              ...(history || []).slice(-6).map(h => ({ role: h.role === 'ai' ? 'assistant' : 'user', content: typeof h.content === 'string' ? h.content : JSON.stringify(h.content) })),
-              { role: 'user', content: userMessage },
-            ],
-            temperature: 0.7,
-            max_tokens: 2000,
-          }),
-        });
-
-        if (retryResponse.ok) {
-          const retryData = await retryResponse.json();
-          const aiText = retryData.choices?.[0]?.message?.content || '';
-          return res.json(parseAIResponse(aiText));
-        }
-      }
-
+      console.error('OpenRouter all models exhausted:', response.status);
       return res.status(502).json({
         error: 'AI service temporarily unavailable',
         response: 'AI abhi busy hai, thodi der mein try karein.',
@@ -766,12 +798,13 @@ app.post('/api/ai/describe', requireAuth, async (req, res) => {
         'X-Title': 'Cream & Crust AI',
       },
       body: JSON.stringify({
-        model: process.env.OPENROUTER_MODEL || 'google/gemini-1.5-flash',
+        model: process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite-preview-02-05:free',
         messages: [
           { role: 'user', content: contentMessage },
         ],
         temperature: 0.7,
         max_tokens: 150,
+        provider: { sort: 'throughput' }
       }),
     });
 
@@ -909,7 +942,7 @@ CRITICAL RULES (ZERO HALLUCINATION):
 8. thoughtProcess MUST be an array of short completed steps, e.g. ["✓ Read 12 orders", "✓ Found 3 unpaid", "✓ Calculated ₹4,200 pending"].`;
 
   const summaryStr = summary ? `\n\nCOMPUTED BUSINESS SUMMARY (use these real numbers):\n${JSON.stringify(summary)}` : '';
-  const contextStr = context ? `\n\nCURRENT APP DATA:\n${JSON.stringify(context, null, 0).slice(0, 3500)}` : '';
+  const contextStr = context ? `\n\nCURRENT APP DATA:\n${JSON.stringify(context, null, 0).slice(0, 6000)}` : '';
 
   const featurePrompts = {
     companion: `\n\nMODE: Autonomous Business Agent
@@ -947,121 +980,54 @@ SPECIALIZED AGENT PERSONAS:
 - Include buttons: [{label:"Copy Caption",action:"copy",value:"[generated caption]"},{label:"Open Products",action:"navigate",value:"/products"}].
 
 AVAILABLE ACTIONS:
-- create_order: { customerName, phone, product, size, price, deliveryDate, deliveryTime, deliveryAddress, deliveryType, notes }
-- update_order_status: { orderId, status } (statuses: "new"|"confirmed"|"in-progress"|"ready"|"delivered"|"cancelled")
+- create_order: { customerName, phone, product, size, price, qty, deliveryDate, deliveryTime, deliveryAddress, deliveryType, notes }
+- update_order_status: { orderId, status } (statuses: "new"|"confirmed"|"in-progress"|"baking"|"ready"|"delivered"|"cancelled") — NO confirm needed for status-only changes
+- mark_paid: { orderId } — mark order payment as paid — NO confirm needed
+- batch_status_update: { status, orderIds: [] } — update multiple orders at once
 - delete_order: { orderId }
 - add_inventory: { item, stock, unit, minStock, expiryDate, cost }
-- update_inventory_stock: { itemId, stock }
+- update_inventory_stock: { itemId, stock } — itemId must be exact Firestore ID from context
 - add_customer: { name, phone, address, dob }
-- add_expense: { title, amount, category }
+- add_expense: { title, amount, category, date, vendor, notes }
 - add_shopping_item: { item, qty, unit, estimatedCost }
 - add_product: { name, price, category, description }
 - add_recipe: { name, category, yield, prepTime, bakeTime, ingredients: [{name, qty, unit}], steps: [{title, desc}] }
-- navigate: { to }
+- navigate: { to } — navigate without confirmation
 - add_memory: { note } / delete_memory: { memoryId }
 - send_whatsapp_invoice: { orderId }
 - export_data: { target: "orders"|"expenses"|"customers" }
 - change_theme: { theme: "dark"|"light" }
+- multi_action: { actions: [{ type, data }] } — run multiple actions in sequence
 
 INSIGHTS PROTOCOL — For analytical/generative requests set state=ready, action=null, populate insights:
 1. Recipe: { type:"recipe_generator", recipe:{ name, yield, cost, prepTime, bakeTime, ingredients:[{item,qty,unit}], steps:[] } }
 2. Inventory: { type:"inventory_assistant", summary, shortages:[{item,stock,reason}], expiring:[{item,date}] }
 3. Coach: { type:"bakery_coach", revenue, profit, bestSellers:[], weakProducts:[], advice } — use COMPUTED BUSINESS SUMMARY numbers.
 4. Marketing: { type:"marketing_campaign", message, target, hashtags:[] }
-5. Payments: { type:"payment_status", pendingAmount, pendingOrders:[{customer,amount,orderId}] }
+5. Payments: { type:"payment_status", pendingAmount, pendingOrders:[{customer,amount,orderId,id}] }
 6. Charts: { type:"chart", chartType:"bar"|"line", data:[{name,value}] }
 7. Product descriptions: { type:"product_descriptions", items:[{id,name,description}] }
+8. Orders list: { type:"orders_list", orders:[{id,orderId,customerName,product,total,status,paymentStatus,deliveryDate}] }
+9. Customers list: { type:"customers_list", customers:[{id,name,phone,totalOrders}] }
+10. Run My Bakery: { type:"run_bakery", priorities:[{task,reason,urgency,action}], summary: "..." }
+11. Predictive Inventory: { type:"predictive_inventory", analysis:"...", shortagesToOrder:[{item, currentStock, neededStock, reason}], actionReady: true }
+12. Customer Retention: { type:"customer_retention", analysis:"...", vipChurnRisks:[{name, lastOrder, totalOrders}], suggestedMessage:"...", actionReady: true }
+
+IMPORTANT — For "show me orders", "list unpaid orders", "find Priya's orders" etc: use type:"orders_list" and populate with REAL order data from context. NEVER say you can't show data — just render it.
+
+QUICK ACTION RULES (no confirmation needed, execute immediately):
+- "Mark CC-001 as delivered" → action: { type:"update_order_status", data:{ orderId:"<id>", status:"delivered" }, confirmRequired: false }
+- "Mark CC-001 as paid" → action: { type:"mark_paid", data:{ orderId:"<id>" }, confirmRequired: false }
+- "Go to orders" / "Open inventory" → action: { type:"navigate", data:{ to:"/orders" }, confirmRequired: false }
+- "Dark mode" / "Light mode" → action: { type:"change_theme", data:{ theme:"dark" }, confirmRequired: false }
+- "Show unpaid orders" → insights: { type:"orders_list", orders:[...filtered from context] }
+
+OrderId resolution: ALWAYS look up the order ID from context.orders by orderId field (like "CC-001") and use the Firestore document id field.
 
 Example: User says "Create order for Priya, 1kg chocolate cake, tomorrow"
 You: { "state":"gathering", "agent":"Order Agent", "extracted":{"customerName":"Priya","product":"Chocolate Cake","size":"1kg","deliveryDate":"tomorrow"}, "missing":["phone"], "response":"Got it! What is Priya's phone number?", "buttons":[{"label":"View Orders","action":"navigate","value":"/orders"}], "action":null, "insights":null, "thoughtProcess":["✓ Detected create order intent","✓ Extracted 4 fields from message","✓ Phone number missing"] }`,
 
-    generate_recipe: `\n\nMODE: Recipe Agent
-You are the Recipe Agent. Generate creative, professional, precisely-scaled bakery recipes.
-Always respond JSON. Set state=ready, action=null. agent="Recipe Agent".
-Insights: { type:"recipe_generator", recipe:{ name, yield, cost, prepTime, bakeTime, ingredients:[{item,qty,unit}], steps:[] } }
-Buttons: [{label:"Save to Recipes",action:"navigate",value:"/recipes"}]`,
 
-    inventory_check: `\n\nMODE: Inventory Agent
-You are the Inventory Agent. Analyze stock levels from CURRENT APP DATA and COMPUTED BUSINESS SUMMARY.
-If inventory is empty: tell the user how to start and provide [Open Inventory] button. Do NOT hallucinate items.
-If items exist: show shortages, expiring items, and recommend a purchase list.
-Insights: { type:"inventory_assistant", summary, shortages:[{item,stock,reason}], expiring:[{item,date}] }
-Buttons: [{label:"Open Inventory",action:"navigate",value:"/inventory"},{label:"Add to Shopping List",action:"navigate",value:"/shopping-list"}]
-agent="Inventory Agent"`,
-
-    coach_me: `\n\nMODE: Business Coach
-You are the Business Coach. Use COMPUTED BUSINESS SUMMARY for all numbers — never fabricate.
-Provide revenue, profit, best sellers, pricing recs with ₹ impact estimates.
-Insights: { type:"bakery_coach", revenue, profit, bestSellers:[], weakProducts:[], advice }
-Buttons: [{label:"View Analytics",action:"navigate",value:"/analytics"},{label:"View Orders",action:"navigate",value:"/orders"}]
-agent="Business Coach"`,
-
-    briefing: `\n\nMODE: Daily Bakery Briefing
-Generate a morning briefing using COMPUTED BUSINESS SUMMARY. Cover today's deliveries, pending payments, low stock, top priority actions.
-Return insights as: { type:"bakery_coach", revenue, profit, bestSellers:[], weakProducts:[], advice }
-agent="Business Coach"`,
-
-
-AVAILABLE ACTIONS TO PREPARE (Full App Orchestration):
-- create_order: { customer, phone, product, size, price, advancePayment, deliveryDate, deliveryTime, address, deliveryType, notes } (AI MUST automatically calculate price and advancePayment if missing based on products list)
-- update_order_status: { orderId, status } (statuses: "new"|"confirmed"|"in-progress"|"ready"|"delivered"|"cancelled")
-- delete_order: { orderId }
-- add_inventory: { item, stock, unit, minStock, expiryDate, cost }
-- update_inventory_stock: { itemId, stock }
-- delete_inventory: { itemId }
-- add_customer: { name, phone, address, dob }
-- delete_customer: { customerId }
-- add_expense: { title, amount, category }
-- delete_expense: { expenseId }
-- add_shopping_item: { item, qty, unit, estimatedCost }
-- toggle_shopping_item: { itemId, bought }
-- delete_shopping_item: { itemId }
-- add_product: { name, price, category, description, imageUrl }
-- delete_product: { productId }
-- add_recipe: { name, category, yield, prepTime, bakeTime, ingredients: [{name, qty, unit}], steps: [{title, desc}] }
-- delete_recipe: { recipeId }
-- navigate: { to } (target paths: "/"|"/orders"|"/calendar"|"/products"|"/customers"|"/inventory"|"/recipes"|"/analytics"|"/expenses"|"/shopping-list"|"/menu-builder"|"/settings"|"/profile")
-- search: { query, category }
-- add_memory: { note }
-- delete_memory: { memoryId }
-- send_whatsapp_invoice: { orderId } (Find the order by ID or customer name, and return the orderId)
-- export_data: { target } (target: "orders"|"expenses"|"customers")
-- change_theme: { theme } (theme: "dark"|"light")
-- open_modal: { modal } (modal: "add_product"|"add_order"|"add_expense")
-- batch_update: { target, filters, updates } (e.g. target: "products", filters: { category: "Cupcakes" }, updates: { menuHidden: true })
-
-INSIGHTS PROTOCOL (Analytical Tasks):
-If the user asks an analytical question or requests generation (like a recipe), do not gather fields. Set state to "ready", action to null, and populate the "insights" object.
-
-1. Recipe Agent ("Generate a recipe for 2kg eggless chocolate cake"):
-   - Calculate precise ingredient weights, step-by-step instructions, yield, and an estimated cost.
-   - Return insights: { "type": "recipe_generator", "recipe": { "name": "Eggless Chocolate Cake", "yield": "2kg", "cost": 450, "prepTime": "30m", "bakeTime": "45m", "ingredients": [{"item": "Flour", "qty": "500", "unit": "g"}], "steps": ["Mix dry ingredients", "Bake at 180C"] } }
-
-2. Inventory Assistant ("Show low stock" or "Inventory check"):
-   - Analyze inventory for items with low stock or expiring soon.
-   - Return insights: { "type": "inventory_assistant", "shortages": [{"item": "Butter", "stock": "200g", "reason": "Needed for 3 cakes tomorrow"}], "expiring": [{"item": "Milk", "date": "Tomorrow"}], "summary": "You are critically low on butter." }
-
-3. Bakery Coach ("How is my business doing?"):
-   - Analyze orders and expenses to provide a plain English summary of revenue, profits, best sellers, and weak products.
-   - Return insights: { "type": "bakery_coach", "revenue": 15000, "profit": 5500, "bestSellers": ["Truffle Cake"], "weakProducts": ["Dry Cake"], "advice": "Your profit margin is healthy at 36%, but dry cake sales are down. Consider running a weekend promo." }
-
-4. Marketing Agent ("Give me a WhatsApp promotion"):
-   - Analyze best sellers and create a short, catchy WhatsApp message with emojis.
-   - Return insights: { "type": "marketing_campaign", "message": "The campaign text", "target": "All customers" }
-
-5. Payment Agent ("Show unpaid orders"):
-   - Find unpaid orders in context.
-   - Return insights: { "type": "payment_status", "pendingAmount": 3200, "pendingOrders": [{"customer": "Priya", "amount": 900}] }
-
-6. Chart Generator ("Show me a chart of my last 5 expenses"):
-   - Extract relevant data points.
-   - Return insights: { "type": "chart", "chartType": "bar", "data": [{"name": "Rent", "value": 5000}, {"name": "Supplies", "value": 2000}] }
-
-Example Flow (Data Entry):
-User: "Create a 1kg chocolate cake order for Priya tomorrow."
-You: { "state": "gathering", "agent": "Order Agent", "extracted": { "customer": "Priya", "product": "Chocolate Cake", "size": "1kg", "deliveryDate": "Tomorrow" }, "missing": ["phone", "address", "deliveryTime"], "response": "What is Priya's phone number?", "action": null, "insights": null }
-
-When ALL missing fields are gone, set state to "ready" and fill the "action" object!`,
 
     generate_recipe: `\n\nMODE: Recipe Generator
 Generate a creative, detailed, professional bakery recipe. If the user didn't specify a flavor, invent a highly premium, trending seasonal cake recipe (e.g. Pistachio Rose, Earl Grey Lavender, etc).
@@ -1083,13 +1049,25 @@ Populate the "insights" object exactly like this:
 
     briefing: `\n\nMODE: Daily Bakery Briefing
 Generate a comprehensive morning briefing covering:
-- Today's orders count and expected revenue
-- Pending payments total
+- Today's orders count and expected revenue (use COMPUTED BUSINESS SUMMARY)
+- Pending payments total (use COMPUTED BUSINESS SUMMARY)
 - Low stock items (inventory items below minimum)
-- Expiring ingredients (within 3 days)
 - Best selling product this week
-- Top 3 prioritized recommendations for today
-Return insights as: { todayOrders, expectedRevenue, pendingPayments, lowStockItems, expiringItems, bestSeller, priorities: [...] }`,
+- Top prioritized recommendations for today
+Return insights as: { "type": "run_bakery", "summary": "...", "priorities": [{"task": "...", "reason": "...", "urgency": "high|medium|low"}] }`,
+
+    predictive_inventory: `\n\nMODE: Predictive Inventory Ordering
+Analyze the current inventory against recent or upcoming orders. Predict which ingredients will run out soon based on the products being baked.
+ALWAYS respond with a JSON object. Set state to "ready", action to null. Include a button to add shortages to the shopping list.
+Populate the "insights" object exactly like this:
+{ "type": "predictive_inventory", "analysis": "...", "shortagesToOrder": [{"item": "...", "currentStock": "...", "neededStock": "...", "reason": "..."}] }`,
+
+    customer_retention: `\n\nMODE: Customer Sentiment & Retention
+Analyze the context.customers and context.orders. Identify VIP customers (high totalOrders or high totalSpent) who haven't ordered recently.
+Draft a highly personalized, warm WhatsApp message ("We miss you") to send them, offering a small discount or highlighting a new product.
+ALWAYS respond with a JSON object. Set state to "ready", action to null. Include a button to copy the message.
+Populate the "insights" object exactly like this:
+{ "type": "customer_retention", "analysis": "...", "vipChurnRisks": [{"name": "...", "lastOrder": "...", "totalOrders": "..."}], "suggestedMessage": "..." }`,
 
     health_score: `\n\nMODE: Business Health Score
 Analyze the bakery's health and return a score out of 100.

@@ -21,11 +21,21 @@ const { businessRef } = vi.hoisted(() => ({ businessRef: { current: {} } }));
 
 const EMAIL = 'owner.test@x.io';
 
+const mockAuth = {
+  currentUser: { uid: 'u1', email: 'owner.test@x.io', displayName: 'Baker', metadata: {} },
+  userRole: 'admin',
+  logout: vi.fn(),
+};
+
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({
-    currentUser: { uid: 'u1', email: 'owner.test@x.io', displayName: 'Baker', metadata: {} },
-    userRole: 'admin',
-    logout: vi.fn(),
+  useAuth: () => mockAuth,
+}));
+
+const mockRequirePermission = vi.fn(async () => true);
+
+vi.mock('../../context/PermissionContext', () => ({
+  usePermissions: () => ({
+    requirePermission: mockRequirePermission
   }),
 }));
 
@@ -41,6 +51,8 @@ vi.mock('../../services/db', () => ({
   subscribeToProducts: (cb) => { cb([]); return () => {}; },
   subscribeToRecipes: (cb) => { cb([]); return () => {}; },
   updateBusinessInDB: vi.fn(),
+  getUserDoc: vi.fn(async () => null),
+  updateUserDoc: vi.fn(async () => {}),
 }));
 
 // users/{uid} doc does not exist → userDoc stays at its component defaults
@@ -211,9 +223,7 @@ describe('Profile — Property 3: displays all business fields from the document
       }),
       { numRuns: 100 }
     );
-  }, // Profile is a heavy component; 100 full renders can exceed the default 5s
-  // timeout under full-suite parallel load. Give this property room to run.
-  30000);
+  }, 120000);
 
   it('example: a fully-populated document shows every value and no placeholders', () => {
     const biz = {

@@ -6,6 +6,11 @@
  * Step 3: Payment & Review (pricing breakdown, payment method, summary)
  */
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+
+import { usePermissions } from '../../context/PermissionContext';
+import { PERMISSION_TYPES } from '../../services/PermissionManager';
+import { uploadToCloudinary } from '../../services/cloudinary';
+import { pickPhoto } from '../../utils/photoPicker';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   User,
@@ -54,11 +59,11 @@ export default function OrderForm({
   hasOrders,
   recipeList = [],
 }) {
+  const { requirePermission } = usePermissions();
   const [step, setStep] = useState(1);
   const [direction, setDirection] = useState(1);
   const [expandedItems, setExpandedItems] = useState([0]);
   const [referenceImage, setReferenceImage] = useState(null);
-  const photoInputRef = useRef(null);
 
   // Auto-add one empty item if items array is empty on mount
   useEffect(() => {
@@ -609,20 +614,6 @@ export default function OrderForm({
             {/* Reference Photo and Notes — moved to step 2 */}
             <div style={{ marginTop: 16 }}>
               <FormField label="Reference Photo (optional)">
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const url = URL.createObjectURL(file);
-                      setReferenceImage(url);
-                      setForm((prev) => ({ ...prev, referenceFile: file }));
-                    }
-                  }}
-                  style={{ display: 'none' }}
-                />
                 {referenceImage ? (
                   <div style={{ position: 'relative', display: 'inline-block', marginBottom: 12 }}>
                     <img
@@ -664,7 +655,13 @@ export default function OrderForm({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => photoInputRef.current?.click()}
+                    onClick={async () => {
+                      const photo = await pickPhoto();
+                      if (photo?.file) {
+                        setReferenceImage(photo.previewUrl);
+                        setForm((prev) => ({ ...prev, referenceFile: photo.file }));
+                      }
+                    }}
                     style={{
                       width: '100%',
                       padding: '16px',

@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Camera, Loader2, User2, ArrowUpRight, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { showToast } from '../../components/iOS';
+import { pickPhoto } from '../../utils/photoPicker';
 import { uploadToCloudinary } from '../../services/cloudinary';
 import { useMenuBuilderData } from './useMenuBuilderData';
 import MenuBuilderShell, { SaveBar } from './MenuBuilderShell';
@@ -25,8 +26,14 @@ const MENU_FIELD_GROUPS = [
 ];
 
 function ImageUploadBlock({ label, fieldKey, value, uploading, onUpload, description }) {
-  const ref = useRef(null);
   const isUploading = uploading === fieldKey;
+
+  const handlePick = async () => {
+    const photo = await pickPhoto();
+    if (photo?.file) {
+      onUpload(photo.file, fieldKey);
+    }
+  };
 
   return (
     <div>
@@ -45,7 +52,7 @@ function ImageUploadBlock({ label, fieldKey, value, uploading, onUpload, descrip
       <motion.button
         whileTap={{ scale: 0.98 }}
         type="button"
-        onClick={() => ref.current?.click()}
+        onClick={handlePick}
         style={{
           width: '100%',
           height: 140,
@@ -111,13 +118,6 @@ function ImageUploadBlock({ label, fieldKey, value, uploading, onUpload, descrip
       {description && (
         <div style={{ fontSize: '0.7rem', color: 'var(--text3)', marginTop: 4 }}>{description}</div>
       )}
-      <input
-        ref={ref}
-        type="file"
-        accept="image/*"
-        onChange={(e) => onUpload(e.target.files?.[0], fieldKey)}
-        style={{ display: 'none' }}
-      />
     </div>
   );
 }

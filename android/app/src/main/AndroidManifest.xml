@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -16,6 +16,7 @@
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
 
             <intent-filter>
@@ -34,57 +35,78 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Firebase Cloud Messaging Default Notification Metadata -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="orders_channel" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/accent" />
     </application>
 
     <!-- ================================================================
          PERMISSIONS
          ================================================================ -->
 
-    <!-- Network -->
+    <!-- Network & Billing -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="com.android.vending.BILLING" />
 
     <!-- Haptic feedback -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
     <!--
-        Storage — Android 12 and below (API <= 32)
-        READ_EXTERNAL_STORAGE / WRITE_EXTERNAL_STORAGE are used for
-        reading/writing files to shared storage on older Android versions.
-        maxSdkVersion="32" prevents them being requested on Android 13+
-        where they are superseded by granular READ_MEDIA_* permissions.
+        ╔══════════════════════════════════════════════════════════════╗
+        ║  STORAGE & MEDIA PERMISSIONS — INTENTIONALLY ABSENT         ║
+        ║                                                              ║
+        ║  Cream & Crust uses the Android Photo Picker system UI for  ║
+        ║  all image selection. The Photo Picker requires ZERO         ║
+        ║  storage/media permissions on Android 11+ (API 30+) and     ║
+        ║  is back-ported via Google Play Services on Android 4.4+.   ║
+        ║                                                              ║
+        ║  tools:node="remove" permanently strips these permissions    ║
+        ║  from the merged manifest so NO plugin can re-inject them.  ║
+        ║                                                              ║
+        ║  Google Play Photo & Video Permissions policy: COMPLIANT ✅  ║
+        ╚══════════════════════════════════════════════════════════════╝
     -->
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" tools:node="remove" />
 
-    <!--
-        Granular media permissions — Android 13+ (API 33+)
-        These replace READ_EXTERNAL_STORAGE on Android 13+.
-    -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-
-    <!--
-        Visual media picker — Android 14+ (API 34+)
-        Lets users grant partial access to their media library.
-    -->
-    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
-
-    <!-- Camera (for image capture and gallery uploads) -->
+    <!-- Camera (for image capture — JIT, never on startup) -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <!--
+        Microphone — for AI Voice feature in Cream AI.
+        JIT: requested ONLY when user taps the 🎤 button, never on startup.
+        Required for getUserMedia() in the Capacitor WebView.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!--
+        Location — for delivery radius and customer-facing map features.
+        JIT: requested ONLY when user enables the location feature, never on startup.
+        ACCESS_COARSE_LOCATION is included as a fallback for devices without fine GPS.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!--
         Notifications — Android 13+ (API 33+)
-        Required for push notifications. On Android 12 and below,
-        notification permission is granted at install time.
+        JIT: requested 3 seconds after login, never on splash or startup.
     -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Google Play Services Advertising ID permission -->
+    <!-- Removed to comply strictly with Google Play policies and simplify Data Safety -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 
 </manifest>

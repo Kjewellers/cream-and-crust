@@ -8,10 +8,17 @@
   "plugins": {
     "FirebaseAuthentication": {
       "skipNativeAuth": false,
-      "providers": ["google.com"]
+      "providers": ["google.com", "phone"],
+      "clientId": "357779803337-0489gefb6pinor5orbbro0dr43tus9hj.apps.googleusercontent.com"
     },
     "Filesystem": {
       "iosSchemeName": "ionic"
+    },
+    "CapacitorHttp": {
+      "enabled": true
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false
     }
   },
   "backgroundColor": "#faf7f5"

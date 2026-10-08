@@ -4,14 +4,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3, Brain, Check, ClipboardCopy, Megaphone, Mic, MicOff,
   Package, Pencil, Receipt, RefreshCw, Search, Send, Sparkles, TrendingUp,
-  X, Zap, ShoppingBag, Users, PlusCircle
+  X, Zap, ShoppingBag, Users, PlusCircle, Phone, Video, Camera
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { usePermissions } from '../context/PermissionContext';
+import { PERMISSION_TYPES } from '../services/PermissionManager';
 import { api } from '../api';
 import { INTENTS } from '../ai/actionSchemas';
 import { executeServiceAction } from '../ai/serviceLayer';
 import { BarChart as ReBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import AIChat from '../components/ai/AIChat';
 import './AICompanion.css';
 
 /* ── Constants ─────────────────────────────────────────────────── */
@@ -39,6 +42,9 @@ const ACTION_INTENT_MAP = {
   add_memory: INTENTS.ADD_MEMORY,
   delete_memory: INTENTS.DELETE_MEMORY,
   send_whatsapp_invoice: INTENTS.SEND_WHATSAPP_INVOICE,
+  mark_paid: INTENTS.MARK_PAID,
+  batch_status_update: INTENTS.BATCH_STATUS_UPDATE,
+  multi_action: INTENTS.MULTI_ACTION,
 };
 
 const SUCCESS_MESSAGES = {
@@ -52,6 +58,9 @@ const SUCCESS_MESSAGES = {
   add_recipe: 'Recipe saved! 📖',
   add_memory: "Got it! I'll remember this. 🧠",
   delete_memory: 'Memory deleted.',
+  mark_paid: 'Order marked as paid! 💸',
+  batch_status_update: 'Orders updated in batch! 🚀',
+  multi_action: 'All actions completed successfully! ✨',
 };
 
 /* ── Helpers ───────────────────────────────────────────────────── */
@@ -195,6 +204,19 @@ function InsightRenderer({ insights }) {
         <ol className="ai-recipe-list">
           {recipe.steps.map((step, i) => <li key={i}>{step}</li>)}
         </ol>
+        <button 
+          className="ai-btn-primary" 
+          style={{ marginTop: 12, width: '100%' }}
+          onClick={() => {
+            const data = {
+              name: recipe.name, yield: recipe.yield, prepTime: recipe.prepTime, bakeTime: recipe.bakeTime, cost: recipe.cost,
+              ingredients: recipe.ingredients, steps: recipe.steps.map(s => ({ title: 'Step', desc: s })), category: 'AI Generated'
+            };
+            window.dispatchEvent(new CustomEvent('dispatch-ai-command', { detail: { message: `Please save this recipe to my catalog:\n${JSON.stringify(data)}` } }));
+          }}
+        >
+          <Sparkles size={14} /> Auto-Save to Recipes
+        </button>
       </div>
     );
   }
@@ -347,6 +369,156 @@ function InsightRenderer({ insights }) {
       </div>
     );
   }
+  if (type === 'orders_list' && insights.orders) {
+    return (
+      <div className="ai-insight-card orders-list">
+        <h4><Package size={14} /> Orders ({insights.orders.length})</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+          {insights.orders.map(o => (
+            <div key={o.id} style={{ padding: '10px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.82rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <strong style={{ color: 'var(--text1)' }}>{o.orderId} - {o.customerName}</strong>
+                <span style={{ fontWeight: 600, color: 'var(--text1)' }}>₹{o.total}</span>
+              </div>
+              <div style={{ color: 'var(--text2)', marginBottom: '8px' }}>{o.product}</div>
+              <div style={{ display: 'flex', gap: '6px', fontSize: '0.75rem' }}>
+                <span style={{ padding: '2px 6px', borderRadius: '4px', background: 'var(--surface)', color: o.status === 'delivered' ? 'var(--success)' : 'var(--text2)' }}>{o.status}</span>
+                <span style={{ padding: '2px 6px', borderRadius: '4px', background: o.paymentStatus === 'paid' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: o.paymentStatus === 'paid' ? 'var(--success)' : 'var(--danger)' }}>{o.paymentStatus}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        {insights.orders.some(o => o.paymentStatus !== 'paid') && (
+          <button 
+            className="ai-btn-primary" 
+            style={{ marginTop: 12, width: '100%' }}
+            onClick={() => {
+              const unpaid = insights.orders.find(o => o.paymentStatus !== 'paid');
+              if (unpaid) {
+                window.dispatchEvent(new CustomEvent('dispatch-ai-command', { detail: { featureId: 'send_whatsapp_invoice', message: `Please send a payment reminder for order ${unpaid.orderId}` } }));
+              }
+            }}
+          >
+            <Sparkles size={14} /> Send Payment Reminder
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (type === 'customers_list' && insights.customers) {
+    return (
+      <div className="ai-insight-card customers-list">
+        <h4><Users size={14} /> Customers ({insights.customers.length})</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+          {insights.customers.map(c => (
+            <div key={c.id} style={{ padding: '10px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.82rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <strong style={{ color: 'var(--text1)', display: 'block' }}>{c.name}</strong>
+                <span style={{ color: 'var(--text3)', fontSize: '0.75rem' }}>{c.phone}</span>
+              </div>
+              <div style={{ background: 'var(--surface)', padding: '4px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 600 }}>
+                {c.totalOrders || 0} orders
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'run_bakery' && insights.priorities) {
+    return (
+      <div className="ai-insight-card run-bakery">
+        <h4><Zap size={14} /> Priority Feed</h4>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text2)', marginBottom: '12px' }}>{insights.summary}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {insights.priorities.map((p, i) => (
+            <div key={i} style={{ padding: '12px', background: 'var(--bg)', borderRadius: '8px', borderLeft: `3px solid ${p.urgency === 'high' ? 'var(--danger)' : p.urgency === 'medium' ? 'var(--warning)' : 'var(--success)'}` }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '4px' }}>{p.task}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text2)' }}>{p.reason}</div>
+              {p.action && (
+                <button 
+                  className="ai-btn-secondary" 
+                  style={{ marginTop: '8px', fontSize: '0.75rem', padding: '4px 8px' }}
+                  onClick={() => window.dispatchEvent(new CustomEvent('dispatch-ai-command', { detail: { message: `Execute this task: ${p.action}` } }))}
+                >
+                  Do This For Me
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (type === 'predictive_inventory' && insights.shortagesToOrder) {
+    return (
+      <div className="ai-insight-card inventory">
+        <h4><Package size={14} /> Predictive Restock Analysis</h4>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text2)', marginBottom: '12px' }}>{insights.analysis}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {insights.shortagesToOrder.map((s, i) => (
+            <div key={i} style={{ padding: '10px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.82rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <strong>{s.item}</strong>
+                <span style={{ color: 'var(--danger)' }}>Need: {s.neededStock}</span>
+              </div>
+              <div style={{ color: 'var(--text2)', fontSize: '0.75rem' }}>Current: {s.currentStock}</div>
+              <div style={{ color: 'var(--text3)', fontSize: '0.75rem', marginTop: '4px', fontStyle: 'italic' }}>{s.reason}</div>
+            </div>
+          ))}
+        </div>
+        {insights.actionReady && insights.shortagesToOrder.length > 0 && (
+          <button 
+            className="ai-btn-primary" 
+            style={{ marginTop: 12, width: '100%' }}
+            onClick={() => {
+              const actions = insights.shortagesToOrder.map(s => ({
+                type: 'add_shopping_item',
+                data: { item: s.item, qty: parseFloat(s.neededStock) || 1, unit: s.unit || 'units' }
+              }));
+              // Dispatch to the AI to execute
+              window.dispatchEvent(new CustomEvent('dispatch-ai-command', { detail: { message: `Please add these to my shopping list: ${insights.shortagesToOrder.map(s => s.item).join(', ')}` } }));
+            }}
+          >
+            <Sparkles size={14} /> Auto-Add to Shopping List
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (type === 'customer_retention' && insights.vipChurnRisks) {
+    return (
+      <div className="ai-insight-card coach">
+        <h4><Users size={14} /> Retention Analysis</h4>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text2)', marginBottom: '12px' }}>{insights.analysis}</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '12px' }}>
+          {insights.vipChurnRisks.map((c, i) => (
+            <div key={i} style={{ padding: '10px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--warning)', fontSize: '0.82rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <strong>{c.name}</strong>
+                <span>{c.totalOrders} orders</span>
+              </div>
+              <div style={{ color: 'var(--text2)', fontSize: '0.75rem' }}>Last order: {c.lastOrder}</div>
+            </div>
+          ))}
+        </div>
+        {insights.suggestedMessage && (
+          <div style={{ padding: '10px', background: 'rgba(var(--accent-rgb), 0.1)', borderRadius: '8px', fontSize: '0.82rem', border: '1px solid var(--accent)' }}>
+            <strong>Suggested Message:</strong>
+            <p style={{ marginTop: '4px', color: 'var(--text1)' }}>{insights.suggestedMessage}</p>
+            <button className="ai-desc-copy-btn" style={{ marginTop: '8px', width: '100%' }} type="button"
+              onClick={() => navigator.clipboard.writeText(insights.suggestedMessage || '').catch(() => {})}>
+              <ClipboardCopy size={13} /> Copy Message
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // Fallback for default insights
   return (
@@ -446,20 +618,56 @@ function MemoryDeck({ memories, onClose, onDelete }) {
 export function AICompanionDrawer() {
   const { currentUser } = useAuth();
   const data = useData();
+  const { requirePermission } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const feedRef = useRef(null);
   const recognitionRef = useRef(null);
 
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
+  const storageKey = currentUser?.uid ? `cream_ai_session_${currentUser.uid}` : 'cream_ai_guest';
+  const [messages, setMessages] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(storageKey + '_msgs')) || []; } catch { return []; }
+  });
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [chatHistory, setChatHistory] = useState([]);
+  const [chatHistory, setChatHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(storageKey + '_hist')) || []; } catch { return []; }
+  });
   const [pendingAction, setPendingAction] = useState(null);
   const [activeAgent, setActiveAgent] = useState(null);
   const [listening, setListening] = useState(false);
   const [showMemoryDeck, setShowMemoryDeck] = useState(false);
+
+  useEffect(() => {
+    if (currentUser?.uid) {
+      localStorage.setItem(storageKey + '_msgs', JSON.stringify(messages.slice(-50)));
+      localStorage.setItem(storageKey + '_hist', JSON.stringify(chatHistory.slice(-20)));
+    }
+  }, [messages, chatHistory, currentUser?.uid, storageKey]);
+
+  useEffect(() => {
+    if (messages.length === 0 && currentUser?.uid && isOpen && !loading) {
+      const today = new Date().toDateString();
+      const lastBriefing = localStorage.getItem(`cream_ai_briefing_${currentUser.uid}`);
+      if (lastBriefing !== today) {
+        localStorage.setItem(`cream_ai_briefing_${currentUser.uid}`, today);
+        // We simulate a message trigger after component mount
+        setTimeout(() => window.dispatchEvent(new CustomEvent('dispatch-ai-command', { detail: { featureId: 'briefing' } })), 500);
+      }
+    }
+  }, [messages.length, currentUser?.uid, isOpen, loading]);
+
+  // ── Mobile detection (stable, not inline) ──
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 700);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 700);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // ── SpeechRecognition availability (false on Android WebView) ──
+  const canVoice = Boolean(SpeechRecognition);
   const [undoAction, setUndoAction] = useState(null);
 
   // Global event listener to toggle drawer and dispatch commands
@@ -478,7 +686,6 @@ export function AICompanionDrawer() {
       window.removeEventListener('toggle-ai-drawer', handleToggle);
       window.removeEventListener('dispatch-ai-command', handleDispatch);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Context-aware suggestions based on current route
@@ -489,23 +696,23 @@ export function AICompanionDrawer() {
       { id: 'coach_me', icon: TrendingUp, label: 'Coach Me' },
     ];
     if (path.includes('orders')) return [...base, { id: 'create_order', label: 'Create Order', intent: true }, { id: 'unpaid_orders', label: 'Unpaid Orders' }];
-    if (path.includes('inventory')) return [...base, { id: 'inventory_check', label: 'Stock Report' }, { id: 'add_inventory', label: 'Add Item', intent: true }];
+    if (path.includes('inventory')) return [...base, { id: 'inventory_check', label: 'Stock Report' }, { id: 'predictive_inventory', label: 'Predictive Restock' }, { id: 'add_inventory', label: 'Add Item', intent: true }];
     if (path.includes('expenses')) return [...base, { id: 'add_expense', label: 'Log Expense', intent: true }, { id: 'coach_me', label: 'Business Health' }];
     if (path.includes('recipes')) return [...base, { id: 'generate_recipe', label: 'Generate Recipe', intent: true }];
-    if (path.includes('customers')) return [...base, { id: 'add_customer', label: 'Add Customer', intent: true }, { id: 'marketing_campaign', label: 'Marketing Ideas' }];
+    if (path.includes('customers')) return [...base, { id: 'add_customer', label: 'Add Customer', intent: true }, { id: 'customer_retention', label: 'Retention Analysis' }, { id: 'marketing_campaign', label: 'Marketing Ideas' }];
     return [...base, { id: 'create_order', label: 'Create Order', intent: true }, { id: 'add_expense', label: 'Log Expense', intent: true }];
   }, [location.pathname]);
 
   const dataContext = useMemo(() => ({
-    orders: trimContext(data.orders, 50).map((o) => ({
+    orders: trimContext(data.orders, 15).map((o) => ({
       id: o.id, orderId: o.orderId, customerName: o.customerName || o.customer?.name || o.customer,
       product: o.product, total: o.total, status: o.status, paymentStatus: o.paymentStatus, 
       deliveryDate: o.deliveryDate, createdAt: o.createdAt
     })),
-    customers: trimContext(data.customers, 30).map((c) => ({ id: c.id, name: c.name, phone: c.phone, totalOrders: c.totalOrders })),
-    inventory: trimContext(data.inventory, 50).map((i) => ({ id: i.id, item: i.item, stock: i.stock, unit: i.unit, minStock: i.minStock })),
-    expenses: trimContext(data.expenses, 30).map((e) => ({ id: e.id, title: e.title, amount: e.amount, category: e.category })),
-    products: trimContext(data.products, 30).map((p) => ({ id: p.id, name: p.name, price: p.price })),
+    customers: trimContext(data.customers, 15).map((c) => ({ id: c.id, name: c.name, phone: c.phone, totalOrders: c.totalOrders })),
+    inventory: trimContext(data.inventory, 20).map((i) => ({ id: i.id, item: i.item, stock: i.stock, unit: i.unit, minStock: i.minStock })),
+    expenses: trimContext(data.expenses, 15).map((e) => ({ id: e.id, title: e.title, amount: e.amount, category: e.category })),
+    products: trimContext(data.products, 20).map((p) => ({ id: p.id, name: p.name, price: p.price })),
     memories: trimContext(data.memories || []).map((m) => ({ id: m.id, note: m.note })),
   }), [data]);
 
@@ -530,6 +737,12 @@ export function AICompanionDrawer() {
     return () => rec.abort?.();
   }, []);
 
+  const isMounted = useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
   const append = (msg) => setMessages((prev) => [...prev, { time: nowTime(), ...msg }]);
 
   const sendMessage = async (textOverride, featureId) => {
@@ -541,6 +754,7 @@ export function AICompanionDrawer() {
     if (featureId && !text) append({ role: 'user', type: 'text', text: `🚀 Trigger: ${suggestions.find((s) => s.id === featureId)?.label || featureId}` });
 
     setLoading(true);
+    
     try {
       const result = await api.chatAI({
         message: text || undefined,
@@ -548,6 +762,8 @@ export function AICompanionDrawer() {
         context: dataContext,
         history: chatHistory.slice(-6),
       });
+
+      if (!isMounted.current) return;
 
       setChatHistory((prev) => [...prev, ...(text ? [{ role: 'user', content: text }] : []), { role: 'ai', content: result.response || '' }].slice(-12));
       if (result.agent) setActiveAgent(result.agent);
@@ -598,9 +814,28 @@ export function AICompanionDrawer() {
         append({ role: 'assistant', type: 'text', text: result.response, agent: result.agent, thoughtProcess: result.thoughtProcess, buttons: result.buttons });
       }
     } catch (err) {
-      append({ role: 'assistant', type: 'text', text: '😔 AI is temporarily unavailable.', agent: 'System' });
+      if (!isMounted.current) return;
+      const errMsg = err?.message || 'Unknown error';
+      let displayMsg = '';
+      
+      // Robust Error Classification (Req 7)
+      if (!navigator.onLine || errMsg.includes('Network Error') || errMsg.includes('Failed to fetch') || errMsg.includes('Offline')) {
+        displayMsg = '📶 No internet connection. Please check your network and try again.';
+      } else if (errMsg.includes('503') || errMsg.includes('unavailable') || errMsg.includes('not configured')) {
+        displayMsg = '⚙️ Server unavailable. The AI service is currently down or misconfigured (Check Vercel API Keys).';
+      } else if (errMsg.includes('401') || errMsg.includes('token') || errMsg.includes('auth') || errMsg.includes('Unauthorized')) {
+        displayMsg = '🔐 Unauthorized. Your session has expired. Please log out and log back in.';
+      } else if (errMsg.includes('429') || errMsg.includes('rate') || errMsg.includes('limit')) {
+        displayMsg = '⏱️ Rate limited. You are sending messages too quickly. Please wait a moment.';
+      } else if (errMsg.includes('Timeout') || errMsg.includes('timed out')) {
+        displayMsg = '⏳ Request timed out. The AI took too long to respond. Please try again.';
+      } else {
+        displayMsg = `😔 Unknown server error: ${errMsg.length > 120 ? errMsg.slice(0, 120) + '…' : errMsg}`;
+      }
+      
+      append({ role: 'assistant', type: 'text', text: displayMsg, agent: 'System' });
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   };
 
@@ -651,9 +886,20 @@ export function AICompanionDrawer() {
     }
   };
 
-  const toggleVoice = () => {
-    if (!SpeechRecognition) return append({ role: 'assistant', type: 'text', text: 'Voice not supported.' });
-    listening ? recognitionRef.current?.stop?.() : recognitionRef.current?.start?.();
+  const toggleVoice = async () => {
+    if (!canVoice) {
+      return append({ role: 'assistant', type: 'text', text: '🎤 Voice input is not supported on this device. Please type your command instead.' });
+    }
+    if (listening) {
+      recognitionRef.current?.stop?.();
+      return;
+    }
+    // JIT microphone permission — show custom modal first, then Android dialog
+    const granted = await requirePermission(PERMISSION_TYPES.MICROPHONE);
+    if (!granted) {
+      return append({ role: 'assistant', type: 'text', text: '🎤 Microphone permission is required for voice commands. Please enable it in Settings.' });
+    }
+    recognitionRef.current?.start?.();
   };
 
   if (!currentUser) return null;
@@ -663,39 +909,47 @@ export function AICompanionDrawer() {
       {isOpen && (
         <div className="ai-drawer-overlay" onClick={() => setIsOpen(false)}>
           <motion.div
-            className="ai-drawer"
-            initial={{ x: '100%', y: window.innerWidth <= 700 ? '100%' : 0 }}
+            className={`ai-drawer ${isMobile ? 'ai-drawer--mobile' : ''}`}
+            initial={isMobile ? { y: '100%' } : { x: '100%' }}
             animate={{ x: 0, y: 0 }}
-            exit={{ x: window.innerWidth <= 700 ? 0 : '100%', y: window.innerWidth <= 700 ? '100%' : 0 }}
+            exit={isMobile ? { y: '100%' } : { x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Featherlight Header */}
             <div className="ai-drawer-header">
-              <div className="ai-header-left">
-                <span className="ai-kicker"><Sparkles size={14} /> Intelligence</span>
+              <div className="ai-header-brand">
+                <div className="ai-brand-dot">
+                  <Sparkles size={12} color="#D4A050" />
+                </div>
                 <h2>Cream AI</h2>
               </div>
               <div className="ai-header-actions">
-                <button className="ai-icon-btn" onClick={() => setShowMemoryDeck(true)} title="Memory Deck"><Brain size={16} /></button>
-                <button className="ai-icon-btn" onClick={() => { setMessages([]); setChatHistory([]); setPendingAction(null); }} title="New Chat"><RefreshCw size={16} /></button>
-                <button className="ai-icon-btn" onClick={() => setIsOpen(false)} title="Close"><X size={20} /></button>
+                <button className="ai-header-btn" title="Memory Deck" onClick={() => setShowMemoryDeck(true)}>
+                  <Brain size={13} />
+                </button>
+                <button className="ai-header-btn" title="New Chat" onClick={() => { setMessages([]); setChatHistory([]); setPendingAction(null); }}>
+                  <RefreshCw size={13} />
+                </button>
+                <button className="ai-header-btn" title="Close" onClick={() => setIsOpen(false)}>
+                  <X size={15} />
+                </button>
               </div>
             </div>
 
-            <div className="ai-suggestions-bar">
-              {suggestions.map((s) => (
-                <button key={s.id} className="ai-suggestion-btn" onClick={() => sendMessage(s.intent ? `I want to ${s.label.toLowerCase()}` : '', s.intent ? null : s.id)} disabled={loading}>
-                  {s.intent ? <PlusCircle size={14} /> : s.icon && <s.icon size={14} />} {s.label}
-                </button>
-              ))}
-            </div>
-
+            {/* AI Feed Canvas */}
             <div className="ai-feed" ref={feedRef}>
               {messages.length === 0 && (
                 <div className="ai-welcome">
-                  <div className="ai-welcome-emoji">🧠</div>
-                  <h3>How can I help?</h3>
-                  <p>I can create orders, log expenses, update inventory, or give you business insights based on the page you're on.</p>
+                  <h3>Cream AI</h3>
+                  <p>Ask anything or select a quick action below:</p>
+                  <div className="ai-empty-suggestions">
+                    {suggestions.map((s) => (
+                      <button key={s.id} className="ai-empty-chip" onClick={() => sendMessage(s.intent ? `I want to ${s.label.toLowerCase()}` : '', s.intent ? null : s.id)} disabled={loading}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -722,8 +976,7 @@ export function AICompanionDrawer() {
                     )}
                   </div>
                   <div className="ai-message-meta">
-                    {msg.agent && <span className="ai-agent-badge">{msg.agent}</span>}
-                    <span>{msg.time}</span>
+                    <span>{msg.role === 'assistant' ? 'Cream AI' : 'You'} · {msg.time}</span>
                   </div>
                 </div>
               ))}
@@ -734,18 +987,48 @@ export function AICompanionDrawer() {
                 </div>
               )}
 
-              {loading && <TypingIndicator />}
+              {loading && (
+                <div className="ai-message assistant">
+                  <div className="ai-message-body" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px' }}>
+                    <Sparkles size={13} color="#D4A050" className="spin" />
+                    <span style={{ fontSize: '0.8rem', color: '#8E8D9A' }}>Thinking...</span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <form className="ai-compose" onSubmit={(e) => { e.preventDefault(); sendMessage(); }}>
-              <button type="button" className={`ai-voice-btn ${listening ? 'listening' : ''}`} onClick={toggleVoice}>
-                {listening ? <MicOff size={20} /> : <Mic size={20} />}
-              </button>
-              <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type a command..." autoComplete="off" />
-              <button type="submit" className="ai-send-btn" disabled={!input.trim() || loading}>
-                <Send size={18} />
-              </button>
-            </form>
+            {input.startsWith('/') && (
+              <div className="ai-slash-commands" style={{ position: 'absolute', bottom: '60px', left: '12px', right: '12px', background: '#15141B', borderRadius: '12px', padding: '6px', boxShadow: '0 8px 24px rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.08)', zIndex: 10 }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#D4A050', padding: '4px 6px', marginBottom: '2px', textTransform: 'uppercase' }}>Quick Commands</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                  {suggestions.map((s) => (
+                    <button key={s.id} type="button" onClick={() => { sendMessage('', s.id); }} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 10px', background: 'transparent', border: 'none', color: '#FFF', textAlign: 'left', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }} onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'} onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}>
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Compact Compose Capsule */}
+            <div className="ai-compose-container">
+              <form className="ai-compose-capsule" onSubmit={(e) => { e.preventDefault(); sendMessage(); }}>
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder="Ask Cream AI..."
+                  autoComplete="off"
+                />
+                {canVoice && (
+                  <button type="button" className={`ai-voice-btn ${listening ? 'listening' : ''}`} onClick={toggleVoice} title="Voice Command">
+                    {listening ? <MicOff size={14} /> : <Mic size={14} />}
+                  </button>
+                )}
+                <button type="submit" className="ai-send-btn" disabled={!input.trim() || loading} title="Send">
+                  <Send size={12} color="#0E0D11" />
+                </button>
+              </form>
+            </div>
 
             {/* Action Recovery Buffer */}
             <AnimatePresence>
@@ -797,11 +1080,32 @@ export default function AICompanionManager() {
 }
 
 function AIFloatingSummoner() {
+  const location = useLocation();
+  const isDashboard = location.pathname === '/' || location.pathname === '/dashboard';
+
+  // Render ONLY on dashboard route
+  if (!isDashboard) return null;
+
   return (
-    <button type="button" className="ai-floating-bubble" aria-label="Open Cream AI"
+    <motion.button
+      type="button"
+      className="ai-floating-bubble"
+      aria-label="Open Cream AI"
+      drag
+      dragConstraints={{
+        left: -window.innerWidth + 80,
+        right: 0,
+        top: -window.innerHeight + 120,
+        bottom: 0,
+      }}
+      dragElastic={0.1}
+      dragMomentum={false}
+      whileHover={{ scale: 1.08 }}
+      whileTap={{ scale: 0.92 }}
+      whileDrag={{ scale: 1.12, cursor: 'grabbing' }}
       onClick={() => window.dispatchEvent(new CustomEvent('toggle-ai-drawer'))}
     >
-      <Sparkles size={24} />
-    </button>
+      <Sparkles size={20} color="#D4A050" />
+    </motion.button>
   );
 }

@@ -26,11 +26,15 @@ import {
 } from '../services/db';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
-import { Skeleton, showToast, BottomSheet } from '../components/iOS';
+import { usePermissions } from '../context/PermissionContext';
+import { PERMISSION_TYPES } from '../services/PermissionManager';
+import { Skeleton, showToast } from '../components/iOS';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { formatCurrency } from '../utils/date';
 import { uploadToCloudinary } from '../services/cloudinary';
 import { toWebP } from '../utils/imagePipeline';
+import { pickPhoto } from '../utils/photoPicker';
 import ModuleTour from '../components/ModuleTour';
 import { productsTourSteps } from '../components/tours/productsTour';
 import AnimatedDemo from '../components/AnimatedDemo';
@@ -41,6 +45,7 @@ const DEFAULT_CATEGORIES = ['All', 'Cakes', 'Cupcakes', 'Brownies', 'Cookies', '
 export default function Products() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const { requirePermission } = usePermissions();
   const [products, setProducts] = useState([]);
   const [recipes, setRecipes] = useState([]);
   const [business, setBusiness] = useState(null);
@@ -71,7 +76,6 @@ export default function Products() {
   const [uploading, setUploading] = useState(false);
   const [customCategories, setCustomCategories] = useState([]);
   const [newCatInput, setNewCatInput] = useState('');
-  const fileInputRef = useRef();
   const newCatRef = useRef();
   const isSavingRef = useRef(false);
 
@@ -218,11 +222,11 @@ export default function Products() {
     });
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
+  const handleImagePick = async () => {
+    const photo = await pickPhoto();
+    if (photo) {
+      setImageFile(photo.file);
+      setImagePreview(photo.previewUrl);
     }
   };
 
@@ -784,7 +788,7 @@ export default function Products() {
         </div>
       )}
 
-      <BottomSheet open={showModal} onClose={closeModal} title={editingId ? 'Edit Product' : 'Add New Product'}>
+      <NativeBottomSheet open={showModal} onClose={closeModal} title={editingId ? 'Edit Product' : 'Add New Product'}>
             <form
               onSubmit={handleSaveProduct}
               style={{ display: 'flex', flexDirection: 'column', gap: 24 }}
@@ -792,7 +796,7 @@ export default function Products() {
               {/* PHOTO SECTION - BIG & BOLD */}
               <div style={{ position: 'relative' }}>
                 <div
-                  onClick={() => fileInputRef.current.click()}
+                  onClick={handleImagePick}
                   style={{
                     width: '100%',
                     height: 200,
@@ -858,14 +862,7 @@ export default function Products() {
                     <X size={14} />
                   </button>
                 )}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  style={{ display: 'none' }}
-                />
-              </div>
+                </div>
 
               {/* CORE FIELDS */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1320,7 +1317,7 @@ export default function Products() {
                 </button>
               </div>
             </form>
-      </BottomSheet>
+      </NativeBottomSheet>
       <AnimatedDemo moduleId="products" title="How to Add Products" scenes={productsDemoScenes} />
     </motion.div>
   );

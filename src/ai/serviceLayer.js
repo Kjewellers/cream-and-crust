@@ -148,6 +148,27 @@ export async function executeServiceAction(action, context = {}) {
     case INTENTS.UPDATE_ORDER_STATUS:
       await updateOrderStatusInDB(data.orderId, data.status);
       return { id: data.orderId };
+    case INTENTS.MARK_PAID:
+      await updateOrderStatusInDB(data.orderId, undefined, { paymentStatus: 'paid', isPaid: true });
+      return { id: data.orderId };
+    case INTENTS.BATCH_STATUS_UPDATE:
+      if (Array.isArray(data.orderIds)) {
+        const extraFields = {};
+        if (data.paymentStatus) {
+          extraFields.paymentStatus = data.paymentStatus;
+          extraFields.isPaid = data.paymentStatus === 'paid';
+        }
+        await Promise.all(data.orderIds.map(id => updateOrderStatusInDB(id, data.status, extraFields)));
+      }
+      return { id: data.orderIds?.[0] };
+    case INTENTS.MULTI_ACTION:
+      if (Array.isArray(data.actions)) {
+        for (const act of data.actions) {
+          // Recursive call for multi-actions, context is passed down
+          await executeServiceAction({ intent: act.type, data: act.data }, context);
+        }
+      }
+      return { id: 'multi' };
     case INTENTS.DELETE_ORDER:
       await deleteOrderFromDB(data.orderId);
       return { id: data.orderId };

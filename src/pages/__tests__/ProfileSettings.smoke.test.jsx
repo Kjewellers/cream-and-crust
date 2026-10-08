@@ -18,6 +18,44 @@ vi.mock('../../context/AuthContext', () => ({
   useAuth: () => mockAuth,
 }));
 
+const mockRequirePermission = vi.fn(async () => true);
+
+vi.mock('../../context/PermissionContext', () => ({
+  usePermissions: () => ({
+    requirePermission: mockRequirePermission
+  }),
+}));
+
+vi.mock('../../hooks/useSubscription', () => ({
+  useSubscription: () => ({
+    isActive: true,
+    isTrial: false,
+    expiryDate: null,
+    loading: false,
+  }),
+}));
+
+vi.mock('../../context/SubscriptionContext', () => ({
+  useSubscriptionContext: () => ({
+    isPro: false,
+    isTrial: false,
+    trialDaysRemaining: null,
+    expiryDate: null,
+    openPaywall: vi.fn(),
+    subscriptionLoading: false,
+  }),
+  SubscriptionProvider: ({ children }) => children,
+}));
+
+vi.mock('../../services/purchases', () => ({
+  isNativeAndroidRuntime: () => false,
+  restorePurchases: vi.fn(),
+}));
+
+vi.mock('../../components/premium/PremiumBadge', () => ({
+  default: () => null,
+}));
+
 vi.mock('../../services/db', () => ({
   subscribeToOrders: (cb) => {
     cb([]);
@@ -31,6 +69,8 @@ vi.mock('../../services/db', () => ({
   subscribeToProducts: (cb) => { cb([]); return () => {}; },
   subscribeToRecipes: (cb) => { cb([]); return () => {}; },
   updateBusinessInDB: vi.fn(),
+  getUserDoc: vi.fn(async () => null),
+  updateUserDoc: vi.fn(async () => {}),
 }));
 
 vi.mock('firebase/firestore', () => ({

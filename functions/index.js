@@ -38,62 +38,24 @@ exports.backupFirestore = functions.pubsub
 
 /**
  * HTTP Callable Function: validatePlaySubscription
- * Validates a Google Play Billing purchase token via the Google Play Developer API.
- * This is a highly secure endpoint invoked by the client after a purchase.
+ * Deprecated: purchases are validated by RevenueCat and mirrored by
+ * revenueCatWebhook only. This endpoint must not grant premium access.
  */
 exports.validatePlaySubscription = functions.https.onCall(async (data, context) => {
-  // 1. Ensure user is authenticated (Firebase App Check enforces this if enabled)
   if (!context.auth) {
     throw new functions.https.HttpsError('unauthenticated', 'You must be logged in to validate a subscription.');
   }
 
-  const { purchaseToken, subscriptionId } = data;
-  if (!purchaseToken || !subscriptionId) {
-    throw new functions.https.HttpsError('invalid-argument', 'Missing purchase token or subscription ID.');
-  }
+  await admin.firestore().collection('audit_logs').add({
+    action: 'deprecated_validate_play_subscription_called',
+    uid: context.auth.uid,
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+  });
 
-  try {
-    const uid = context.auth.uid;
-    // In a production environment, you would use googleapis package:
-    // const { google } = require('googleapis');
-    // const androidPublisher = google.androidpublisher('v3');
-    // await androidPublisher.purchases.subscriptions.get({ ... })
-    
-    // For local testing & scaffold, we simulate a successful Google API response
-    // (A full implementation requires a Service Account Key with Google Play Console access)
-    
-    // TODO: Connect `googleapis` here when Play Console is active.
-    const isMockValid = purchaseToken.length > 10; 
-    
-    if (isMockValid) {
-      // 2. Mark subscription as active in Firestore user document
-      const userRef = admin.firestore().collection('users').doc(uid);
-      await userRef.set({
-        subscription: {
-          status: 'active',
-          planId: subscriptionId,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          // mock expiry date (+30 days)
-          expiryDate: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
-        }
-      }, { merge: true });
-
-      // Write to audit log
-      await admin.firestore().collection('audit_logs').add({
-        action: 'subscription_activated',
-        uid: uid,
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        details: { plan: subscriptionId }
-      });
-
-      return { status: 'success', active: true };
-    } else {
-      throw new functions.https.HttpsError('invalid-argument', 'Purchase token is invalid.');
-    }
-  } catch (error) {
-    console.error('Subscription validation error:', error);
-    throw new functions.https.HttpsError('internal', 'Failed to validate subscription.', error);
-  }
+  throw new functions.https.HttpsError(
+    'failed-precondition',
+    'Google Play purchases are validated by RevenueCat CustomerInfo/webhooks only.'
+  );
 });
 
 /**
@@ -136,8 +98,10 @@ exports.revenueCatWebhook = functions.https.onRequest(async (req, res) => {
       type,                    // e.g. "INITIAL_PURCHASE", "RENEWAL", "CANCELLATION"
       app_user_id,             // This is the Firebase UID we set in initPurchases()
       product_id,              // e.g. "pro_monthly"
-      expiration_at_ms,        // Unix ms — when the entitlement expires
-      store,                   // "PLAY_STORE"
+      expiration_at_ms,
+      purchased_at_ms,
+      store,
+      entitlement_ids,
     } = event;
 
     // app_user_id is the Firebase UID
@@ -151,20 +115,30 @@ exports.revenueCatWebhook = functions.https.onRequest(async (req, res) => {
 
     const ACTIVE_EVENTS = ['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE'];
     const INACTIVE_EVENTS = ['CANCELLATION', 'EXPIRATION', 'BILLING_ISSUE'];
+    const expiryDate = expiration_at_ms > 0
+      ? admin.firestore.Timestamp.fromMillis(expiration_at_ms)
+      : null;
+    const purchaseDate = purchased_at_ms > 0
+      ? admin.firestore.Timestamp.fromMillis(purchased_at_ms)
+      : null;
+    const entitlementName = Array.isArray(entitlement_ids) && entitlement_ids.length
+      ? entitlement_ids[0]
+      : 'premium';
 
     if (ACTIVE_EVENTS.includes(type)) {
-      const expiryDate = expiration_at_ms
-        ? admin.firestore.Timestamp.fromMillis(expiration_at_ms)
-        : null;
 
       await userRef.set({
         subscription: {
           status: 'active',
+          productId: product_id || null,
           planId: product_id || 'pro_monthly',
+          purchaseDate,
           expiryDate,
           store: store || 'PLAY_STORE',
+          entitlementName,
+          source: 'revenuecat_webhook',
           activatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastSync: admin.firestore.FieldValue.serverTimestamp(),
           rcEventType: type,
         }
       }, { merge: true });
@@ -174,14 +148,16 @@ exports.revenueCatWebhook = functions.https.onRequest(async (req, res) => {
     } else if (INACTIVE_EVENTS.includes(type)) {
       await userRef.set({
         subscription: {
-          status: type === 'BILLING_ISSUE' ? 'billing_issue' : 'expired',
+          status: type === 'BILLING_ISSUE' ? 'billing_issue' : 'not_subscribed',
+          productId: product_id || null,
           planId: product_id || 'pro_monthly',
-          expiryDate: expiration_at_ms
-            ? admin.firestore.Timestamp.fromMillis(expiration_at_ms)
-            : null,
+          purchaseDate,
+          expiryDate,
           store: store || 'PLAY_STORE',
+          entitlementName,
+          source: 'revenuecat_webhook',
           expiredAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastSync: admin.firestore.FieldValue.serverTimestamp(),
           rcEventType: type,
         }
       }, { merge: true });
@@ -229,63 +205,257 @@ exports.revenueCatWebhook = functions.https.onRequest(async (req, res) => {
 });
 
 /**
- * Firestore Trigger: onNotificationCreated
- * Listens for new documents in the `notifications` collection and sends a
- * Firebase Cloud Messaging (FCM) push notification to the targeted user.
+ * ── Enterprise Notification Engine v2.0 (Cloud Functions) ───────────────────
+ */
+
+/** Helper: Check Quiet Hours (10 PM - 7 AM default) */
+function isQuietHoursNowServer(prefs) {
+  if (!prefs || !prefs.quietHoursEnabled) return false;
+  const now = new Date();
+  const hours = now.getHours();
+  return hours >= 22 || hours < 7;
+}
+
+/** Helper: Send Push Notification to Multi-Device FCM Tokens */
+async function sendMultiDevicePush(userId, payload, category = 'system', priority = 'NORMAL') {
+  try {
+    const db = admin.firestore();
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) return null;
+
+    const userData = userDoc.data();
+    const tokens = userData.fcmTokens && Array.isArray(userData.fcmTokens) && userData.fcmTokens.length > 0
+      ? userData.fcmTokens
+      : (userData.fcmToken ? [userData.fcmToken] : []);
+
+    if (tokens.length === 0) {
+      console.log(`[PushEngine] No tokens registered for user ${userId}`);
+      return null;
+    }
+
+    // Check User Notification Preferences & Quiet Hours
+    const prefSnap = await db.collection('users').doc(userId).collection('settings').doc('notificationPreferences').get();
+    const prefs = prefSnap.exists() ? prefSnap.data() : {};
+
+    if (priority !== 'CRITICAL') {
+      if (category && prefs[category] === false) {
+        console.log(`[PushEngine] Category ${category} muted by user ${userId}`);
+        return null;
+      }
+      if (isQuietHoursNowServer(prefs)) {
+        console.log(`[PushEngine] Quiet hours active for user ${userId}, suppressing push`);
+        return null;
+      }
+    }
+
+    const multicastMessage = {
+      tokens: tokens,
+      notification: payload.notification,
+      data: {
+        ...payload.data,
+        category: category,
+        priority: priority,
+      },
+      android: {
+        priority: priority === 'CRITICAL' ? 'high' : 'normal',
+        notification: {
+          channelId: payload.channelId || 'orders_channel',
+          sound: prefs.sound !== false ? 'default' : null,
+          color: '#B5606A',
+          icon: 'ic_stat_notification',
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: prefs.sound !== false ? 'default' : null,
+            badge: 1,
+          },
+        },
+      },
+    };
+
+    if (payload.collapseKey) {
+      multicastMessage.android.collapseKey = payload.collapseKey;
+      multicastMessage.apns.headers = { 'apns-collapse-id': payload.collapseKey };
+    }
+
+    const response = await admin.messaging().sendEachForMulticast(multicastMessage);
+    console.log(`[PushEngine] Sent push to ${tokens.length} devices for user ${userId}:`, response.successCount, 'successes');
+    return response;
+  } catch (err) {
+    console.error('[PushEngine] Error sending multi-device push:', err);
+    return null;
+  }
+}
+
+/**
+ * Firestore Trigger: onOrderCreated
+ * Fires when a new order document is created in `orders/{orderId}`.
+ */
+exports.onOrderCreated = functions.firestore
+  .document('orders/{orderId}')
+  .onCreate(async (snap, context) => {
+    const order = snap.data();
+    const orderId = context.params.orderId;
+    const userId = order.bakeryId || order.userId || order.ownerId;
+    if (!userId) return null;
+
+    const payload = {
+      notification: {
+        title: '🧁 New Order Received!',
+        body: `Order #${orderId.slice(-4)} • ${order.customerName || 'Customer'} • ₹${order.total || 0}`,
+      },
+      data: {
+        type: 'NEW_ORDER',
+        orderId: orderId,
+        total: String(order.total || 0),
+        customerName: String(order.customerName || ''),
+      },
+      channelId: 'orders_channel',
+    };
+
+    // Save notification to Firestore notification center
+    await admin.firestore().collection('notifications').add({
+      userId: userId,
+      title: payload.notification.title,
+      message: payload.notification.body,
+      type: 'NEW_ORDER',
+      orderId: orderId,
+      read: false,
+      archived: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return sendMultiDevicePush(userId, payload, 'orders', 'CRITICAL');
+  });
+
+/**
+ * Firestore Trigger: onOrderStatusUpdated (Update-in-Place & Live Activity Progress)
+ * Fires on `orders/{orderId}` mutations. Uses collapse_key to update notification in place.
+ */
+exports.onOrderStatusUpdated = functions.firestore
+  .document('orders/{orderId}')
+  .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    if (before.status === after.status) return null;
+
+    const orderId = context.params.orderId;
+    const userId = after.bakeryId || after.userId || after.ownerId;
+    if (!userId) return null;
+
+    const STAGE_LABELS = {
+      pending: 'Order Received 📋',
+      preparing: 'Prepping Ingredients 🥣',
+      baking: 'Baking in Oven 🧁',
+      out_for_delivery: 'Out for Delivery 🛵',
+      ready: 'Ready for Pickup 🛍️',
+      completed: 'Completed ✨',
+    };
+
+    const statusText = STAGE_LABELS[after.status] || after.status;
+
+    const payload = {
+      notification: {
+        title: `Order #${orderId.slice(-4)} Progress`,
+        body: `${statusText} • ${after.customerName || 'Customer'}`,
+      },
+      data: {
+        type: 'ORDER_STATUS',
+        orderId: orderId,
+        status: after.status,
+      },
+      channelId: 'live_activity_channel',
+      collapseKey: `order_status_${orderId}`, // Updates existing notification in place
+    };
+
+    // Log notification in Notification Center
+    await admin.firestore().collection('notifications').add({
+      userId: userId,
+      title: payload.notification.title,
+      message: payload.notification.body,
+      type: 'ORDER_STATUS',
+      orderId: orderId,
+      read: false,
+      archived: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return sendMultiDevicePush(userId, payload, 'orderStatus', 'NORMAL');
+  });
+
+/**
+ * Firestore Trigger: onLowStockDetected (Anti-Spam Grouping)
+ * Fires when inventory document is updated with low stock.
+ */
+exports.onLowStockDetected = functions.firestore
+  .document('inventory/{itemId}')
+  .onUpdate(async (change, context) => {
+    const after = change.after.data();
+    const isLow = Number(after.stock) <= Number(after.minStock || 0);
+    if (!isLow) return null;
+
+    const userId = after.userId || after.ownerId;
+    if (!userId) return null;
+
+    const payload = {
+      notification: {
+        title: '⚠️ Low Stock Alert',
+        body: `"${after.item}" is down to ${after.stock} ${after.unit || 'units'}!`,
+      },
+      data: {
+        type: 'LOW_STOCK',
+        itemId: context.params.itemId,
+        itemName: String(after.item || ''),
+      },
+      channelId: 'inventory_channel',
+      collapseKey: 'low_stock_group', // Group multiple inventory alerts together
+    };
+
+    return sendMultiDevicePush(userId, payload, 'lowInventory', 'NORMAL');
+  });
+
+/**
+ * General Trigger: onNotificationCreated
  */
 exports.onNotificationCreated = functions.firestore
   .document('notifications/{notificationId}')
   .onCreate(async (snap, context) => {
     const data = snap.data();
-    
-    // The notification must target a specific user (the bakery owner)
     const userId = data.userId || data.uid;
-    if (!userId) {
-      console.log('No userId found in notification, skipping push.');
-      return null;
-    }
+    if (!userId) return null;
 
-    try {
-      const db = admin.firestore();
-      const userDoc = await db.collection('users').doc(userId).get();
-      
-      if (!userDoc.exists) {
-        console.log(`User ${userId} not found, skipping push.`);
-        return null;
-      }
+    const payload = {
+      notification: {
+        title: data.title || 'Cream & Crust',
+        body: data.message || data.body || 'New notification',
+      },
+      data: {
+        type: data.type || 'general',
+        link: data.link || '',
+        orderId: data.orderId || '',
+      },
+      channelId: data.channelId || 'system_channel',
+    };
 
-      const userData = userDoc.data();
-      const fcmToken = userData.fcmToken;
-      
-      if (!fcmToken) {
-        console.log(`User ${userId} does not have an fcmToken registered, skipping push.`);
-        return null;
-      }
-
-      const payload = {
-        notification: {
-          title: data.title || 'Cream & Crust',
-          body: data.message || data.body || 'You have a new notification'
-        },
-        data: {
-          click_action: 'FLUTTER_NOTIFICATION_CLICK',
-          type: data.type || 'general',
-          // Optional payload data
-          link: data.link || '',
-          orderId: data.orderId || ''
-        },
-        token: fcmToken
-      };
-
-      const response = await admin.messaging().send(payload);
-      console.log(`Successfully sent push notification to user ${userId}:`, response);
-      return { success: true, response };
-      
-    } catch (error) {
-      console.error('Error sending push notification:', error);
-      return null;
-    }
+    return sendMultiDevicePush(userId, payload, data.category || 'system', data.priority || 'NORMAL');
   });
+
+/**
+ * Delivery Analytics Tracker
+ */
+exports.trackNotificationDelivery = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  const { notificationId, action } = data; // 'delivered' | 'opened' | 'dismissed'
+  await admin.firestore().collection('notification_analytics').add({
+    userId: context.auth.uid,
+    notificationId,
+    action,
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { success: true };
+});
 
 /**
  * HTTP Callable Function: resetPasswordWithPhone

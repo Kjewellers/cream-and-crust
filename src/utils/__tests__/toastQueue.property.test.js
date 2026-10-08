@@ -53,10 +53,18 @@ describe('toast queue reducer (Property 11)', () => {
     s = reduceToasts(s, { kind: 'add', toast: { id: 2 } });
     s = reduceToasts(s, { kind: 'add', toast: { id: 3 } });
     s = reduceToasts(s, { kind: 'add', toast: { id: 4 } }); // queued
-    expect(s.visible.map((t) => t.id)).toEqual([1, 2, 3]);
-    expect(s.pending.map((t) => t.id)).toEqual([4]);
-    s = reduceToasts(s, { kind: 'remove', id: 1 });
-    expect(s.visible.map((t) => t.id)).toEqual([2, 3, 4]);
-    expect(s.pending).toEqual([]);
+    if (MAX_VISIBLE === 1) {
+      expect(s.visible.map((t) => t.id)).toEqual([1]);
+      expect(s.pending.map((t) => t.id)).toEqual([2, 3, 4]);
+      s = reduceToasts(s, { kind: 'remove', id: 1 });
+      expect(s.visible.map((t) => t.id)).toEqual([2]);
+      expect(s.pending.map((t) => t.id)).toEqual([3, 4]);
+    } else {
+      expect(s.visible.map((t) => t.id)).toEqual([1, 2, 3]);
+      expect(s.pending.map((t) => t.id)).toEqual([4]);
+      s = reduceToasts(s, { kind: 'remove', id: 1 });
+      expect(s.visible.map((t) => t.id)).toEqual([2, 3, 4]);
+      expect(s.pending).toEqual([]);
+    }
   });
 });

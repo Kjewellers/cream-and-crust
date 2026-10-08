@@ -45,13 +45,13 @@ export function useFirestoreSubscription(subscribeFn, { transform } = {}) {
         setData(transform ? transform(result) : result);
         setLoading(false);
       },
-      uid,
       (err) => {
         clearTimeout(safetyRef.current);
         console.error('Subscription error:', err);
         setError(err);
         setLoading(false);
-      }
+      },
+      uid
     );
 
     return () => {

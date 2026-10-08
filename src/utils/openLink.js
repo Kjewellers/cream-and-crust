@@ -15,12 +15,12 @@
  *   openWhatsAppChat('919876543210', 'Hello!');
  */
 
-import { Capacitor } from '@capacitor/core';
+import Platform from '../platform/Platform';
 import { normalizePhone } from './whatsappLink.js';
 import { log } from './logger.js';
 
-const isNative = () => Capacitor.isNativePlatform();
-const isAndroid = () => Capacitor.getPlatform() === 'android';
+const isNative = () => Platform.isNative();
+const isAndroid = () => Platform.isAndroid();
 
 /**
  * Open any URL in the best available handler.
@@ -78,21 +78,24 @@ export async function openWhatsAppChat(phone, message = '') {
     // On Android, try the intent scheme for more reliable app launch
     try {
       const intentUrl = `intent://send/${normalized}#Intent;scheme=smsto;package=com.whatsapp;action=android.intent.action.SENDTO;end`;
-      // Try intent first, fall back to wa.me
-      const { Browser } = await import('@capacitor/browser');
-      await Browser.open({ url: waUrl });
-      log.whatsapp('Opened via Browser plugin');
-      return;
+      const { App } = await import('@capacitor/app');
+      
+      // Attempt to open the Android intent directly
+      const canOpen = await App.openUrl({ url: intentUrl }).catch(() => false);
+      if (canOpen !== false) {
+        log.whatsapp('Opened via Android intent');
+        return;
+      }
     } catch (e) {
-      log.whatsapp.warn('Intent/Browser open failed, using window.open:', e?.message);
+      log.whatsapp.warn('Intent open failed, falling back to wa.me:', e?.message);
     }
   }
 
   // Web / iOS / fallback
   try {
     if (isNative()) {
-      const { Browser } = await import('@capacitor/browser');
-      await Browser.open({ url: waUrl });
+      const { App } = await import('@capacitor/app');
+      await App.openUrl({ url: waUrl });
     } else {
       window.open(waUrl, '_blank', 'noopener,noreferrer');
     }

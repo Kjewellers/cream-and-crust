@@ -1,21 +1,34 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ProGuard / R8 Rules for Cream & Crust Android App
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# 1. WebView & JavaScript Interfaces
+-keepattributes *Annotation*
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# 2. Capacitor Core, Plugins & Bridge
+-keep public class * extends com.getcapacitor.Plugin
+-keep public class com.getcapacitor.** { *; }
+-keep public class * extends com.getcapacitor.Bridge
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# 3. RevenueCat & Google Play Billing
+-keep class com.revenuecat.purchases.** { *; }
+-keep class com.android.billingclient.api.** { *; }
+
+# 4. Firebase (Analytics, Crashlytics, Authentication, Push Notifications)
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+-dontwarn com.google.firebase.ktx.**
+
+# 5. CapGo Updater
+-keep class ee.forrest.capacitorupdater.** { *; }
+-keep class com.capgo.** { *; }
+
+# 6. Optional third-party providers referenced by Firebase Auth plugins
+-dontwarn com.facebook.**
+
+# 7. Preserve Line Numbers & Source File attributes for Firebase Crashlytics stack traces
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+
+

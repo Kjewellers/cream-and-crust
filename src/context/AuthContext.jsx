@@ -189,31 +189,23 @@ export function AuthProvider({ children }) {
   // (Dashboard, Invoice, WhatsApp, Profile) instantly when updated.
   useEffect(() => {
     if (!currentUser || userRole === 'customer') return;
-    
+
     let unsubBiz = () => {};
-    import('firebase/firestore').then(({ doc, onSnapshot }) => {
-      import('../services/firebase').then(({ db }) => {
-        unsubBiz = onSnapshot(
-          doc(db, 'business', currentUser.uid),
-          (docSnap) => {
-            try {
-              if (docSnap.exists()) {
-                setBusiness({ id: docSnap.id, ...docSnap.data() });
-              } else {
-                setBusiness({ id: currentUser.uid, name: '', logo: '' });
-              }
-            } catch (e) {
-              console.warn('[CC:Auth] Business snapshot parse error:', e?.message);
-              setBusiness({ id: currentUser.uid, name: '', logo: '' });
-            }
-          },
-          (error) => {
-            // Listener error (e.g. permission denied) — use fallback
-            console.warn('[CC:Auth] Business listener error:', error?.code);
-            setBusiness((prev) => prev || { id: currentUser.uid, name: '', logo: '' });
+    import('../services/db').then(({ subscribeToBusiness }) => {
+      unsubBiz = subscribeToBusiness(
+        (bizData) => {
+          if (bizData) {
+            setBusiness(bizData);
+          } else {
+            setBusiness({ id: currentUser.uid, name: '', logo: '' });
           }
-        );
-      }).catch(() => {});
+        },
+        (error) => {
+          console.warn('[CC:Auth] Business listener error:', error?.code);
+          setBusiness((prev) => prev || { id: currentUser.uid, name: '', logo: '' });
+        },
+        currentUser.uid
+      );
     }).catch(() => {});
 
     return () => unsubBiz();
@@ -241,7 +233,9 @@ export function AuthProvider({ children }) {
       await withAuthTimeout(logoutUser(), 10000, 'Logout');
     } catch (e) {
       console.warn('[CC:Auth] Logout timed out, forcing reload:', e);
-      window.location.replace('/login');
+      // Use '/' not '/login' — on Android with HashRouter there is no login.html file.
+      // The app will load index.html, see currentUser is null, and show Login automatically.
+      window.location.replace('/');
     }
   };
 
@@ -264,9 +258,8 @@ export function AuthProvider({ children }) {
         const { completeTourV1 } = await import('../services/auth');
         await completeTourV1(currentUser.uid);
 
-        const { doc, updateDoc } = await import('firebase/firestore');
-        const { db } = await import('../services/firebase');
-        await updateDoc(doc(db, 'users', currentUser.uid), { onboardingComplete: true });
+        const { updateUserDoc } = await import('../services/db');
+        await updateUserDoc(currentUser.uid, { onboardingComplete: true });
 
         setHasSeenTourV1(true);
       }

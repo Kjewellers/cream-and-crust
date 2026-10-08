@@ -14,6 +14,8 @@ import { X, Phone, MapPin, MessageCircle, Repeat, Receipt } from 'lucide-react';
 import { triggerHaptic } from '../iOS';
 import AnimatedNumber from '../AnimatedNumber';
 import { safeDisplayValue } from '../../utils/crypto';
+import NativeBottomSheet from '../ui/NativeBottomSheet';
+import { MotionTokens } from '../../motion/motionTokens';
 
 /**
  * @param {Object} props
@@ -31,15 +33,8 @@ export default function CustomerProfileSheet({
   orders = [],
   onRepeatOrder,
 }) {
-  // Lock body scroll when open
-  React.useEffect(() => {
-    if (!open) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  // Body scroll locking is handled by AnimatedBottomSheet's ref-counted
+  // lockBody/unlockBody. No additional overflow manipulation needed here.
 
   // ESC closes
   React.useEffect(() => {
@@ -52,341 +47,359 @@ export default function CustomerProfileSheet({
   }, [open, onClose]);
 
   return (
-    <AnimatePresence>
-      {open && customer && (
-        <motion.div
-          key="cc-customer-profile-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          onClick={onClose}
+    <NativeBottomSheet
+      open={Boolean(open && customer)}
+      onClose={onClose}
+    >
+      <motion.div
+        variants={MotionTokens.staggerReveal.container}
+        initial="hidden"
+        animate="show"
+        exit="hidden"
+        style={{
+          fontFamily: '"Inter", system-ui, sans-serif',
+          color: '#2D1B14',
+        }}
+      >
+        {/* Close Button - Staggered */}
+        <motion.button
+          variants={MotionTokens.staggerReveal.item}
+          type="button"
+          onClick={() => {
+            triggerHaptic('light');
+            onClose && onClose();
+          }}
+          aria-label="Close"
           style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(15, 15, 15, 0.55)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-            zIndex: 1100,
+            position: 'absolute',
+            top: 18,
+            right: 18,
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            border: '1px solid rgba(0, 0, 0, 0.1)',
+            background: '#F5F5F5',
+            cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '24px 16px',
+            color: '#4A3B32',
           }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Customer profile"
         >
+          <X size={16} strokeWidth={2.4} />
+        </motion.button>
+
+        {/* Hero */}
+        <div style={{ textAlign: 'center', marginBottom: 22 }}>
           <motion.div
-            key="cc-customer-profile-sheet"
-            initial={{ y: 60, opacity: 0, scale: 0.95 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 60, opacity: 0, scale: 0.95 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            onClick={(e) => e.stopPropagation()}
+            variants={MotionTokens.staggerReveal.item}
+            animate={{
+              y: [0, -6, 0],
+            }}
+            transition={{
+              duration: 4,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
             style={{
-              width: '100%',
-              maxWidth: 420,
-              background: '#FFFDF9',
-              borderRadius: 28,
-              paddingTop: 12,
-              paddingLeft: 22,
-              paddingRight: 22,
-              paddingBottom: 28,
-              boxShadow: '0 24px 80px rgba(0,0,0,0.18), 0 8px 24px rgba(181, 96, 106, 0.12)',
-              position: 'relative',
-              maxHeight: 'calc(100vh - 80px)',
-              overflowY: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              fontFamily: '"Inter", system-ui, sans-serif',
+              width: 88,
+              height: 88,
+              borderRadius: '50%',
+              background:
+                'linear-gradient(135deg, var(--accent, #B5606A) 0%, var(--accent2, #D4A050) 100%)',
+              color: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 36,
+              fontWeight: 700,
+              margin: '0 auto 14px',
+              fontFamily: '"Playfair Display", Georgia, serif',
+              letterSpacing: '-0.02em',
+              boxShadow:
+                '0 12px 28px rgba(181, 96, 106, 0.32), inset 0 1px 0 rgba(255,255,255,0.22)',
+              border: '3px solid rgba(255,255,255,0.9)',
+            }}
+          >
+            {safeDisplayValue(customer?.name, '👤')?.charAt(0)?.toUpperCase() || '👤'}
+          </motion.div>
+          <motion.div
+            variants={MotionTokens.staggerReveal.item}
+            style={{
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: '0.28em',
+              textTransform: 'uppercase',
+              color: 'var(--accent, #B5606A)',
+              marginBottom: 6,
+              opacity: 0.85,
+            }}
+          >
+            Customer
+          </motion.div>
+          <motion.h2
+            variants={MotionTokens.staggerReveal.item}
+            style={{
+              fontFamily: '"Playfair Display", Georgia, serif',
+              fontSize: 24,
+              fontWeight: 700,
+              margin: '0 0 4px',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.2,
               color: '#2D1B14',
             }}
           >
-            {/* Drag pill */}
-            <div
-              style={{
-                width: 36,
-                height: 4,
-                background: 'rgba(181, 96, 106, 0.25)',
-                borderRadius: 99,
-                margin: '0 auto 20px',
-              }}
-            />
-
-            {/* Close */}
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('light');
-                onClose && onClose();
-              }}
-              aria-label="Close"
-              style={{
-                position: 'absolute',
-                top: 18,
-                right: 18,
-                width: 34,
-                height: 34,
-                borderRadius: '50%',
-                border: '1px solid rgba(181, 96, 106, 0.12)',
-                background: 'rgba(255, 255, 255, 0.85)',
-                backdropFilter: 'blur(8px)',
-                WebkitBackdropFilter: 'blur(8px)',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#8C7A6B',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-              }}
-            >
-              <X size={15} strokeWidth={2.4} />
-            </button>
-
-            {/* Hero */}
-            <div style={{ textAlign: 'center', marginBottom: 22 }}>
-              <div
-                style={{
-                  width: 88,
-                  height: 88,
-                  borderRadius: '50%',
-                  background:
-                    'linear-gradient(135deg, var(--accent, #B5606A) 0%, var(--accent2, #D4A050) 100%)',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 36,
-                  fontWeight: 700,
-                  margin: '0 auto 14px',
-                  fontFamily: '"Playfair Display", Georgia, serif',
-                  letterSpacing: '-0.02em',
-                  boxShadow:
-                    '0 12px 28px rgba(181, 96, 106, 0.32), inset 0 1px 0 rgba(255,255,255,0.22)',
-                  border: '3px solid rgba(255,255,255,0.9)',
-                }}
-              >
-                {safeDisplayValue(customer?.name, '👤')?.charAt(0)?.toUpperCase() || '👤'}
-              </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  fontWeight: 800,
-                  letterSpacing: '0.28em',
-                  textTransform: 'uppercase',
-                  color: 'var(--accent, #B5606A)',
-                  marginBottom: 6,
-                  opacity: 0.85,
-                }}
-              >
-                Customer
-              </div>
-              <h2
-                style={{
-                  fontFamily: '"Playfair Display", Georgia, serif',
-                  fontSize: 24,
-                  fontWeight: 700,
-                  margin: '0 0 4px',
-                  letterSpacing: '-0.02em',
-                  lineHeight: 1.2,
-                  color: '#2D1B14',
-                }}
-              >
-                {safeDisplayValue(customer?.name, 'Unknown')}
-              </h2>
-              <div
-                style={{
-                  fontSize: 14,
-                  color: '#8C7A6B',
-                  fontWeight: 600,
-                  letterSpacing: '-0.01em',
-                }}
-              >
-                {safeDisplayValue(customer?.phone, 'No phone on file')}
-              </div>
-            </div>
-
-            {/* Quick actions */}
-            {(customer?.phone || customer?.address) && (
-              <div style={{ display: 'flex', gap: 10, marginBottom: 22 }}>
-                {customer?.phone && (
-                  <a
-                    href={`tel:${String(customer.phone).replace(/\D/g, '')}`}
-                    onClick={() => triggerHaptic('light')}
-                    style={tileStyle('rgba(181, 96, 106, 0.12)')}
-                    aria-label="Call customer"
-                  >
-                    <div
-                      style={iconWrapStyle('rgba(181, 96, 106, 0.12)', 'var(--accent, #B5606A)')}
-                    >
-                      <Phone size={16} strokeWidth={2.4} />
-                    </div>
-                    <span style={tileLabelStyle}>Call</span>
-                  </a>
-                )}
-                {customer?.phone && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      triggerHaptic('light');
-                      const { openWhatsAppChat } = await import('../../utils/openLink');
-                      await openWhatsAppChat(
-                        customer.phone,
-                        `Hi ${customer?.name || ''}! 🧁`
-                      );
-                    }}
-                    style={{ ...tileStyle('rgba(37, 211, 102, 0.18)'), fontFamily: 'inherit' }}
-                    aria-label="Open WhatsApp"
-                  >
-                    <div style={iconWrapStyle('rgba(37, 211, 102, 0.14)', '#1EBE5A')}>
-                      <MessageCircle size={16} strokeWidth={2.4} />
-                    </div>
-                    <span style={tileLabelStyle}>WhatsApp</span>
-                  </button>
-                )}
-                {customer?.address && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      triggerHaptic('light');
-                      const url = `https://maps.google.com/maps?q=${encodeURIComponent(customer.address)}`;
-                      try {
-                        const { openLink } = await import('../../utils/openLink');
-                        await openLink(url);
-                      } catch {
-                        window.open(url, '_blank', 'noopener,noreferrer');
-                      }
-                    }}
-                    style={{ ...tileStyle('rgba(59, 130, 246, 0.18)'), fontFamily: 'inherit' }}
-                    aria-label="Navigate to address"
-                  >
-                    <div style={iconWrapStyle('rgba(59, 130, 246, 0.12)', '#3B82F6')}>
-                      <MapPin size={16} strokeWidth={2.4} />
-                    </div>
-                    <span style={tileLabelStyle}>Navigate</span>
-                  </button>
-                )}
-              </div>
-            )}
-
-            {/* Address card */}
-            <div
-              style={{
-                background: 'rgba(255, 255, 255, 0.7)',
-                border: '1px solid rgba(181, 96, 106, 0.10)',
-                borderRadius: 18,
-                padding: '14px 16px',
-                marginBottom: 14,
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: 12,
-              }}
-            >
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 10,
-                  background: 'rgba(181, 96, 106, 0.12)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--accent, #B5606A)',
-                  flexShrink: 0,
-                }}
-              >
-                <MapPin size={14} strokeWidth={2.4} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 800,
-                    letterSpacing: '0.14em',
-                    textTransform: 'uppercase',
-                    color: '#8C7A6B',
-                    marginBottom: 4,
-                  }}
-                >
-                  Saved Address
-                </div>
-                <div
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: '#2D1B14',
-                    lineHeight: 1.5,
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  {customer?.address || (
-                    <span style={{ color: '#B5A89E', fontStyle: 'italic', fontWeight: 500 }}>
-                      No address saved
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Stats pair */}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <StatCard
-                label="Total Orders"
-                value={
-                  <AnimatedNumber
-                    value={customer?.totalOrders || 1}
-                    duration={0.9}
-                    style={{
-                      fontFamily: '"Playfair Display", Georgia, serif',
-                      fontWeight: 700,
-                      fontSize: 28,
-                      color: '#A06820',
-                      letterSpacing: '-0.02em',
-                      lineHeight: 1,
-                    }}
-                  />
-                }
-                tint="#A06820"
-                bg="linear-gradient(135deg, rgba(212, 160, 80, 0.10) 0%, rgba(212, 160, 80, 0.04) 100%)"
-                border="rgba(212, 160, 80, 0.18)"
-              />
-              <StatCard
-                label="Total Spent"
-                value={
-                  <AnimatedNumber
-                    value={Math.round(customer?.totalSpent || 0)}
-                    prefix="₹"
-                    duration={1.2}
-                    style={{
-                      fontFamily: '"Playfair Display", Georgia, serif',
-                      fontWeight: 700,
-                      fontSize: 28,
-                      color: '#2E7A5A',
-                      letterSpacing: '-0.02em',
-                      lineHeight: 1,
-                    }}
-                  />
-                }
-                tint="#2E7A5A"
-                bg="linear-gradient(135deg, rgba(46, 122, 90, 0.10) 0%, rgba(46, 122, 90, 0.04) 100%)"
-                border="rgba(46, 122, 90, 0.18)"
-              />
-            </div>
-
-            {/* Past orders */}
-            <PastOrdersSection
-              customer={customer}
-              orders={orders}
-              onRepeatOrder={(o) => {
-                triggerHaptic('success');
-                if (onRepeatOrder) onRepeatOrder(o);
-                if (onClose) onClose();
-              }}
-            />
+            {safeDisplayValue(customer?.name, 'Unknown')}
+          </motion.h2>
+          <motion.div
+            variants={MotionTokens.staggerReveal.item}
+            style={{
+              fontSize: 14,
+              color: '#8C7A6B',
+              fontWeight: 600,
+              letterSpacing: '-0.01em',
+              marginBottom: 8,
+            }}
+          >
+            {safeDisplayValue(customer?.phone, 'No phone on file')}
           </motion.div>
+
+          {/* Loyalty Tier Badge */}
+          {(() => {
+            const totalSpent = Number(customer?.totalSpent || 0);
+            const totalOrders = Number(customer?.totalOrders || 0);
+            let label = '🌱 New Patron';
+            let bg = '#ECFDF5';
+            let color = '#059669';
+            let border = '1px solid #A7F3D0';
+
+            if (totalSpent >= 10000 || totalOrders >= 5) {
+              label = '👑 VIP Patron';
+              bg = 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)';
+              color = '#D97706';
+              border = '1px solid #FCD34D';
+            } else if (totalOrders >= 2 || totalSpent >= 3000) {
+              label = '⭐ Repeat Patron';
+              bg = '#FFF0EE';
+              color = '#B5606A';
+              border = '1px solid #FFCDD2';
+            }
+
+            return (
+              <motion.div
+                variants={MotionTokens.staggerReveal.item}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '4px 12px',
+                  borderRadius: 99,
+                  background: bg,
+                  color,
+                  border,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: '0.02em',
+                  marginTop: 4,
+                }}
+              >
+                {label}
+              </motion.div>
+            );
+          })()}
+        </div>
+
+        {/* Quick actions */}
+        {(customer?.phone || customer?.address) && (
+          <motion.div variants={MotionTokens.staggerReveal.item} style={{ display: 'flex', gap: 10, marginBottom: 22 }}>
+            {customer?.phone && (
+              <motion.a
+                variants={MotionTokens.buttonPress}
+                initial="idle"
+                whileTap="tap"
+                href={`tel:${String(customer.phone).replace(/\D/g, '')}`}
+                onClick={() => triggerHaptic('light')}
+                style={tileStyle('rgba(181, 96, 106, 0.12)')}
+                aria-label="Call customer"
+              >
+                <div
+                  style={iconWrapStyle('rgba(181, 96, 106, 0.12)', 'var(--accent, #B5606A)')}
+                >
+                  <Phone size={16} strokeWidth={2.4} />
+                </div>
+                <span style={tileLabelStyle}>Call</span>
+              </motion.a>
+            )}
+            {customer?.phone && (
+              <motion.button
+                variants={MotionTokens.buttonPress}
+                initial="idle"
+                whileTap="tap"
+                type="button"
+                onClick={async () => {
+                  triggerHaptic('light');
+                  const { openWhatsAppChat } = await import('../../utils/openLink');
+                  await openWhatsAppChat(
+                    customer.phone,
+                    `Hi ${customer?.name || ''}! 🧁`
+                  );
+                }}
+                style={{ ...tileStyle('rgba(37, 211, 102, 0.18)'), fontFamily: 'inherit' }}
+                aria-label="Open WhatsApp"
+              >
+                <div style={iconWrapStyle('rgba(37, 211, 102, 0.14)', '#1EBE5A')}>
+                  <MessageCircle size={16} strokeWidth={2.4} />
+                </div>
+                <span style={tileLabelStyle}>WhatsApp</span>
+              </motion.button>
+            )}
+            {customer?.address && (
+              <motion.button
+                variants={MotionTokens.buttonPress}
+                initial="idle"
+                whileTap="tap"
+                type="button"
+                onClick={async () => {
+                  triggerHaptic('light');
+                  const url = `https://maps.google.com/maps?q=${encodeURIComponent(customer.address)}`;
+                  try {
+                    const { openLink } = await import('../../utils/openLink');
+                    await openLink(url);
+                  } catch {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                  }
+                }}
+                style={{ ...tileStyle('rgba(59, 130, 246, 0.18)'), fontFamily: 'inherit' }}
+                aria-label="Navigate to address"
+              >
+                <div style={iconWrapStyle('rgba(59, 130, 246, 0.12)', '#3B82F6')}>
+                  <MapPin size={16} strokeWidth={2.4} />
+                </div>
+                <span style={tileLabelStyle}>Navigate</span>
+              </motion.button>
+            )}
+          </motion.div>
+        )}
+
+        {/* Address card */}
+        <motion.div
+          variants={MotionTokens.staggerReveal.item}
+          style={{
+            background: 'rgba(255, 255, 255, 0.7)',
+            border: '1px solid rgba(181, 96, 106, 0.10)',
+            borderRadius: 18,
+            padding: '14px 16px',
+            marginBottom: 14,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 10,
+              background: 'rgba(181, 96, 106, 0.12)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--accent, #B5606A)',
+              flexShrink: 0,
+            }}
+          >
+            <MapPin size={14} strokeWidth={2.4} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+                color: '#8C7A6B',
+                marginBottom: 4,
+              }}
+            >
+              Saved Address
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: '#2D1B14',
+                lineHeight: 1.5,
+                letterSpacing: '-0.01em',
+              }}
+            >
+              {customer?.address || (
+                <span style={{ color: '#B5A89E', fontStyle: 'italic', fontWeight: 500 }}>
+                  No address saved
+                </span>
+              )}
+            </div>
+          </div>
         </motion.div>
-      )}
-    </AnimatePresence>
+
+        {/* Stats pair */}
+        <motion.div variants={MotionTokens.staggerReveal.item} style={{ display: 'flex', gap: 10 }}>
+          <StatCard
+            label="Total Orders"
+            value={
+              <AnimatedNumber
+                value={customer?.totalOrders || 1}
+                duration={0.9}
+                style={{
+                  fontFamily: '"Playfair Display", Georgia, serif',
+                  fontWeight: 700,
+                  fontSize: 28,
+                  color: '#A06820',
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1,
+                }}
+              />
+            }
+            tint="#A06820"
+            bg="linear-gradient(135deg, rgba(212, 160, 80, 0.10) 0%, rgba(212, 160, 80, 0.04) 100%)"
+            border="rgba(212, 160, 80, 0.18)"
+          />
+          <StatCard
+            label="Total Spent"
+            value={
+              <AnimatedNumber
+                value={Math.round(customer?.totalSpent || 0)}
+                prefix="₹"
+                duration={1.2}
+                style={{
+                  fontFamily: '"Playfair Display", Georgia, serif',
+                  fontWeight: 700,
+                  fontSize: 28,
+                  color: '#2E7A5A',
+                  letterSpacing: '-0.02em',
+                  lineHeight: 1,
+                }}
+              />
+            }
+            tint="#2E7A5A"
+            bg="linear-gradient(135deg, rgba(46, 122, 90, 0.10) 0%, rgba(46, 122, 90, 0.04) 100%)"
+            border="rgba(46, 122, 90, 0.18)"
+          />
+        </motion.div>
+
+        {/* Past orders */}
+        <motion.div variants={MotionTokens.staggerReveal.item}>
+          <PastOrdersSection
+            customer={customer}
+            orders={orders}
+            onRepeatOrder={(o) => {
+              triggerHaptic('success');
+              if (onRepeatOrder) onRepeatOrder(o);
+              if (onClose) onClose();
+            }}
+          />
+        </motion.div>
+      </motion.div>
+    </NativeBottomSheet>
   );
 }
 
@@ -682,7 +695,10 @@ function PastOrderRow({ order, onRepeat }) {
           )}
         </div>
       </div>
-      <button
+      <motion.button
+        variants={MotionTokens.buttonPress}
+        initial="idle"
+        whileTap="tap"
         type="button"
         onClick={() => onRepeat && onRepeat(order)}
         aria-label={`Order ${title} again`}
@@ -704,7 +720,7 @@ function PastOrderRow({ order, onRepeat }) {
         }}
       >
         <Repeat size={12} strokeWidth={2.6} /> Order again
-      </button>
+      </motion.button>
     </div>
   );
 }

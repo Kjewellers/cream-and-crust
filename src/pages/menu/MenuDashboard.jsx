@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import { showToast } from '../../components/iOS';
 import { useMenuBuilderData } from './useMenuBuilderData';
+import { useSubscription } from '../../hooks/useSubscription';
+import { useSubscriptionContext } from '../../context/SubscriptionContext';
 import MenuBuilderShell, { PublishButton } from './MenuBuilderShell';
 import MenuBuilderGuide from '../../components/menu/MenuBuilderGuide';
 import QRCodeView from './QRCodeView';
@@ -84,6 +86,8 @@ function computeStepStatus(business, menu, products) {
 
 export default function MenuDashboard() {
   const { business, username, menu, products, loading, publishMenu } = useMenuBuilderData();
+  const { isActive } = useSubscription();
+  const { openPaywall } = useSubscriptionContext();
   const [showGuide, setShowGuide] = useState(false);
   const navigate = useNavigate();
   const publicUrl = `${window.location.origin}/menu/${username}`;
@@ -106,12 +110,18 @@ export default function MenuDashboard() {
   };
 
   const handlePublish = async () => {
+    if (!isActive) {
+      showToast('Publishing requires an active Pro subscription.', 'error');
+      openPaywall('menu_publish');
+      return;
+    }
     if (!allDone) {
       showToast('Finish all 4 steps first', 'error');
       return;
     }
-    if (visibleProducts.length < 5) {
-      showToast(`Add at least 5 products to publish (you have ${visibleProducts.length})`, 'error');
+    const currentProducts = products.filter((p) => !p.menuHidden);
+    if (currentProducts.length < 5) {
+      showToast(`Add at least 5 products to publish (you have ${currentProducts.length})`, 'error');
       return;
     }
     await publishMenu();

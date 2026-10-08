@@ -23,3 +23,25 @@ export const PLAN = Object.freeze({
     'Priority support',
   ],
 });
+
+export const ANNUAL_PLAN = Object.freeze({
+  name: 'Cream & Crust Pro (Annual)',
+  price: 1499,
+  currency: '₹',
+  period: 'year',
+  monthlyEquivalent: 125, // ₹1,499 / 12 ≈ ₹125/mo
+  savings: 289,           // ₹149×12 − ₹1,499 = ₹289 saved
+  trialDays: 90,
+  features: [
+    'Everything in Monthly',
+    '2 Months Free',
+    'Advanced CSV Export',
+    'Early Access to New Features',
+  ],
+});
+
+/** Unified plan map — single source of truth for all UI components. */
+export const PLANS = Object.freeze({
+  monthly: PLAN,
+  yearly: ANNUAL_PLAN,
+});

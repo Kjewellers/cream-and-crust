@@ -1,5 +1,5 @@
 import React from 'react';
-import PremiumBottomSheet from './PremiumBottomSheet';
+import NativeBottomSheet from './ui/NativeBottomSheet';
 import {
   ShoppingBag,
   Users,
@@ -100,7 +100,7 @@ export default function QuickCreateSheet({ open, onClose, mode = 'quick-create' 
   }
 
   return (
-    <PremiumBottomSheet
+    <NativeBottomSheet
       open={open}
       onClose={onClose}
       title={title}
@@ -161,6 +161,6 @@ export default function QuickCreateSheet({ open, onClose, mode = 'quick-create' 
           );
         })}
       </div>
-    </PremiumBottomSheet>
+    </NativeBottomSheet>
   );
 }

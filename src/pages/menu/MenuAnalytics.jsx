@@ -227,7 +227,7 @@ export default function MenuAnalytics() {
 
               <div className="dashboard-section" style={{ marginBottom: 0 }}>
                 <h2 className="section-title">Conversion Rate</h2>
-                <div style={{ position: 'relative', width: '180px', height: '180px', margin: '0 auto' }}>
+                <div style={{ position: 'relative', width: 'clamp(140px, 40vw, 180px)', height: 'clamp(140px, 40vw, 180px)', margin: '0 auto' }}>
                   <Doughnut data={conversionData} options={{ cutout: '80%', plugins: { tooltip: { enabled: false }, legend: { display: false } } }} />
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
                     <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#2D2323' }}>{conversion.value.toFixed(1)}%</div>
@@ -288,7 +288,7 @@ export default function MenuAnalytics() {
                   <div>
                     <h2 className="section-title">Traffic Sources</h2>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                      <div style={{ width: '100px', height: '100px' }}>
+                      <div style={{ width: 'clamp(80px, 25vw, 100px)', height: 'clamp(80px, 25vw, 100px)' }}>
                         <Doughnut data={trafficData} options={{ plugins: { legend: { display: false }, tooltip: { enabled: false } }, cutout: '65%' }} />
                       </div>
                       <div style={{ width: '100%' }}>
@@ -313,7 +313,7 @@ export default function MenuAnalytics() {
                   <div>
                     <h2 className="section-title"><Smartphone size={14} style={{ display: 'inline', verticalAlign: 'text-bottom'}}/> Devices</h2>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                      <div style={{ width: '100px', height: '100px' }}>
+                      <div style={{ width: 'clamp(80px, 25vw, 100px)', height: 'clamp(80px, 25vw, 100px)' }}>
                         <Doughnut data={deviceData} options={{ plugins: { legend: { display: false }, tooltip: { enabled: false } }, cutout: '65%' }} />
                       </div>
                       <div style={{ width: '100%' }}>
@@ -340,7 +340,7 @@ export default function MenuAnalytics() {
 
               <div className="dashboard-section" style={{ marginBottom: 0 }}>
                 <h2 className="section-title" style={{ margin: '0 0 16px' }}>Peak Ordering Time</h2>
-                <div style={{ height: '120px' }}>
+                <div style={{ height: 'clamp(120px, 20vw, 180px)' }}>
                   <Bar data={peakHoursData} options={{
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false }, tooltip: { enabled: false } },

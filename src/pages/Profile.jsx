@@ -30,17 +30,21 @@ import {
   AlertCircle,
   ArrowUpRight,
   Lock as LockIcon,
-  Sliders,
   Upload,
   Trash2,
+  CheckCircle2,
+  Fingerprint,
+  Smartphone,
+  Sliders,
 } from 'lucide-react';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
+import { useWebOTP } from '../hooks/useWebOTP';
+import { promptBiometricAuth } from '../utils/biometrics';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { subscribeToOrders, subscribeToBusiness, updateBusinessInDB, subscribeToProducts, subscribeToRecipes } from '../services/db';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { subscribeToOrders, subscribeToBusiness, updateBusinessInDB, subscribeToProducts, subscribeToRecipes, getUserDoc, updateUserDoc } from '../services/db';
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { showToast } from '../components/iOS';
+import { showToast, triggerHaptic } from '../components/iOS';
 import { BUSINESS_FIELDS, calculateProfileCompleteness } from '../utils/profileFields';
 import PremiumBadge from '../components/PremiumBadge';
 import { useSubscription } from '../hooks/useSubscription';
@@ -48,6 +52,44 @@ import { useAchievements, ACHIEVEMENTS, TIER_STYLES } from '../utils/achievement
 import { triggerConfetti, triggerSuccessBurst } from '../components/DopamineKit';
 import { useContext } from 'react';
 import { DataContext } from '../context/DataContext';
+import { usePermissions } from '../context/PermissionContext';
+import { PERMISSION_TYPES } from '../services/PermissionManager';
+import { pickPhoto } from '../utils/photoPicker';
+
+const chipStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 5,
+  fontSize: 11.5,
+  fontWeight: 700,
+  padding: '4px 10px',
+  borderRadius: 99,
+  background: 'var(--surface)',
+  color: 'var(--text2)',
+  border: '1px solid var(--border)',
+};
+
+const ghostBtn = {
+  background: 'transparent',
+  border: '1px solid var(--border)',
+  color: 'var(--text)',
+  padding: '10px 16px',
+  borderRadius: 12,
+  fontWeight: 600,
+  fontSize: 13,
+  cursor: 'pointer',
+};
+
+const dangerBtn = {
+  background: '#EF4444',
+  border: 'none',
+  color: '#FFFFFF',
+  padding: '10px 16px',
+  borderRadius: 12,
+  fontWeight: 700,
+  fontSize: 13,
+  cursor: 'pointer',
+};
 
 /* ─────────────────────────────────────────────
    Field metadata
@@ -134,6 +176,7 @@ const EDITABLE_KEYS = new Set([
 export default function Profile() {
   const { currentUser, userRole, logout } = useAuth();
   const navigate = useNavigate();
+  const { requirePermission } = usePermissions();
   // Safe read — DataContext may be absent in test environments (Profile smoke tests
   // don't wrap with DataProvider). Fall back to empty arrays so achievements simply
   // show as all-locked rather than crashing.
@@ -201,22 +244,22 @@ export default function Profile() {
 
     const fetchUser = async () => {
       try {
-        const uDoc = await getDoc(doc(db, 'users', currentUser.uid));
-        if (uDoc.exists()) {
+        const uDoc = await getUserDoc(currentUser.uid);
+        if (uDoc) {
           setUserDoc({
-            name: uDoc.data().name || currentUser.displayName || 'Baker',
-            phone: uDoc.data().phone || currentUser.phoneNumber || '',
-            address: uDoc.data().address || 'India',
-            photoURL: uDoc.data().photoURL || '',
-            bio: uDoc.data().bio || '',
-            instagram: uDoc.data().instagram || '',
-            whatsapp: uDoc.data().whatsapp || '',
-            website: uDoc.data().website || '',
-            gstin: uDoc.data().gstin || '',
-            upiId: uDoc.data().upiId || '',
-            invoiceTagline: uDoc.data().invoiceTagline || 'Baking memories, one slice at a time!',
-            terms: uDoc.data().terms || 'Orders confirmed only after 50% advance.',
-            notifications: uDoc.data().notifications || {
+            name: uDoc.name || currentUser.displayName || 'Baker',
+            phone: uDoc.phone || currentUser.phoneNumber || '',
+            address: uDoc.address || 'India',
+            photoURL: uDoc.photoURL || '',
+            bio: uDoc.bio || '',
+            instagram: uDoc.instagram || '',
+            whatsapp: uDoc.whatsapp || '',
+            website: uDoc.website || '',
+            gstin: uDoc.gstin || '',
+            upiId: uDoc.upiId || '',
+            invoiceTagline: uDoc.invoiceTagline || 'Baking memories, one slice at a time!',
+            terms: uDoc.terms || 'Orders confirmed only after 50% advance.',
+            notifications: uDoc.notifications || {
               email: true,
               orders: true,
               whatsapp: false,
@@ -297,7 +340,7 @@ export default function Profile() {
         : [];
 
       if (userRole === 'customer') {
-        await updateDoc(doc(db, 'users', currentUser.uid), {
+        await updateUserDoc(currentUser.uid, {
           name: editOwnerName || userDoc.name,
           phone: editPhone,
           address: editPickupAddress,
@@ -335,7 +378,7 @@ export default function Profile() {
           username: business.username,
         });
         // Mirror common fields back to user doc
-        await updateDoc(doc(db, 'users', currentUser.uid), {
+        await updateUserDoc(currentUser.uid, {
           name: editOwnerName || userDoc.name,
           phone: editPhone,
           address: editPickupAddress,
@@ -817,8 +860,6 @@ export default function Profile() {
   };
 
   const isBakerOrAdmin = userRole === 'admin' || userRole === 'baker';
-  const fileInputRef = useRef(null);
-  const qrFileInputRef = useRef(null);
 
   // Local mirror of the uploaded UPI QR so the UI updates instantly
   // after a save / remove (the business snapshot listener catches up
@@ -835,8 +876,9 @@ export default function Profile() {
    * URL on the bakery profile under `upiQrUrl`, where the invoice
    * template will pick it up automatically.
    */
-  const handleUpiQrUpload = (e) => {
-    const file = e.target.files?.[0];
+  const handleUpiQrUpload = async () => {
+    const photo = await pickPhoto();
+    const file = photo?.file;
     if (!file) return;
 
     if (!business?.id) {
@@ -899,8 +941,9 @@ export default function Profile() {
     }
   };
 
-  const handlePhotoUpload = (e) => {
-    const file = e.target.files?.[0];
+  const handlePhotoUpload = async () => {
+    const photo = await pickPhoto();
+    const file = photo?.file;
     if (!file) return;
 
     const reader = new FileReader();
@@ -929,7 +972,7 @@ export default function Profile() {
 
         try {
           if (userRole === 'customer') {
-            await updateDoc(doc(db, 'users', currentUser.uid), { photoURL: dataUrl });
+            await updateUserDoc(currentUser.uid, { photoURL: dataUrl });
             setUserDoc((prev) => ({ ...prev, photoURL: dataUrl }));
             showToast('Profile photo updated', 'success');
           } else {
@@ -988,19 +1031,21 @@ export default function Profile() {
     const tagline = business.tagline;
 
     return (
-      <div
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
         style={{
           background: 'var(--card)',
-          borderRadius: 'var(--radius)',
+          borderRadius: 22,
           border: '1px solid var(--border)',
-          boxShadow: 'var(--shadow)',
+          boxShadow: 'var(--shadow-sm)',
           overflow: 'hidden',
         }}
       >
         {/* Soft gradient banner with floating bakery elements */}
         <div
           style={{
-            height: 110,
+            height: 120,
             background:
               'linear-gradient(135deg, #B5606A 0%, #C97A82 40%, #E8B4BB 80%, #F6D9C4 100%)',
             position: 'relative',
@@ -1012,21 +1057,21 @@ export default function Profile() {
               position: 'absolute',
               inset: 0,
               backgroundImage:
-                'radial-gradient(circle at 25% 40%, rgba(255,255,255,0.20) 0%, transparent 50%),' +
-                'radial-gradient(circle at 80% 10%, rgba(255,255,255,0.12) 0%, transparent 50%)',
+                'radial-gradient(circle at 25% 40%, rgba(255,255,255,0.25) 0%, transparent 50%),' +
+                'radial-gradient(circle at 80% 10%, rgba(255,255,255,0.18) 0%, transparent 50%)',
             }}
           />
           {/* Floating bakery elements */}
           {[
-            { e: '\u{1F9C1}', top: 16, right: 24, size: 30, d: 0 },
-            { e: '\u{1F382}', top: 50, right: 70, size: 22, d: 0.5 },
-            { e: '\u2728', top: 22, right: 120, size: 16, d: 0.3 },
+            { e: '🧁', top: 18, right: 24, size: 32, d: 0 },
+            { e: '🎂', top: 52, right: 74, size: 24, d: 0.5 },
+            { e: '✨', top: 22, right: 124, size: 18, d: 0.3 },
           ].map((f, i) => (
             <motion.div
               key={i}
               aria-hidden="true"
               initial={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 0.92, scale: 1, y: [0, -8, 0], rotate: [0, 6, -4, 0] }}
+              animate={{ opacity: 0.95, scale: 1, y: [0, -8, 0], rotate: [0, 6, -4, 0] }}
               transition={{
                 opacity: { duration: 0.5, delay: f.d },
                 scale: { duration: 0.5, delay: f.d },
@@ -1038,7 +1083,7 @@ export default function Profile() {
                 top: f.top,
                 right: f.right,
                 fontSize: f.size,
-                filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.15))',
+                filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.18))',
                 pointerEvents: 'none',
                 userSelect: 'none',
               }}
@@ -1091,7 +1136,7 @@ export default function Profile() {
               )}
             </div>
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={handlePhotoUpload}
               aria-label="Change photo"
               style={{
                 position: 'absolute',
@@ -1112,13 +1157,6 @@ export default function Profile() {
             >
               <Camera size={13} />
             </button>
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              style={{ display: 'none' }}
-              onChange={handlePhotoUpload}
-            />
           </div>
 
           {/* Name */}
@@ -1254,7 +1292,7 @@ export default function Profile() {
             <span style={{ fontSize: 12.5, color: 'var(--text3)' }}>{completenessMessage}</span>
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
@@ -1282,45 +1320,66 @@ export default function Profile() {
     ];
 
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
         {stats.map((s, i) => (
-          <div
+          <motion.div
             key={i}
+            whileHover={{ y: -3, scale: 1.02 }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.08, duration: 0.25 }}
             style={{
               background: 'var(--card)',
-              borderRadius: 14,
+              borderRadius: 18,
               border: '1px solid var(--border)',
-              padding: '14px 14px 12px',
+              padding: '16px 16px 14px',
               boxShadow: 'var(--shadow-xs)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
             }}
           >
-            <s.icon size={15} style={{ color: 'var(--text3)', marginBottom: 8 }} />
-            <div
-              style={{
-                fontSize: 10.5,
-                color: 'var(--text3)',
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                marginBottom: 3,
-              }}
-            >
-              {s.label}
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: 10,
+              background: 'var(--accent-lt)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--accent)',
+              marginBottom: 10,
+            }}>
+              <s.icon size={16} strokeWidth={2.2} />
             </div>
-            <div
-              style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: 'var(--text)',
-                letterSpacing: '-0.01em',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {s.value}
+            <div>
+              <div
+                style={{
+                  fontSize: 10.5,
+                  color: 'var(--text3)',
+                  fontWeight: 800,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: 2,
+                }}
+              >
+                {s.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 16,
+                  fontWeight: 800,
+                  color: 'var(--text)',
+                  letterSpacing: '-0.015em',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {s.value}
+              </div>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
     );
@@ -1499,12 +1558,14 @@ export default function Profile() {
      Render: Business details
      ───────────────────────────────────────────── */
   const renderBusinessDetails = () => (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
       style={{
         background: 'var(--card)',
-        borderRadius: 'var(--radius)',
+        borderRadius: 22,
         border: '1px solid var(--border)',
-        boxShadow: 'var(--shadow)',
+        boxShadow: 'var(--shadow-sm)',
         overflow: 'hidden',
       }}
     >
@@ -1636,7 +1697,7 @@ export default function Profile() {
           </div>
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 
   /* ─────────────────────────────────────────────
@@ -1647,12 +1708,14 @@ export default function Profile() {
     const url = `${window.location.origin}/menu/${business.username}`;
 
     return (
-      <div
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
         style={{
           background: 'var(--card)',
-          borderRadius: 'var(--radius)',
+          borderRadius: 22,
           border: '1px solid var(--border)',
-          boxShadow: 'var(--shadow)',
+          boxShadow: 'var(--shadow-sm)',
           padding: 22,
         }}
       >
@@ -1667,21 +1730,22 @@ export default function Profile() {
         <div
           style={{
             background: 'var(--bg)',
-            borderRadius: 11,
-            padding: '11px 13px',
+            borderRadius: 14,
+            padding: '12px 14px',
             border: '1px solid var(--border)',
-            marginBottom: 12,
+            marginBottom: 14,
             display: 'flex',
             alignItems: 'center',
             gap: 10,
           }}
         >
-          <Globe size={14} style={{ color: 'var(--text3)', flexShrink: 0 }} />
+          <Globe size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
           <span
             style={{
               fontSize: 12.5,
-              color: 'var(--text2)',
+              color: 'var(--text)',
               fontFamily: 'monospace',
+              fontWeight: 600,
               flex: 1,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -1692,7 +1756,7 @@ export default function Profile() {
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
           <button
             onClick={() => {
               navigator.clipboard.writeText(url);
@@ -1704,18 +1768,18 @@ export default function Profile() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 6,
-              padding: '10px 14px',
+              padding: '11px 14px',
               background: 'var(--accent)',
               border: 'none',
-              borderRadius: 10,
+              borderRadius: 12,
               fontSize: 13,
-              fontWeight: 600,
+              fontWeight: 700,
               color: 'white',
               cursor: 'pointer',
-              boxShadow: 'var(--shadow-accent)',
+              boxShadow: '0 4px 12px rgba(181,96,106,0.3)',
             }}
           >
-            <Copy size={13} /> Copy link
+            <Copy size={14} /> Copy link
           </button>
           <button
             onClick={async () => {
@@ -1733,20 +1797,20 @@ export default function Profile() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 6,
-              padding: '10px 14px',
-              background: 'var(--card)',
-              border: '1px solid var(--border-md)',
-              borderRadius: 10,
+              padding: '11px 14px',
+              background: 'var(--bg)',
+              border: '1.5px solid var(--border)',
+              borderRadius: 12,
               fontSize: 13,
-              fontWeight: 600,
+              fontWeight: 700,
               color: 'var(--text)',
               cursor: 'pointer',
             }}
           >
-            <ArrowUpRight size={13} /> Open
+            <ArrowUpRight size={14} /> Open Store
           </button>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
@@ -1754,12 +1818,14 @@ export default function Profile() {
      Render: Account security
      ───────────────────────────────────────────── */
   const renderAccountSecurity = () => (
-    <div
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
       style={{
         background: 'var(--card)',
-        borderRadius: 'var(--radius)',
+        borderRadius: 22,
         border: '1px solid var(--border)',
-        boxShadow: 'var(--shadow)',
+        boxShadow: 'var(--shadow-sm)',
         padding: 22,
       }}
     >
@@ -1831,7 +1897,7 @@ export default function Profile() {
           <ChevronRight size={14} style={{ color: 'var(--text3)' }} />
         </button>
       )}
-    </div>
+    </motion.div>
   );
 
   /* ─────────────────────────────────────────────
@@ -1908,18 +1974,10 @@ export default function Profile() {
 
           {/* Hidden input + actions */}
           <div style={{ minWidth: 0 }}>
-            <input
-              ref={qrFileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleUpiQrUpload}
-              style={{ display: 'none' }}
-            />
-
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
                 type="button"
-                onClick={() => qrFileInputRef.current?.click()}
+                onClick={handleUpiQrUpload}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -2098,7 +2156,7 @@ export default function Profile() {
             const toggle = () => {
               const newNotifs = { ...userDoc.notifications, [key]: !isOn };
               setUserDoc({ ...userDoc, notifications: newNotifs });
-              updateDoc(doc(db, 'users', currentUser.uid), { notifications: newNotifs });
+              updateUserDoc(currentUser.uid, { notifications: newNotifs });
             };
             return (
               <div
@@ -2199,7 +2257,77 @@ export default function Profile() {
      ───────────────────────────────────────────── */
   const isGoogleUser = (currentUser?.providerData || []).some((p) => p.providerId === 'google.com');
   const isAppleUser = (currentUser?.providerData || []).some((p) => p.providerId === 'apple.com');
+  const isPhoneUser = Boolean(currentUser?.phoneNumber) || (currentUser?.providerData || []).some((p) => p.providerId === 'phone');
   const CONFIRM_PHRASE = 'DELETE';
+
+  // Phone Account Deletion Security States
+  const [deleteOtpSession, setDeleteOtpSession] = useState(null);
+  const [deleteOtpCode, setDeleteOtpCode] = useState('');
+  const [deleteOtpSent, setDeleteOtpSent] = useState(false);
+  const [deleteOtpSending, setDeleteOtpSending] = useState(false);
+  const [deleteOtpVerified, setDeleteOtpVerified] = useState(false);
+  const [deleteOtpVerifying, setDeleteOtpVerifying] = useState(false);
+  const [deleteBiometricsVerified, setDeleteBiometricsVerified] = useState(false);
+  const [deleteBiometricsVerifying, setDeleteBiometricsVerifying] = useState(false);
+
+  // WebOTP Auto-read listener during Phone Deletion OTP verification
+  useWebOTP(showDeleteModal && deleteStep === 3 && isPhoneUser && deleteOtpSent && !deleteOtpVerified, (code) => {
+    setDeleteOtpCode(code);
+    triggerHaptic('success');
+    showToast('📱 OTP auto-filled from SMS', 'success');
+  });
+
+  const handleSendDeleteOtp = async () => {
+    if (!currentUser?.phoneNumber) {
+      showToast('No phone number associated with this account.', 'error');
+      return;
+    }
+    setDeleteOtpSending(true);
+    try {
+      const { requestPhoneOTP } = await import('../services/auth');
+      const session = await requestPhoneOTP(currentUser.phoneNumber);
+      setDeleteOtpSession(session);
+      setDeleteOtpSent(true);
+      showToast(`OTP sent to ${currentUser.phoneNumber}`, 'success');
+    } catch (err) {
+      console.error('Delete OTP error:', err);
+      showToast(err?.message || 'Failed to send OTP', 'error');
+    } finally {
+      setDeleteOtpSending(false);
+    }
+  };
+
+  const handleVerifyDeleteOtp = async () => {
+    if (!deleteOtpSession || deleteOtpCode.length !== 6) return;
+    setDeleteOtpVerifying(true);
+    try {
+      const { verifyPhoneOTP } = await import('../services/auth');
+      await verifyPhoneOTP(deleteOtpSession, deleteOtpCode);
+      setDeleteOtpVerified(true);
+      triggerHaptic('success');
+      showToast('Phone OTP Verified! Now authenticate with Biometrics.', 'success');
+    } catch (err) {
+      console.error('Verify OTP error:', err);
+      showToast(err?.message || 'Invalid OTP code. Try again.', 'error');
+    } finally {
+      setDeleteOtpVerifying(false);
+    }
+  };
+
+  const handleBiometricDeleteAuth = async () => {
+    setDeleteBiometricsVerifying(true);
+    try {
+      await promptBiometricAuth('Verify biometrics to authorize account deletion');
+      setDeleteBiometricsVerified(true);
+      triggerHaptic('success');
+      showToast('Biometric Verification Successful!', 'success');
+    } catch (err) {
+      console.error('Biometric auth error:', err);
+      showToast(err?.message || 'Biometric authentication failed.', 'error');
+    } finally {
+      setDeleteBiometricsVerifying(false);
+    }
+  };
 
   const renderDangerZone = () => (
     <div
@@ -2247,6 +2375,11 @@ export default function Profile() {
           setDeleteDetail('');
           setDeleteConfirmText('');
           setDeletePassword('');
+          setDeleteOtpSession(null);
+          setDeleteOtpCode('');
+          setDeleteOtpSent(false);
+          setDeleteOtpVerified(false);
+          setDeleteBiometricsVerified(false);
           setShowDeleteModal(true);
         }}
         style={{
@@ -2292,7 +2425,9 @@ export default function Profile() {
     try {
       const { deleteCurrentAccount } = await import('../services/auth');
       await deleteCurrentAccount({
-        password: isGoogleUser || isAppleUser ? undefined : deletePassword,
+        password: isGoogleUser || isAppleUser || isPhoneUser ? undefined : deletePassword,
+        otpSession: isPhoneUser ? deleteOtpSession : undefined,
+        otpCode: isPhoneUser ? deleteOtpCode : undefined,
         reason: deleteReason,
         detail: deleteDetail,
       });
@@ -2371,254 +2506,433 @@ export default function Profile() {
       )}
 
       {/* Password Modal */}
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
-          {showPasswordModal && (
-          <div
-            className="modal-overlay"
-            onClick={() => setShowPasswordModal(false)}
-            style={{ zIndex: 1000 }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
-              className="modal"
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 420 }}
+      <NativeBottomSheet
+        open={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+        title="Change password"
+        subtitle="Use at least 6 characters"
+      >
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (passForm.new !== passForm.confirm)
+              return showToast('Passwords do not match', 'error');
+            if (passForm.new.length < 6) return showToast('Password too short', 'error');
+
+            setChangingPass(true);
+            try {
+              const { changeUserPassword } = await import('../services/auth');
+              await changeUserPassword(passForm.current, passForm.new);
+              showToast('Password updated', 'success');
+              setShowPasswordModal(false);
+              setPassForm({ current: '', new: '', confirm: '' });
+            } catch (err) {
+              showToast(err.message || 'Failed to update password', 'error');
+            } finally {
+              setChangingPass(false);
+            }
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Current password</label>
+              <input
+                type="password"
+                required
+                value={passForm.current}
+                onChange={(e) => setPassForm({ ...passForm, current: e.target.value })}
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">New password</label>
+              <input
+                type="password"
+                required
+                value={passForm.new}
+                onChange={(e) => setPassForm({ ...passForm, new: e.target.value })}
+              />
+            </div>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">Confirm new password</label>
+              <input
+                type="password"
+                required
+                value={passForm.confirm}
+                onChange={(e) => setPassForm({ ...passForm, confirm: e.target.value })}
+              />
+            </div>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={changingPass}
+              style={{ marginTop: 6 }}
             >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: 22,
-                  gap: 12,
-                }}
-              >
-                <div>
-                  <h3 style={{ margin: 0 }}>Change password</h3>
-                  <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--text3)' }}>
-                    Use at least 6 characters
-                  </p>
-                </div>
-                <button className="btn-icon" onClick={() => setShowPasswordModal(false)}>
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (passForm.new !== passForm.confirm)
-                    return showToast('Passwords do not match', 'error');
-                  if (passForm.new.length < 6) return showToast('Password too short', 'error');
-
-                  setChangingPass(true);
-                  try {
-                    const { changeUserPassword } = await import('../services/auth');
-                    await changeUserPassword(passForm.current, passForm.new);
-                    showToast('Password updated', 'success');
-                    setShowPasswordModal(false);
-                    setPassForm({ current: '', new: '', confirm: '' });
-                  } catch (err) {
-                    showToast(err.message || 'Failed to update password', 'error');
-                  } finally {
-                    setChangingPass(false);
-                  }
-                }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label">Current password</label>
-                    <input
-                      type="password"
-                      required
-                      value={passForm.current}
-                      onChange={(e) => setPassForm({ ...passForm, current: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label">New password</label>
-                    <input
-                      type="password"
-                      required
-                      value={passForm.new}
-                      onChange={(e) => setPassForm({ ...passForm, new: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label">Confirm new password</label>
-                    <input
-                      type="password"
-                      required
-                      value={passForm.confirm}
-                      onChange={(e) => setPassForm({ ...passForm, confirm: e.target.value })}
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={changingPass}
-                    style={{ marginTop: 6 }}
-                  >
-                    {changingPass ? 'Updating...' : 'Update password'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
+              {changingPass ? 'Updating...' : 'Update password'}
+            </button>
           </div>
-        )}
-        </AnimatePresence>,
-        document.body
-      )}
+        </form>
+      </NativeBottomSheet>
 
       {/* ── Delete Account Modal (multi-step, deliberately effortful) ── */}
-      {typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
-          {showDeleteModal && (
-          <div
-            className="modal-overlay"
-            onClick={() => !deleting && setShowDeleteModal(false)}
-            style={{ zIndex: 1200 }}
-          >
-            <motion.div
-              className="modal"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ duration: 0.2, ease: [0.25, 1, 0.5, 1] }}
-              onClick={(e) => e.stopPropagation()}
-              style={{ maxWidth: 460, padding: 24 }}
-            >
-              {/* Step indicator */}
-              <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
-                {[1, 2, 3].map((s) => (
-                  <div
-                    key={s}
-                    style={{
-                      flex: 1,
-                      height: 4,
-                      borderRadius: 2,
-                      background: deleteStep >= s ? '#DC2626' : 'var(--border-md)',
-                      transition: 'background 0.3s',
-                    }}
-                  />
-                ))}
-              </div>
+      <NativeBottomSheet
+        open={showDeleteModal}
+        onClose={() => !deleting && setShowDeleteModal(false)}
+        title="Delete Account"
+      >
+        <div>
+          {/* Step indicator */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
+            {[1, 2, 3].map((s) => (
+              <div
+                key={s}
+                style={{
+                  flex: 1,
+                  height: 4,
+                  borderRadius: 2,
+                  background: deleteStep >= s ? '#DC2626' : 'var(--border-md)',
+                  transition: 'background 0.3s',
+                }}
+              />
+            ))}
+          </div>
 
-              {/* STEP 1 — Reason */}
-              {deleteStep === 1 && (
-                <div>
-                  <h2
+          {/* STEP 1 — Reason */}
+          {deleteStep === 1 && (
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontFamily: '"Playfair Display", Georgia, serif',
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                }}
+              >
+                We're sorry to see you go
+              </h2>
+              <p
+                style={{
+                  margin: '6px 0 18px',
+                  fontSize: 13.5,
+                  color: 'var(--text3)',
+                  lineHeight: 1.5,
+                }}
+              >
+                Before you leave, could you tell us why? It helps us improve.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {DELETE_REASONS.map((r) => (
+                  <button
+                    key={r}
+                    onClick={() => setDeleteReason(r)}
                     style={{
-                      margin: 0,
-                      fontFamily: '"Playfair Display", Georgia, serif',
-                      fontSize: 22,
-                      fontWeight: 700,
-                      color: 'var(--text)',
-                    }}
-                  >
-                    We're sorry to see you go
-                  </h2>
-                  <p
-                    style={{
-                      margin: '6px 0 18px',
-                      fontSize: 13.5,
-                      color: 'var(--text3)',
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    Before you leave, could you tell us why? It helps us improve.
-                  </p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {DELETE_REASONS.map((r) => (
-                      <button
-                        key={r}
-                        onClick={() => setDeleteReason(r)}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          padding: '13px 15px',
-                          borderRadius: 12,
-                          cursor: 'pointer',
-                          fontSize: 14,
-                          fontWeight: 600,
-                          color: deleteReason === r ? '#B91C1C' : 'var(--text)',
-                          background: deleteReason === r ? 'rgba(220,38,38,0.07)' : 'var(--bg)',
-                          border:
-                            deleteReason === r
-                              ? '1.5px solid rgba(220,38,38,0.4)'
-                              : '1.5px solid var(--border)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          transition: 'all 0.15s',
-                        }}
-                      >
-                        {r}
-                        {deleteReason === r && <Check size={15} color="#DC2626" strokeWidth={3} />}
-                      </button>
-                    ))}
-                  </div>
-                  {deleteReason === 'Other' && (
-                    <textarea
-                      value={deleteDetail}
-                      onChange={(e) => setDeleteDetail(e.target.value)}
-                      placeholder="Tell us more (optional)…"
-                      rows={3}
-                      style={{ marginTop: 10, resize: 'vertical', width: '100%' }}
-                    />
-                  )}
-                  <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-                    <button onClick={() => setShowDeleteModal(false)} style={{ ...ghostBtn }}>
-                      Keep my account
-                    </button>
-                    <button
-                      onClick={() => setDeleteStep(2)}
-                      disabled={!deleteReason}
-                      style={{
-                        ...dangerBtn,
-                        opacity: deleteReason ? 1 : 0.5,
-                        cursor: deleteReason ? 'pointer' : 'not-allowed',
-                      }}
-                    >
-                      Continue
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 2 — Type DELETE to confirm */}
-              {deleteStep === 2 && (
-                <div>
-                  <div
-                    style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: 16,
-                      background: 'rgba(220,38,38,0.10)',
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '13px 15px',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: deleteReason === r ? '#B91C1C' : 'var(--text)',
+                      background: deleteReason === r ? 'rgba(220,38,38,0.07)' : 'var(--bg)',
+                      border:
+                        deleteReason === r
+                          ? '1.5px solid rgba(220,38,38,0.4)'
+                          : '1.5px solid var(--border)',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#DC2626',
-                      marginBottom: 14,
+                      justifyContent: 'space-between',
+                      transition: 'all 0.15s',
                     }}
                   >
-                    <AlertCircle size={26} />
+                    {r}
+                    {deleteReason === r && <Check size={15} color="#DC2626" strokeWidth={3} />}
+                  </button>
+                ))}
+              </div>
+              {deleteReason === 'Other' && (
+                <textarea
+                  value={deleteDetail}
+                  onChange={(e) => setDeleteDetail(e.target.value)}
+                  placeholder="Tell us more (optional)…"
+                  rows={3}
+                  style={{ marginTop: 10, resize: 'vertical', width: '100%' }}
+                />
+              )}
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button onClick={() => setShowDeleteModal(false)} style={{ ...ghostBtn }}>
+                  Keep my account
+                </button>
+                <button
+                  onClick={() => setDeleteStep(2)}
+                  disabled={!deleteReason}
+                  style={{
+                    ...dangerBtn,
+                    opacity: deleteReason ? 1 : 0.5,
+                    cursor: deleteReason ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2 — Type DELETE to confirm */}
+          {deleteStep === 2 && (
+            <div>
+              <div
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 16,
+                  background: 'rgba(220,38,38,0.10)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#DC2626',
+                  marginBottom: 14,
+                }}
+              >
+                <AlertCircle size={26} />
+              </div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontFamily: '"Playfair Display", Georgia, serif',
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: '#B91C1C',
+                }}
+              >
+                This is permanent
+              </h2>
+              <p
+                style={{
+                  margin: '6px 0 16px',
+                  fontSize: 13.5,
+                  color: 'var(--text3)',
+                  lineHeight: 1.6,
+                }}
+              >
+                Your profile, business details and sign-in will be erased. To confirm, type{' '}
+                <strong style={{ color: '#B91C1C', letterSpacing: 1 }}>{CONFIRM_PHRASE}</strong>{' '}
+                below.
+              </p>
+              <input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={`Type ${CONFIRM_PHRASE}`}
+                autoCapitalize="characters"
+                style={{
+                  width: '100%',
+                  letterSpacing: 2,
+                  fontWeight: 700,
+                  textAlign: 'center',
+                  borderColor:
+                    deleteConfirmText === CONFIRM_PHRASE ? 'rgba(220,38,38,0.5)' : undefined,
+                }}
+              />
+              <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+                <button onClick={() => setDeleteStep(1)} style={{ ...ghostBtn }}>
+                  Back
+                </button>
+                <button
+                  onClick={() => setDeleteStep(3)}
+                  disabled={deleteConfirmText !== CONFIRM_PHRASE}
+                  style={{
+                    ...dangerBtn,
+                    opacity: deleteConfirmText === CONFIRM_PHRASE ? 1 : 0.5,
+                    cursor: deleteConfirmText === CONFIRM_PHRASE ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3 — Re-authenticate */}
+          {deleteStep === 3 && (
+            <div>
+              <div
+                style={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 16,
+                  background: 'rgba(220,38,38,0.10)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#DC2626',
+                  marginBottom: 14,
+                }}
+              >
+                <Lock size={24} />
+              </div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontFamily: '"Playfair Display", Georgia, serif',
+                  fontSize: 22,
+                  fontWeight: 700,
+                  color: 'var(--text)',
+                }}
+              >
+                Verify it's you
+              </h2>
+              {isPhoneUser ? (
+                <div>
+                  <p style={{ margin: '6px 0 16px', fontSize: 13, color: 'var(--text3)', lineHeight: 1.5 }}>
+                    Security Policy: Mobile accounts require <strong>OTP Verification</strong> and <strong>Biometric Authentication</strong> to delete.
+                  </p>
+
+                  {/* GATE 1: Phone OTP */}
+                  <div style={{
+                    background: 'var(--bg)',
+                    borderRadius: 14,
+                    padding: 14,
+                    border: deleteOtpVerified ? '1.5px solid #10B981' : '1.5px solid var(--border)',
+                    marginBottom: 14,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>
+                        <Smartphone size={16} color={deleteOtpVerified ? '#10B981' : 'var(--text2)'} />
+                        <span>1. Mobile OTP Verification</span>
+                      </div>
+                      {deleteOtpVerified && (
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#10B981', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <CheckCircle2 size={13} /> Verified
+                        </span>
+                      )}
+                    </div>
+
+                    {!deleteOtpVerified && (
+                      <>
+                        <p style={{ fontSize: 12, color: 'var(--text3)', margin: '0 0 10px' }}>
+                          OTP will be sent to <strong>{currentUser?.phoneNumber || 'your phone number'}</strong>
+                        </p>
+                        {!deleteOtpSent ? (
+                          <button
+                            type="button"
+                            onClick={handleSendDeleteOtp}
+                            disabled={deleteOtpSending}
+                            style={{
+                              width: '100%',
+                              padding: '10px 14px',
+                              borderRadius: 10,
+                              background: 'var(--accent)',
+                              color: '#fff',
+                              fontWeight: 700,
+                              fontSize: 13,
+                              border: 'none',
+                              cursor: 'pointer',
+                              opacity: deleteOtpSending ? 0.7 : 1,
+                            }}
+                          >
+                            {deleteOtpSending ? 'Sending OTP…' : 'Send Verification OTP'}
+                          </button>
+                        ) : (
+                          <div>
+                            <input
+                              type="tel"
+                              autoComplete="one-time-code"
+                              inputMode="numeric"
+                              maxLength={6}
+                              value={deleteOtpCode}
+                              onChange={(e) => setDeleteOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              placeholder="Enter 6-digit OTP"
+                              style={{ width: '100%', textAlign: 'center', letterSpacing: 3, fontWeight: 700, fontSize: 16, marginBottom: 8 }}
+                            />
+                            <button
+                              type="button"
+                              onClick={handleVerifyDeleteOtp}
+                              disabled={deleteOtpCode.length !== 6 || deleteOtpVerifying}
+                              style={{
+                                width: '100%',
+                                padding: '10px 14px',
+                                borderRadius: 10,
+                                background: '#DC2626',
+                                color: '#fff',
+                                fontWeight: 700,
+                                fontSize: 13,
+                                border: 'none',
+                                cursor: deleteOtpCode.length === 6 ? 'pointer' : 'not-allowed',
+                                opacity: deleteOtpCode.length === 6 ? 1 : 0.6,
+                              }}
+                            >
+                              {deleteOtpVerifying ? 'Verifying OTP…' : 'Verify OTP Code'}
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                  <h2
+
+                  {/* GATE 2: Biometrics */}
+                  <div style={{
+                    background: 'var(--bg)',
+                    borderRadius: 14,
+                    padding: 14,
+                    border: deleteBiometricsVerified ? '1.5px solid #10B981' : '1.5px solid var(--border)',
+                    marginBottom: 16,
+                    opacity: deleteOtpVerified ? 1 : 0.5,
+                    pointerEvents: deleteOtpVerified ? 'auto' : 'none',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 700, color: 'var(--text)' }}>
+                        <Fingerprint size={16} color={deleteBiometricsVerified ? '#10B981' : 'var(--text2)'} />
+                        <span>2. Biometric Authentication</span>
+                      </div>
+                      {deleteBiometricsVerified && (
+                        <span style={{ fontSize: 11.5, fontWeight: 700, color: '#10B981', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <CheckCircle2 size={13} /> Verified
+                        </span>
+                      )}
+                    </div>
+
+                    {!deleteBiometricsVerified && (
+                      <button
+                        type="button"
+                        onClick={handleBiometricDeleteAuth}
+                        disabled={!deleteOtpVerified || deleteBiometricsVerifying}
+                        style={{
+                          width: '100%',
+                          padding: '11px 14px',
+                          borderRadius: 10,
+                          background: 'linear-gradient(135deg, #D4A050 0%, #B8860B 100%)',
+                          color: '#0E0C0B',
+                          fontWeight: 800,
+                          fontSize: 13,
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        <Fingerprint size={17} />
+                        <span>{deleteBiometricsVerifying ? 'Verifying Biometrics…' : 'Verify Fingerprint / Biometrics'}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={deleting || !deleteOtpVerified || !deleteBiometricsVerified}
                     style={{
-                      margin: 0,
-                      fontFamily: '"Playfair Display", Georgia, serif',
-                      fontSize: 22,
-                      fontWeight: 700,
-                      color: '#B91C1C',
+                      ...dangerBtn,
+                      width: '100%',
+                      opacity: deleting || !deleteOtpVerified || !deleteBiometricsVerified ? 0.5 : 1,
+                      cursor: deleting || !deleteOtpVerified || !deleteBiometricsVerified ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    This is permanent
-                  </h2>
+                    {deleting ? 'Deleting Account…' : 'Permanently Delete Account'}
+                  </button>
+                </div>
+              ) : isGoogleUser || isAppleUser ? (
+                <>
                   <p
                     style={{
                       margin: '6px 0 16px',
@@ -2627,187 +2941,64 @@ export default function Profile() {
                       lineHeight: 1.6,
                     }}
                   >
-                    Your profile, business details and sign-in will be erased. To confirm, type{' '}
-                    <strong style={{ color: '#B91C1C', letterSpacing: 1 }}>{CONFIRM_PHRASE}</strong>{' '}
-                    below.
+                    For your security, confirm with {isGoogleUser ? 'Google' : 'Apple'}. A popup
+                    will appear — sign in once more to authorise deletion.
+                  </p>
+                  <button
+                    onClick={handleDeleteAccount}
+                    disabled={deleting}
+                    style={{ ...dangerBtn, width: '100%' }}
+                  >
+                    {deleting
+                      ? 'Deleting…'
+                      : `Verify with ${isGoogleUser ? 'Google' : 'Apple'} & delete`}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p
+                    style={{
+                      margin: '6px 0 16px',
+                      fontSize: 13.5,
+                      color: 'var(--text3)',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    Enter your password to permanently delete your account.
                   </p>
                   <input
-                    value={deleteConfirmText}
-                    onChange={(e) => setDeleteConfirmText(e.target.value)}
-                    placeholder={`Type ${CONFIRM_PHRASE}`}
-                    autoCapitalize="characters"
-                    style={{
-                      width: '100%',
-                      letterSpacing: 2,
-                      fontWeight: 700,
-                      textAlign: 'center',
-                      borderColor:
-                        deleteConfirmText === CONFIRM_PHRASE ? 'rgba(220,38,38,0.5)' : undefined,
-                    }}
+                    type="password"
+                    value={deletePassword}
+                    onChange={(e) => setDeletePassword(e.target.value)}
+                    placeholder="Your password"
+                    style={{ width: '100%' }}
                   />
-                  <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-                    <button onClick={() => setDeleteStep(1)} style={{ ...ghostBtn }}>
-                      Back
-                    </button>
-                    <button
-                      onClick={() => setDeleteStep(3)}
-                      disabled={deleteConfirmText !== CONFIRM_PHRASE}
-                      style={{
-                        ...dangerBtn,
-                        opacity: deleteConfirmText === CONFIRM_PHRASE ? 1 : 0.5,
-                        cursor: deleteConfirmText === CONFIRM_PHRASE ? 'pointer' : 'not-allowed',
-                      }}
-                    >
-                      Continue
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 3 — Re-authenticate */}
-              {deleteStep === 3 && (
-                <div>
-                  <div
-                    style={{
-                      width: 52,
-                      height: 52,
-                      borderRadius: 16,
-                      background: 'rgba(220,38,38,0.10)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#DC2626',
-                      marginBottom: 14,
-                    }}
-                  >
-                    <Lock size={24} />
-                  </div>
-                  <h2
-                    style={{
-                      margin: 0,
-                      fontFamily: '"Playfair Display", Georgia, serif',
-                      fontSize: 22,
-                      fontWeight: 700,
-                      color: 'var(--text)',
-                    }}
-                  >
-                    Verify it's you
-                  </h2>
-                  {isGoogleUser || isAppleUser ? (
-                    <>
-                      <p
-                        style={{
-                          margin: '6px 0 16px',
-                          fontSize: 13.5,
-                          color: 'var(--text3)',
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        For your security, confirm with {isGoogleUser ? 'Google' : 'Apple'}. A popup
-                        will appear — sign in once more to authorise deletion.
-                      </p>
-                      <button
-                        onClick={handleDeleteAccount}
-                        disabled={deleting}
-                        style={{ ...dangerBtn, width: '100%' }}
-                      >
-                        {deleting
-                          ? 'Deleting…'
-                          : `Verify with ${isGoogleUser ? 'Google' : 'Apple'} & delete`}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <p
-                        style={{
-                          margin: '6px 0 16px',
-                          fontSize: 13.5,
-                          color: 'var(--text3)',
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        Enter your password to permanently delete your account.
-                      </p>
-                      <input
-                        type="password"
-                        value={deletePassword}
-                        onChange={(e) => setDeletePassword(e.target.value)}
-                        placeholder="Your password"
-                        style={{ width: '100%' }}
-                      />
-                      <button
-                        onClick={handleDeleteAccount}
-                        disabled={deleting || !deletePassword}
-                        style={{
-                          ...dangerBtn,
-                          width: '100%',
-                          marginTop: 14,
-                          opacity: deleting || !deletePassword ? 0.5 : 1,
-                          cursor: deleting || !deletePassword ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        {deleting ? 'Deleting…' : 'Permanently delete account'}
-                      </button>
-                    </>
-                  )}
                   <button
-                    onClick={() => setDeleteStep(2)}
-                    disabled={deleting}
-                    style={{ ...ghostBtn, width: '100%', marginTop: 10 }}
+                    onClick={handleDeleteAccount}
+                    disabled={deleting || !deletePassword}
+                    style={{
+                      ...dangerBtn,
+                      width: '100%',
+                      marginTop: 14,
+                      opacity: deleting || !deletePassword ? 0.5 : 1,
+                      cursor: deleting || !deletePassword ? 'not-allowed' : 'pointer',
+                    }}
                   >
-                    Back
+                    {deleting ? 'Deleting…' : 'Permanently delete account'}
                   </button>
-                </div>
+                </>
               )}
-            </motion.div>
-          </div>
-        )}
-        </AnimatePresence>,
-        document.body
-      )}
+              <button
+                onClick={() => setDeleteStep(2)}
+                disabled={deleting}
+                style={{ ...ghostBtn, width: '100%', marginTop: 10 }}
+              >
+                Back
+              </button>
+            </div>
+          )}
+        </div>
+      </NativeBottomSheet>
     </div>
   );
 }
-
-// Shared button styles for the delete flow
-const ghostBtn = {
-  flex: 1,
-  padding: '13px 16px',
-  background: 'transparent',
-  border: '1.5px solid var(--border-md)',
-  borderRadius: 12,
-  fontSize: 14,
-  fontWeight: 700,
-  color: 'var(--text2)',
-  cursor: 'pointer',
-};
-
-const dangerBtn = {
-  flex: 1,
-  padding: '13px 16px',
-  background: 'linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)',
-  border: 'none',
-  borderRadius: 12,
-  fontSize: 14,
-  fontWeight: 800,
-  color: '#fff',
-  cursor: 'pointer',
-  boxShadow: '0 8px 20px rgba(220,38,38,0.3)',
-};
-
-const chipStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  padding: '4px 10px',
-  borderRadius: 'var(--radius-pill)',
-  background: 'var(--bg)',
-  color: 'var(--text2)',
-  fontSize: 11.5,
-  fontWeight: 600,
-  border: '1px solid var(--border)',
-  whiteSpace: 'nowrap',
-  maxWidth: 200,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-};

@@ -4,4 +4,5 @@
     <string name="title_activity_main">Cream and Crust</string>
     <string name="package_name">com.creamandcrust.app</string>
     <string name="custom_url_scheme">com.creamandcrust.app</string>
+    <string name="server_client_id">357779803337-0489gefb6pinor5orbbro0dr43tus9hj.apps.googleusercontent.com</string>
 </resources>

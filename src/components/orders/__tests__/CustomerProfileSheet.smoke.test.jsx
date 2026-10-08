@@ -16,104 +16,103 @@ const fullCustomer = {
 };
 
 describe('CustomerProfileSheet smoke', () => {
-  beforeEach(() => cleanup());
+  beforeEach(() => {
+    cleanup();
+    document.body.innerHTML = '';
+  });
 
   it('renders nothing when closed', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet open={false} onClose={() => {}} customer={fullCustomer} />
     );
-    expect(container.textContent).toBe('');
+    expect(document.body.textContent).toBe('');
   });
 
   it('renders nothing when customer is null', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet open={true} onClose={() => {}} customer={null} />
     );
-    expect(container.textContent).toBe('');
+    expect(document.body.textContent).toBe('');
   });
 
   it('renders a fully-populated customer', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet open={true} onClose={() => {}} customer={fullCustomer} />
     );
-    expect(container.textContent).toContain('Anita Kapoor');
-    expect(container.textContent).toContain('9876543210');
-    expect(container.textContent).toContain('Jasmine Lane');
-    expect(container.textContent).toContain('Customer');
-    expect(container.textContent).toContain('Total Orders');
-    expect(container.textContent).toContain('Total Spent');
-    // AnimatedNumber starts at 0 and animates up — initial render shows ₹0/0,
-    // final (after animation) shows full value. We don't drive timers in smoke
-    // tests; just confirm both stats render their currency prefix and the
-    // structure isn't crashed.
-    expect(container.textContent).toContain('₹');
+    expect(document.body.textContent).toContain('Anita Kapoor');
+    expect(document.body.textContent).toContain('9876543210');
+    expect(document.body.textContent).toContain('Jasmine Lane');
+    expect(document.body.textContent).toContain('Customer');
+    expect(document.body.textContent).toContain('Total Orders');
+    expect(document.body.textContent).toContain('Total Spent');
+    expect(document.body.textContent).toContain('₹');
   });
 
   it('shows Call + WhatsApp + Navigate when phone and address present', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet open={true} onClose={() => {}} customer={fullCustomer} />
     );
-    expect(container.textContent).toContain('Call');
-    expect(container.textContent).toContain('WhatsApp');
-    expect(container.textContent).toContain('Navigate');
+    expect(document.body.textContent).toContain('Call');
+    expect(document.body.textContent).toContain('WhatsApp');
+    expect(document.body.textContent).toContain('Navigate');
   });
 
   it('hides quick actions when phone and address are both missing', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet
         open={true}
         onClose={() => {}}
         customer={{ name: 'Skinny', totalOrders: 1, totalSpent: 0 }}
       />
     );
-    expect(container.textContent).toContain('Skinny');
-    expect(container.textContent).not.toContain('Call');
-    expect(container.textContent).not.toContain('WhatsApp');
-    expect(container.textContent).not.toContain('Navigate');
-    expect(container.textContent).toContain('No address saved');
-    expect(container.textContent).toContain('No phone on file');
+    expect(document.body.textContent).toContain('Skinny');
+    expect(document.body.textContent).not.toContain('Call');
+    expect(document.body.textContent).not.toContain('WhatsApp');
+    expect(document.body.textContent).not.toContain('Navigate');
+    expect(document.body.textContent).toContain('No address saved');
+    expect(document.body.textContent).toContain('No phone on file');
   });
 
   it('uses fallback initial when name is missing', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet open={true} onClose={() => {}} customer={{ phone: '9999999999' }} />
     );
-    expect(container.textContent).toContain('Unknown');
-    expect(container.textContent).toContain('9999999999');
+    expect(document.body.textContent).toContain('Unknown');
+    expect(document.body.textContent).toContain('9999999999');
   });
 
   it('renders ₹0 when totalSpent is missing/zero', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet
         open={true}
         onClose={() => {}}
         customer={{ name: 'Z', phone: '8888888888' }}
       />
     );
-    expect(container.textContent).toContain('₹0');
+    expect(document.body.textContent).toContain('₹0');
   });
 
   it('handles non-numeric totalSpent gracefully', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet
         open={true}
         onClose={() => {}}
         customer={{ name: 'X', phone: '7777777777', totalSpent: undefined, totalOrders: undefined }}
       />
     );
-    expect(container.textContent).toContain('X');
-    expect(container.textContent).toContain('₹0');
+    expect(document.body.textContent).toContain('X');
+    expect(document.body.textContent).toContain('₹0');
   });
 
   it('handles emoji name initial gracefully', () => {
-    const { container } = render(
+    render(
       <CustomerProfileSheet
         open={true}
         onClose={() => {}}
         customer={{ name: '🧁 Anonymous', phone: '6666666666' }}
       />
     );
-    expect(container.textContent).toContain('Anonymous');
+    expect(document.body.textContent).toContain('Anonymous');
   });
 
   it('renders Past Orders section and "Order again" buttons for matched orders', () => {
@@ -134,7 +133,6 @@ describe('CustomerProfileSheet smoke', () => {
         status: 'inquiry',
         createdAt: { seconds: Math.floor(Date.now() / 1000) - 7 * 86400 },
       },
-      // unrelated customer — must NOT show
       {
         id: 'other',
         phone: '1111111111',
@@ -142,7 +140,7 @@ describe('CustomerProfileSheet smoke', () => {
         total: 200,
       },
     ];
-    const { container } = render(
+    render(
       <CustomerProfileSheet
         open={true}
         onClose={() => {}}
@@ -151,12 +149,11 @@ describe('CustomerProfileSheet smoke', () => {
         onRepeatOrder={() => {}}
       />
     );
-    expect(container.textContent).toContain('Past Orders');
-    expect(container.textContent).toContain('Red Velvet 1kg');
-    expect(container.textContent).toContain('Brownie Box');
-    expect(container.textContent).not.toContain('Croissant');
-    // "Order again" buttons should be present for each matched row.
-    const buttons = container.querySelectorAll('button[aria-label^="Order "]');
+    expect(document.body.textContent).toContain('Past Orders');
+    expect(document.body.textContent).toContain('Red Velvet 1kg');
+    expect(document.body.textContent).toContain('Brownie Box');
+    expect(document.body.textContent).not.toContain('Croissant');
+    const buttons = document.body.querySelectorAll('button[aria-label^="Order "]');
     expect(buttons.length).toBe(2);
   });
 
@@ -171,7 +168,7 @@ describe('CustomerProfileSheet smoke', () => {
       status: 'delivered',
       createdAt: { seconds: Math.floor(Date.now() / 1000) - 3 * 86400 },
     };
-    const { container } = render(
+    render(
       <CustomerProfileSheet
         open={true}
         onClose={onClose}
@@ -180,7 +177,7 @@ describe('CustomerProfileSheet smoke', () => {
         onRepeatOrder={onRepeatOrder}
       />
     );
-    const btn = container.querySelector('button[aria-label^="Order "]');
+    const btn = document.body.querySelector('button[aria-label^="Order "]');
     expect(btn).toBeTruthy();
     btn.click();
     expect(onRepeatOrder).toHaveBeenCalledTimes(1);
@@ -190,7 +187,7 @@ describe('CustomerProfileSheet smoke', () => {
 
   it('does not render Past Orders when customer has no phone', () => {
     const orders = [{ id: 'o1', phone: '9876543210', product: 'Tart', total: 300 }];
-    const { container } = render(
+    render(
       <CustomerProfileSheet
         open={true}
         onClose={() => {}}
@@ -198,6 +195,6 @@ describe('CustomerProfileSheet smoke', () => {
         orders={orders}
       />
     );
-    expect(container.textContent).not.toContain('Past Orders');
+    expect(document.body.textContent).not.toContain('Past Orders');
   });
 });

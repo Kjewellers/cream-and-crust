@@ -25,12 +25,19 @@ import {
   lookupEmailByPhone,
   loginWithPhone,
   resetPasswordViaPhone,
+  requestPhoneOTP,
+  verifyPhoneOTP,
+  isNativeAuthApp,
 } from '../services/auth';
-import { signInWithPhoneNumber } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import { getVerifier, resetVerifier } from '../services/recaptchaManager';
 import { triggerHaptic, showToast } from '../components/iOS';
 import { withAuthTimeout } from '../utils/authTimeout';
+import { Capacitor } from '@capacitor/core';
+import { createOtpMachine, OTP_STATES } from '../services/otpStateMachine';
+import { saveOtpSession, loadOtpSession, clearOtpSession, reconstructOtpSession } from '../services/otpSessionPersistence';
+import { logOtpSendFailure, logOtpVerifyFailure, logOtpSessionMissing } from '../services/otpCrashAnalytics';
+import { useWebOTP } from '../hooks/useWebOTP';
 
 /* ─── Palette ──────────────────────────────────────────────────────
    Warm bakery atelier palette consistent with the rest of the app.
@@ -300,8 +307,13 @@ function PhoneOtpFlow({
   loadingMessage,
   onSendOtp,
   onVerifyOtp,
+  otpError,
+  onClearError,
+  onChangeNumber,
 }) {
-  const [timer, setTimer] = useState(30);
+  const RESEND_SECONDS = 30;
+  const [timer, setTimer] = useState(RESEND_SECONDS);
+  const canResend = timer <= 0;
 
   useEffect(() => {
     let intval;
@@ -311,12 +323,26 @@ function PhoneOtpFlow({
     return () => clearInterval(intval);
   }, [otpSent, timer]);
 
+  // Auto-read SMS OTP on Android via WebOTP API
+  useWebOTP(otpSent, (code) => {
+    setOtpCode(code);
+    triggerHaptic('success');
+    showToast('📱 OTP auto-filled from SMS', 'success');
+  });
+
   // Handle auto-verify when 6 digits are entered
+  // Guard: do NOT auto-verify if there's already an error (user must manually retry)
+  const autoVerifyFiredRef = useRef(false);
   useEffect(() => {
-    if (otpCode.length === 6 && !loading && otpSent) {
+    if (otpCode.length === 6 && !loading && otpSent && !otpError && !autoVerifyFiredRef.current) {
+      autoVerifyFiredRef.current = true;
       onVerifyOtp();
     }
-  }, [otpCode, loading, otpSent, onVerifyOtp]);
+    // Reset the guard when OTP code changes (user is editing)
+    if (otpCode.length < 6) {
+      autoVerifyFiredRef.current = false;
+    }
+  }, [otpCode, loading, otpSent, otpError, onVerifyOtp]);
 
   // Derived UI State
   let state = 'input';
@@ -341,7 +367,9 @@ function PhoneOtpFlow({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 20,
+        padding: 'max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px))',
+        overflowY: 'auto',
+        boxSizing: 'border-box',
       }}
     >
       <motion.div
@@ -353,22 +381,23 @@ function PhoneOtpFlow({
         style={{
           width: '100%',
           maxWidth: 360,
+          maxHeight: 'calc(100dvh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
           background: '#fff',
           borderRadius: 24,
-          padding: '32px 24px',
+          padding: 'clamp(20px, 6vw, 32px) clamp(16px, 5vw, 24px)',
           boxShadow: '0 24px 80px rgba(0,0,0,0.12)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           position: 'relative',
+          overflowY: 'auto',
+          boxSizing: 'border-box',
         }}
       >
         {state === 'verify' && (
           <button
             onClick={() => {
-              // Hack to go back: just close the modal for now, or reset parent state.
-              // We'll just close it so they can reopen it to start fresh.
-              onClose();
+              onChangeNumber();
             }}
             style={{
               position: 'absolute',
@@ -524,14 +553,36 @@ function PhoneOtpFlow({
         {/* Verify State */}
         {state === 'verify' && (
           <div style={{ width: '100%' }}>
+            {/* Inline OTP error banner */}
+            {otpError && (
+              <div style={{
+                background: '#FEF2F2',
+                border: '1px solid #FECACA',
+                borderRadius: 12,
+                padding: '10px 14px',
+                marginBottom: 16,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}>
+                <span style={{ fontSize: 16 }}>⚠️</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#DC2626', lineHeight: 1.4 }}>{otpError}</span>
+              </div>
+            )}
+
             {/* Native-feeling OTP boxes */}
             <div style={{ position: 'relative', marginBottom: 24 }}>
               <input
                 type="tel"
                 autoFocus
+                autoComplete="one-time-code"
+                inputMode="numeric"
                 maxLength={6}
                 value={otpCode}
-                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={(e) => {
+                  if (onClearError) onClearError();
+                  setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                }}
                 style={{
                   position: 'absolute',
                   inset: 0,
@@ -544,6 +595,7 @@ function PhoneOtpFlow({
                 {[0, 1, 2, 3, 4, 5].map((i) => {
                   const digit = otpCode[i] || '';
                   const isActive = otpCode.length === i;
+                  const hasError = !!otpError;
                   return (
                     <div
                       key={i}
@@ -551,7 +603,7 @@ function PhoneOtpFlow({
                         width: 42,
                         height: 52,
                         borderRadius: 12,
-                        border: `1.5px solid ${isActive ? C.rose : (digit ? C.mute : C.ivory)}`,
+                        border: `1.5px solid ${hasError ? '#EF4444' : isActive ? C.rose : (digit ? C.mute : C.ivory)}`,
                         background: digit ? '#fff' : C.cream,
                         display: 'flex',
                         alignItems: 'center',
@@ -574,30 +626,32 @@ function PhoneOtpFlow({
               <div style={{ fontSize: 13, color: C.mute, marginBottom: 4 }}>Didn't receive OTP?</div>
               <button
                 type="button"
-                disabled={timer > 0}
+                disabled={!canResend}
                 onClick={() => {
-                  setTimer(30);
+                  console.log("OTP RESENT");
+                  setTimer(RESEND_SECONDS);
                   setOtpCode('');
+                  if (onClearError) onClearError();
                   onSendOtp();
                 }}
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: timer > 0 ? C.mute : C.rose,
+                  color: canResend ? C.rose : C.mute,
                   fontSize: 13.5,
                   fontWeight: 700,
-                  cursor: timer > 0 ? 'default' : 'pointer',
+                  cursor: canResend ? 'pointer' : 'default',
                   padding: 0,
                 }}
               >
-                {timer > 0 ? `Resend in 00:${timer.toString().padStart(2, '0')}` : 'Resend OTP'}
+                {canResend ? 'Resend OTP' : `Resend in 00:${timer.toString().padStart(2, '0')}`}
               </button>
             </div>
 
             <button
               type="button"
               onClick={onVerifyOtp}
-              disabled={otpCode.length !== 6}
+              disabled={otpCode.length !== 6 || loading}
               style={{
                 width: '100%',
                 height: 52,
@@ -611,10 +665,38 @@ function PhoneOtpFlow({
                 cursor: 'pointer',
                 opacity: otpCode.length !== 6 ? 0.5 : 1,
                 boxShadow: `0 8px 24px ${C.rose}40`,
-                marginBottom: 16,
+                marginBottom: 12,
               }}
             >
               Verify OTP
+            </button>
+
+            {/* Change Number button */}
+            <button
+              type="button"
+              onClick={() => {
+                if (onClearError) onClearError();
+                onChangeNumber();
+              }}
+              style={{
+                width: '100%',
+                height: 40,
+                borderRadius: 12,
+                border: `1.5px solid ${C.hairline}`,
+                background: 'transparent',
+                color: C.mute,
+                fontFamily: FONT_BODY,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                marginBottom: 16,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              <Phone size={14} /> Change Number
             </button>
 
             <div style={{
@@ -718,13 +800,19 @@ function ForgotPasswordFlow({ onClose }) {
     }
     const fullPhone = digits.length === 10 ? `+91${digits}` : `+${digits}`;
     setError('');
-    
+
     const t0 = performance.now();
     setStep('sending');
     setLoadingMessage('Verifying...');
-    
+
+    // ── ANDROID: never use reCAPTCHA in Capacitor WebView ──
+    // The WebView domain is not in Firebase authorized domains → reCAPTCHA hangs.
+    // Native FirebaseAuthentication plugin handles the SMS natively.
+    const isNative = isNativeAuthApp();
+    const verifierFn = isNative ? null : getVerifier;
+
     try {
-      console.log(`[Auth] [Timing] Forgot Password OTP Request Started`);
+      console.log(`[Auth] [Timing] Forgot Password OTP Request Started. isNative: ${isNative}`);
       const t_lookup0 = performance.now();
       await withAuthTimeout(lookupEmailByPhone(resetPhone), 12000, 'Phone lookup');
       const t_lookup1 = performance.now();
@@ -732,26 +820,44 @@ function ForgotPasswordFlow({ onClose }) {
 
       const t1 = performance.now();
       setLoadingMessage('Sending OTP...');
-      const verifier = await getVerifier();
-      const result = await withAuthTimeout(signInWithPhoneNumber(auth, fullPhone, verifier), 12000, 'OTP request');
+      const otpSession = await withAuthTimeout(requestPhoneOTP(fullPhone, verifierFn), 20000, 'OTP request');
       const t2 = performance.now();
       console.log(`[Auth] [Timing] Firebase OTP Request took ${(t2 - t1).toFixed(2)}ms`);
       console.log(`[Auth] [Timing] Total Time to OTP Sent: ${(t2 - t0).toFixed(2)}ms`);
 
-      // Token is consumed after successful send — reset for Resend
-      resetVerifier();
+      // ── Guard: session must exist ────────────────────────────────────
+      if (!otpSession) {
+        throw new Error('OTP response is missing. Please try again.');
+      }
+      console.log('[ForgotPassword handleSendOtp] Platform Response (normalized):', JSON.stringify({
+        success: otpSession.success,
+        platform: otpSession.platform,
+        verificationId: otpSession.verificationId ? `[present, len=${otpSession.verificationId.length}]` : null,
+        confirmationResult: otpSession.confirmationResult ? '[ConfirmationResult]' : null,
+      }));
 
-      setConfirmationResult(result);
+      // Validate shape matches platform
+      if (otpSession.platform === 'android' &&
+          (!otpSession.verificationId || typeof otpSession.verificationId !== 'string')) {
+        throw new Error('Firebase did not return a verification ID. Check SHA-1/SHA-256 in Firebase Console.');
+      }
+
+      // Token is consumed after successful send — reset only on web
+      if (!isNative) resetVerifier();
+
+      setConfirmationResult(otpSession);
       setStep('phone_otp');
       triggerHaptic('success');
 
     } catch (err) {
-      console.error('[Auth] Phone reset error:', err);
-      // Reset verifier on failure so next attempt gets a fresh one
-      resetVerifier();
+      console.error('[Auth] Phone reset error:', err?.code, err?.message);
+      // Reset verifier on failure so next attempt gets a fresh one (web only)
+      if (!isNative) resetVerifier();
       if (step !== 'phone_otp') setStep('input');
       const msgs = {
         'auth/timeout': 'Request timed out. Please try again.',
+        'auth/invalid-phone-number': 'Invalid phone number format.',
+        'auth/too-many-requests': 'Too many attempts. Please wait a few minutes.',
       };
       setError(msgs[err?.code] || err?.message || 'Could not find an account with that phone number.');
     } finally {
@@ -767,7 +873,8 @@ function ForgotPasswordFlow({ onClose }) {
     setError('');
     setStep('sending');
     try {
-      await withAuthTimeout(confirmationResult.confirm(otpCode), 12000, 'OTP verify');
+      await withAuthTimeout(verifyPhoneOTP(confirmationResult, otpCode), 12000, 'OTP verify');
+
       setStep('phone_new_password');
       triggerHaptic('success');
     } catch (err) {
@@ -1272,7 +1379,11 @@ export default function Login() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
+  // OTP state machine — owns all session state; replaces raw confirmationResult
+  const otpMachineRef = useRef(null);
+  // Shim: keep a derived confirmationResult for the parts of the UI that read it
   const [confirmationResult, setConfirmationResult] = useState(null);
+  const [otpError, setOtpError] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   // When user types a phone number in the email field, we look up their email
   // and store it here. A non-empty value means we're in "phone login" mode.
@@ -1284,6 +1395,47 @@ export default function Login() {
   // RecaptchaVerifier is managed by the singleton recaptchaManager module.
   // No useRef, no useEffect — avoids StrictMode double-mount and
   // destroy-on-close/create-on-open cycling bugs.
+
+  // ── Restore OTP session on app foreground / mount (Android rotation/bg) ──
+  useEffect(() => {
+    async function restoreOtpSession() {
+      try {
+        const record = await loadOtpSession();
+        if (!record) return;
+
+        // Web sessions can't be reconstructed (ConfirmationResult is gone)
+        if (record.platform === 'web') {
+          console.log('[OtpRestore] Web session found in storage but cannot be reconstructed — clearing');
+          await clearOtpSession();
+          return;
+        }
+
+        // Android: reconstruct from persisted verificationId
+        const restoredSession = reconstructOtpSession(record);
+        if (!restoredSession) {
+          await clearOtpSession();
+          return;
+        }
+
+        console.log('[OtpRestore] Android session restored — phone:', record.phoneNumber, '| verificationId present:', !!restoredSession.verificationId);
+        // Restore UI state so user can continue without re-requesting OTP
+        setPhoneNumber(record.phoneNumber);
+        setConfirmationResult(restoredSession);
+        setOtpSent(true);
+
+        // Ensure machine is created and advanced to otp_sent
+        const machine = createOtpMachine(record.phoneNumber);
+        machine.startSend();
+        machine.onSendSuccess(restoredSession);
+        otpMachineRef.current = machine;
+
+        showToast('Resuming OTP session 🔒', 'info');
+      } catch (e) {
+        console.warn('[OtpRestore] Session restore failed (non-fatal):', e?.message);
+      }
+    }
+    restoreOtpSession();
+  }, []);
 
   // Rotate taglines every 5.5s
   useEffect(() => {
@@ -1467,7 +1619,7 @@ export default function Login() {
     [mode]
   );
 
-  // ── Phone OTP handlers ──────────────────────────────────────────
+  // ── Phone OTP handlers ─────────────────────────────────────────────────
   const handleSendOtp = async () => {
     const digits = phoneNumber.replace(/\D/g, '');
     if (digits.length < 10) {
@@ -1476,41 +1628,114 @@ export default function Login() {
     }
     const fullPhone = digits.length === 10 ? `+91${digits}` : `+${digits}`;
 
-    const t0 = performance.now();
+    // ── Create or reset the OTP state machine ──────────────────────────────
+    let machine = otpMachineRef.current;
+    if (!machine || machine.state === OTP_STATES.VERIFIED) {
+      machine = createOtpMachine(fullPhone);
+      otpMachineRef.current = machine;
+    }
+    // Machine validates: throws if cooldown active (resend too soon)
+    try {
+      machine.startSend();
+    } catch (machineErr) {
+      showToast(machineErr.message.replace('[OtpMachine] ', ''), 'error');
+      return;
+    }
+
     setLoading(true);
-    setLoadingMessage('Verifying...');
+    setLoadingMessage('Sending OTP...');
+    setOtpError('');
+    // Clear any previous session to avoid stale session crash
+    setConfirmationResult(null);
+    setOtpSent(false);
+
+    // ── ANDROID: never use reCAPTCHA in Capacitor WebView ───────────────
+    const isNative = isNativeAuthApp();
+    const verifierFn = isNative ? null : getVerifier;
+    const sendStart = Date.now();
 
     try {
-      console.log(`[Auth] [Timing] OTP Request Started`);
+      console.log(`[handleSendOtp] Starting OTP send. isNative: ${isNative}, phone: ${fullPhone}`);
 
-      const t1 = performance.now();
-      setLoadingMessage('Sending OTP...');
-      const verifier = await getVerifier();
-      const result = await withAuthTimeout(signInWithPhoneNumber(auth, fullPhone, verifier), 15000, 'Send OTP');
+      const otpSession = await withAuthTimeout(
+        requestPhoneOTP(fullPhone, verifierFn),
+        20000,
+        'Send OTP'
+      );
 
-      const t2 = performance.now();
-      console.log(`[Auth] [Timing] Firebase Request & Response took ${(t2 - t1).toFixed(2)}ms`);
-      console.log(`[Auth] [Timing] Total Time to OTP Sent: ${(t2 - t0).toFixed(2)}ms`);
+      // ── Guard: session must not be null ──────────────────────────────
+      if (!otpSession) {
+        throw new Error('[handleSendOtp] OTP response is missing (requestPhoneOTP returned null/undefined)');
+      }
 
-      // Token is consumed after successful send — reset for Resend
-      resetVerifier();
+      // ── DIAGNOSTIC: log the full normalized session ────────────────────
+      console.log('[handleSendOtp] Platform Response (normalized):', JSON.stringify({
+        success: otpSession.success,
+        platform: otpSession.platform,
+        verificationId: otpSession.verificationId ? `[present, len=${otpSession.verificationId.length}]` : null,
+        confirmationResult: otpSession.confirmationResult ? '[ConfirmationResult]' : null,
+      }));
 
-      setConfirmationResult(result);
+      // ── Validate the session shape matches expected platform ──────────────
+      if (otpSession.platform === 'android' &&
+          (!otpSession.verificationId || typeof otpSession.verificationId !== 'string')) {
+        console.error('[handleSendOtp] Android session has no verificationId:', JSON.stringify(otpSession));
+        throw new Error(
+          'Firebase did not return a verification ID.\n\n' +
+          'This usually means your SHA-1/SHA-256 fingerprint is not registered in Firebase Console.'
+        );
+      }
+      if (otpSession.platform === 'web' &&
+          (!otpSession.confirmationResult || typeof otpSession.confirmationResult.confirm !== 'function')) {
+        console.error('[handleSendOtp] Web session has no confirmationResult:', typeof otpSession?.confirmationResult);
+        throw new Error('OTP session could not be created. Please refresh and try again.');
+      }
+
+      // Only reset the web verifier token after successful send (native has no reCAPTCHA)
+      if (!isNative) resetVerifier();
+
+      // ── Advance machine, persist session for rotation/background survival ──
+      machine.onSendSuccess(otpSession);
+      await saveOtpSession(fullPhone, otpSession);
+
+      // ── Store the whole unified session object; UI never reads fields from it ──
+      setConfirmationResult(otpSession);
       setOtpSent(true);
+      console.log(`[handleSendOtp] OTP SENT successfully on platform: ${otpSession.platform}`);
       triggerHaptic('success');
-      showToast('OTP sent! Check your messages', 'success');
+      showToast('OTP sent! Check your messages 📱', 'success');
 
     } catch (err) {
-      console.error('[Auth] OTP send error:', err);
-      // Reset verifier on failure so next attempt gets a fresh one
-      resetVerifier();
+      console.error('[handleSendOtp] OTP send error:', err?.code, err?.message);
+
+      // ── Advance machine to error state ──────────────────────────────────
+      if (machine.state === 'sending_otp') machine.onSendFailure(err);
+
+      // ── Structured crash analytics ──────────────────────────────────────
+      logOtpSendFailure({
+        phoneNumber: fullPhone,
+        error: err,
+        durationMs: Date.now() - sendStart,
+        platform: Capacitor.getPlatform(),
+      }).catch(() => {}); // fire-and-forget, never block UI
+
+      // Only reset web verifier on failure — native has no reCAPTCHA to reset
+      if (!isNative) resetVerifier();
+
+      // Clean up stale listener on failure
+      if (window._ccPhoneListener) {
+        await window._ccPhoneListener.remove().catch(() => {});
+        window._ccPhoneListener = null;
+      }
+
       const msgs = {
-        'auth/invalid-phone-number': 'Invalid phone number. Include country code (e.g. +91...)',
-        'auth/too-many-requests': 'Too many attempts. Try again in a few minutes.',
-        'auth/captcha-check-failed': 'reCAPTCHA verification failed. Refresh and try again.',
-        'auth/timeout': 'Request timed out. Please try again.',
+        'auth/invalid-phone-number': 'Invalid phone number. Use format: +91XXXXXXXXXX',
+        'auth/too-many-requests': 'Too many attempts. Please wait a few minutes.',
+        'auth/captcha-check-failed': 'Verification failed. Please try again.',
+        'auth/timeout': 'Sending OTP timed out. Check your signal and try again.',
       };
-      showToast(msgs[err?.code] || err?.message || 'Failed to send OTP', 'error');
+      const friendlyMsg = msgs[err?.code] || err?.message || 'Failed to send OTP. Try again.';
+      showToast(friendlyMsg, 'error');
     } finally {
       setLoading(false);
       setLoadingMessage('');
@@ -1519,17 +1744,82 @@ export default function Login() {
 
   const handleVerifyOtp = async () => {
     if (!confirmationResult) {
-      showToast('Please request OTP first', 'error');
+      setOtpError('Please request OTP first.');
+      // Log this — it was the original crash point
+      logOtpSessionMissing({
+        phoneNumber,
+        storedSession: confirmationResult,
+        location: 'main_login',
+      }).catch(() => {});
       return;
     }
     if (otpCode.length !== 6) {
-      showToast('Enter the 6-digit OTP', 'error');
+      setOtpError('Enter the 6-digit OTP.');
       return;
     }
+
+    const otpSession = confirmationResult;
+
+    // ── Guard: validate session shape ─────────────────────────────────────
+    if (!otpSession.platform) {
+      console.error('[handleVerifyOtp] Session missing platform:', JSON.stringify(otpSession));
+      logOtpSessionMissing({ phoneNumber, storedSession: otpSession, location: 'main_login_no_platform' }).catch(() => {});
+      setOtpError('Your OTP session is invalid. Please go back and send a new OTP.');
+      setConfirmationResult(null); setOtpSent(false);
+      return;
+    }
+    if (otpSession.platform === 'android' &&
+        (!otpSession.verificationId || typeof otpSession.verificationId !== 'string')) {
+      console.error('[handleVerifyOtp] Android session: verificationId missing:', JSON.stringify(otpSession));
+      logOtpSessionMissing({ phoneNumber, storedSession: otpSession, location: 'main_login_android_no_vid' }).catch(() => {});
+      setOtpError('Your OTP session expired. Please go back and send a new OTP.');
+      setConfirmationResult(null); setOtpSent(false);
+      return;
+    }
+    if (otpSession.platform === 'web' &&
+        (!otpSession.confirmationResult || typeof otpSession.confirmationResult.confirm !== 'function')) {
+      console.error('[handleVerifyOtp] Web session: confirmationResult invalid:', typeof otpSession.confirmationResult);
+      setOtpError('Your OTP session expired. Please request a new OTP.');
+      setConfirmationResult(null); setOtpSent(false);
+      return;
+    }
+
+    // ── Machine guard — blocks double-tap and wrong-state verify ─────────
+    const machine = otpMachineRef.current;
+    if (machine) {
+      try {
+        machine.startVerify();
+      } catch (machineErr) {
+        console.error('[handleVerifyOtp] Machine blocked verify:', machineErr.message);
+        setOtpError('Verification already in progress. Please wait.');
+        return;
+      }
+    }
+
+    console.log(
+      '[handleVerifyOtp] Starting OTP verify.',
+      '| platform:', otpSession.platform,
+      '| verificationId present:', !!otpSession.verificationId,
+      '| confirmationResult present:', !!otpSession.confirmationResult
+    );
     setLoading(true);
+    setOtpError('');
+    const verifyStart = Date.now();
+
     try {
-      const result = await withAuthTimeout(confirmationResult.confirm(otpCode), 12000, 'Verify OTP');
+      const result = await withAuthTimeout(
+        verifyPhoneOTP(otpSession, otpCode),
+        12000,
+        'Verify OTP'
+      );
       const user = result.user;
+
+      // ── Advance machine, clear persisted session ──────────────────────
+      machine?.onVerifySuccess(user?.uid);
+      clearOtpSession().catch(() => {});
+
+      console.log('[handleVerifyOtp] OTP VERIFY SUCCESS, uid:', user?.uid);
+      setLoading(false);
       triggerHaptic('success');
 
       // Create user doc if first time
@@ -1555,14 +1845,46 @@ export default function Login() {
       }
       showToast('Welcome! 🎉', 'success');
     } catch (err) {
-      console.error('OTP verify error:', err);
-      const msgs = {
-        'auth/invalid-verification-code': 'Wrong OTP. Check and try again.',
-        'auth/code-expired': 'OTP expired. Request a new one.',
-        'auth/timeout': 'Verification timed out. Try again.',
-      };
-      showToast(msgs[err?.code] || 'Verification failed', 'error');
+      console.error('[handleVerifyOtp] FAILED. code:', err?.code, '| message:', err?.message);
+
+      let message;
+      switch (err?.code) {
+        case 'auth/invalid-verification-code':
+          message = 'Incorrect OTP. Please try again.';
+          break;
+        case 'auth/code-expired':
+          message = 'OTP expired. Request a new code.';
+          break;
+        case 'auth/session-expired':
+          message = 'Session expired. Request a new OTP.';
+          break;
+        case 'auth/too-many-requests':
+          message = 'Too many attempts. Please wait and try again.';
+          break;
+        case 'auth/network-request-failed':
+          message = 'Network issue. Check your connection.';
+          break;
+        case 'auth/timeout':
+          message = 'Verification timed out. Try again.';
+          break;
+        default:
+          message = err?.message || 'Verification failed. Please try again.';
+      }
+
+      setOtpError(message);
+      setOtpCode('');
       triggerHaptic('error');
+
+      // Advance machine back to otp_sent for retry
+      machine?.onVerifyFailure(err);
+
+      // Structured crash analytics (fire-and-forget)
+      logOtpVerifyFailure({
+        phoneNumber,
+        error: err,
+        durationMs: Date.now() - verifyStart,
+        otpSession,
+      }).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -1883,6 +2205,7 @@ export default function Login() {
                   setOtpCode('');
                   setConfirmationResult(null);
                   setOtpSent(false);
+                  setOtpError('');
                 }}
                 phoneNumber={phoneNumber}
                 setPhoneNumber={setPhoneNumber}
@@ -1893,6 +2216,16 @@ export default function Login() {
                 loadingMessage={loadingMessage}
                 onSendOtp={handleSendOtp}
                 onVerifyOtp={handleVerifyOtp}
+                otpError={otpError}
+                onClearError={() => setOtpError('')}
+                onChangeNumber={() => {
+                  // Return to phone input step — keep modal open, destroy stale session
+                  setOtpCode('');
+                  setOtpSent(false);
+                  setConfirmationResult(null);
+                  setOtpError('');
+                  setLoading(false);
+                }}
               />
             )}
           </AnimatePresence>
@@ -1924,19 +2257,24 @@ export default function Login() {
         <footer className="cc-login-footer">
           <span>&copy; {new Date().getFullYear()} Cream &amp; Crust</span>
           <span aria-hidden="true">&middot;</span>
-          <span>Crafted in India</span>
+          <a href="/privacy.html" style={{ color: 'inherit', textDecoration: 'underline' }}>Privacy Policy</a>
+          <span aria-hidden="true">&middot;</span>
+          <a href="/terms.html" style={{ color: 'inherit', textDecoration: 'underline' }}>Terms</a>
         </footer>
         {/* reCAPTCHA is rendered in the persistent #recaptcha-root div in index.html */}
       </main>
 
       <style>{`
         .cc-login-shell {
+          width: 100%;
+          max-width: 100vw;
           min-height: 100dvh;
           display: grid;
           grid-template-columns: 1fr;
           font-family: ${FONT_BODY};
           color: ${C.ink};
           background: ${C.cream};
+          overflow-x: clip;
         }
 
         @media (min-width: 920px) {
@@ -1977,6 +2315,39 @@ export default function Login() {
           .cc-hero-title { font-size: 28px !important; }
           .cc-hero-tag-wrap { height: 22px; }
           .cc-hero-tag { font-size: 13px !important; }
+          .cc-login-hero {
+            flex: 0 0 auto;
+            padding: max(14px, env(safe-area-inset-top, 0px)) 16px 14px;
+            gap: 10px;
+          }
+          .cc-login-form-panel {
+            min-height: auto;
+            padding: 18px 16px max(22px, env(safe-area-inset-bottom, 0px));
+          }
+          .cc-login-card {
+            gap: 16px;
+          }
+        }
+
+        @media (max-width: 919px) and (max-height: 700px) {
+          .cc-login-hero {
+            display: none;
+          }
+          .cc-login-form-panel {
+            min-height: 100dvh;
+            justify-content: center;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .cc-card-head h2 { font-size: 25px !important; }
+          .cc-card-head p { font-size: 13px !important; }
+          .cc-submit,
+          .cc-google,
+          .cc-phone-btn {
+            height: 46px;
+            font-size: 13px;
+          }
         }
 
         .cc-grain {
@@ -1999,19 +2370,19 @@ export default function Login() {
           transition: transform 0.4s ease-out;
         }
         .cc-orb-1 {
-          width: 280px; height: 280px;
+          width: clamp(200px, 25vw, 320px); height: clamp(200px, 25vw, 320px);
           top: -60px; left: -40px;
           background: radial-gradient(circle, ${C.rose}33, transparent 70%);
           transform: translate(var(--orb-x), var(--orb-y));
         }
         .cc-orb-2 {
-          width: 240px; height: 240px;
+          width: clamp(160px, 20vw, 260px); height: clamp(160px, 20vw, 260px);
           bottom: -50px; right: -30px;
           background: radial-gradient(circle, ${C.goldHi}3D, transparent 70%);
           transform: translate(calc(var(--orb-x) * -1), calc(var(--orb-y) * -1));
         }
         .cc-orb-3 {
-          width: 180px; height: 180px;
+          width: clamp(120px, 15vw, 200px); height: clamp(120px, 15vw, 200px);
           top: 50%; left: 60%;
           background: radial-gradient(circle, ${C.roseSoft}88, transparent 70%);
           transform: translate(calc(var(--orb-x) * 0.6), calc(var(--orb-y) * 0.6));

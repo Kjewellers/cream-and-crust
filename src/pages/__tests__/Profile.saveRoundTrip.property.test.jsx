@@ -35,6 +35,18 @@ vi.mock('../../context/AuthContext', () => ({
   useAuth: () => mockAuth,
 }));
 
+const mockRequirePermission = vi.fn(async () => true);
+
+vi.mock('../../context/PermissionContext', () => ({
+  usePermissions: () => ({
+    requirePermission: mockRequirePermission
+  }),
+}));
+
+vi.mock('../../services/business', () => ({
+  subscribeToAllBusinesses: vi.fn(),
+}));
+
 vi.mock('../../services/db', () => ({
   subscribeToOrders: (cb) => {
     cb([]);
@@ -47,6 +59,8 @@ vi.mock('../../services/db', () => ({
   subscribeToProducts: (cb) => { cb([]); return () => {}; },
   subscribeToRecipes: (cb) => { cb([]); return () => {}; },
   updateBusinessInDB: (...args) => h.updateBusinessInDB(...args),
+  getUserDoc: vi.fn(async () => null),
+  updateUserDoc: vi.fn(async () => {}),
 }));
 
 vi.mock('firebase/firestore', () => ({

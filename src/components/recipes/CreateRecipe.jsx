@@ -3,7 +3,10 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Trash2, Camera, Plus, Loader2 } from 'lucide-react';
 import { addRecipeToDB, updateRecipeInDB } from '../../services/db';
 import { uploadToCloudinary } from '../../services/cloudinary';
+import { pickPhoto } from '../../utils/photoPicker';
 import { showToast } from '../iOS';
+import { usePermissions } from '../../context/PermissionContext';
+import { PERMISSION_TYPES } from '../../services/PermissionManager';
 
 const STEP_LABELS = ['Basic Info', 'Ingredients', 'Steps', 'Costing'];
 
@@ -57,6 +60,7 @@ const YIELD_OPTIONS = [
 
 export default function CreateRecipe({ onClose, existingRecipe }) {
   const isEditing = !!existingRecipe;
+  const { requirePermission } = usePermissions();
   const [step, setStep] = useState(1);
   const [scaleTo, setScaleTo] = useState('3 kg cake');
   const [data, setData] = useState({
@@ -83,7 +87,6 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
   });
   const [tagInput, setTagInput] = useState('');
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
 
   useEffect(() => {
     if (existingRecipe) {
@@ -284,17 +287,13 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
                 marginBottom: 24,
               }}
             >
-              <input
-                type="file"
-                accept="image/*"
-                ref={fileInputRef}
-                style={{ display: 'none' }}
-                onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (!file) return;
+              <div
+                onClick={async () => {
+                  const photo = await pickPhoto();
+                  if (!photo?.file) return;
                   setUploading(true);
                   try {
-                    const url = await uploadToCloudinary(file);
+                    const url = await uploadToCloudinary(photo.file);
                     setData({ ...data, imageUrl: url });
                     showToast('Image uploaded!', 'success');
                   } catch (err) {
@@ -303,9 +302,6 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
                     setUploading(false);
                   }
                 }}
-              />
-              <div
-                onClick={() => fileInputRef.current?.click()}
                 style={{
                   width: 120,
                   height: 90,
@@ -351,7 +347,20 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
               </div>
               {data.imageUrl && !uploading && (
                 <button
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={async () => {
+                    const photo = await pickPhoto();
+                    if (!photo?.file) return;
+                    setUploading(true);
+                    try {
+                      const url = await uploadToCloudinary(photo.file);
+                      setData({ ...data, imageUrl: url });
+                      showToast('Image uploaded!', 'success');
+                    } catch (err) {
+                      showToast('Failed to upload image', 'error');
+                    } finally {
+                      setUploading(false);
+                    }
+                  }}
                   style={{
                     marginTop: 6,
                     fontSize: 12,

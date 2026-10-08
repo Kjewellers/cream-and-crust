@@ -6,7 +6,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { triggerHaptic } from '../iOS';
-import PremiumBottomSheet from '../PremiumBottomSheet';
+import NativeBottomSheet from '../ui/NativeBottomSheet';
 
 const STATUS_LABELS = {
   confirmed: 'Confirmed',
@@ -63,7 +63,7 @@ export default function StatusUpdateModal({ open, onClose, status, customerName,
   const canSend = draft.trim() && phone && !isOverLimit;
 
   return (
-    <PremiumBottomSheet
+    <NativeBottomSheet
       open={open}
       onClose={onClose}
       title={`Update ${customerName || 'Customer'}`}
@@ -194,6 +194,6 @@ export default function StatusUpdateModal({ open, onClose, status, customerName,
           Send on WhatsApp
         </button>
       </div>
-    </PremiumBottomSheet>
+    </NativeBottomSheet>
   );
 }

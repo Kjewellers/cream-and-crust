@@ -9,6 +9,13 @@ vi.mock('@capacitor/browser', () => ({
   },
 }));
 
+const mockAppOpenUrl = vi.fn();
+vi.mock('@capacitor/app', () => ({
+  App: {
+    openUrl: (...args) => mockAppOpenUrl(...args),
+  },
+}));
+
 let mockIsNative = false;
 let mockPlatform = 'web';
 vi.mock('@capacitor/core', () => ({
@@ -26,6 +33,7 @@ describe('openLink utility', () => {
     mockPlatform = 'web';
     window.open = vi.fn();
     mockBrowserOpen.mockClear();
+    mockAppOpenUrl.mockClear();
   });
 
   afterEach(() => {
@@ -46,6 +54,7 @@ describe('openLink utility', () => {
 
   it('uses Browser.open on native platform', async () => {
     mockIsNative = true;
+    mockPlatform = 'android';
     await openLink('https://example.com');
     expect(mockBrowserOpen).toHaveBeenCalledWith({ url: 'https://example.com', windowName: '_blank' });
     expect(window.open).not.toHaveBeenCalled();
@@ -53,6 +62,7 @@ describe('openLink utility', () => {
 
   it('falls back to window.open if Browser.open fails on native platform', async () => {
     mockIsNative = true;
+    mockPlatform = 'android';
     mockBrowserOpen.mockRejectedValueOnce(new Error('Browser blocked'));
     await openLink('https://example.com');
     expect(mockBrowserOpen).toHaveBeenCalled();
@@ -68,6 +78,7 @@ describe('openWhatsAppChat utility', () => {
     mockPlatform = 'web';
     window.open = vi.fn();
     mockBrowserOpen.mockClear();
+    mockAppOpenUrl.mockClear();
   });
 
   afterEach(() => {
@@ -83,21 +94,29 @@ describe('openWhatsAppChat utility', () => {
     );
   });
 
-  it('uses Browser.open on native Android', async () => {
+  it('uses App.openUrl on native Android', async () => {
     mockIsNative = true;
     mockPlatform = 'android';
+    // Mock the initial intent URL attempt to fail so it falls back to wa.me URL
+    mockAppOpenUrl.mockResolvedValueOnce(false); // intent fails
+    mockAppOpenUrl.mockResolvedValueOnce(true);  // wa.me succeeds
+
     await openWhatsAppChat('9876543210', 'Hello Android!');
-    expect(mockBrowserOpen).toHaveBeenCalledWith({
+    
+    expect(mockAppOpenUrl).toHaveBeenLastCalledWith({
       url: 'https://wa.me/919876543210?text=Hello%20Android!',
     });
     expect(window.open).not.toHaveBeenCalled();
   });
 
-  it('uses Browser.open on native iOS', async () => {
+  it('uses App.openUrl on native iOS', async () => {
     mockIsNative = true;
     mockPlatform = 'ios';
+    mockAppOpenUrl.mockResolvedValueOnce(true);
+
     await openWhatsAppChat('9876543210', 'Hello iOS!');
-    expect(mockBrowserOpen).toHaveBeenCalledWith({
+    
+    expect(mockAppOpenUrl).toHaveBeenCalledWith({
       url: 'https://wa.me/919876543210?text=Hello%20iOS!',
     });
     expect(window.open).not.toHaveBeenCalled();
@@ -121,6 +140,7 @@ describe('openWhatsAppLink utility', () => {
     mockPlatform = 'web';
     window.open = vi.fn();
     mockBrowserOpen.mockClear();
+    mockAppOpenUrl.mockClear();
   });
 
   afterEach(() => {

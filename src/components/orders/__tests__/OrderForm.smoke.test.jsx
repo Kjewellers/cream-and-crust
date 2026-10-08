@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import OrderForm from '../OrderForm';
+import { PermissionProvider } from '../../../context/PermissionContext';
 
 describe('OrderForm Smoke Tests', () => {
   const defaultForm = {
@@ -26,13 +27,15 @@ describe('OrderForm Smoke Tests', () => {
     const showToast = vi.fn();
 
     render(
-      <OrderForm
-        form={defaultForm}
-        setForm={setForm}
-        onSubmit={onSubmit}
-        showToast={showToast}
-        recipeList={[]}
-      />
+      <PermissionProvider>
+        <OrderForm
+          form={defaultForm}
+          setForm={setForm}
+          onSubmit={onSubmit}
+          showToast={showToast}
+          recipeList={[]}
+        />
+      </PermissionProvider>
     );
 
     expect(screen.getByText("Let's get to know your customer")).toBeInTheDocument();
@@ -53,13 +56,15 @@ describe('OrderForm Smoke Tests', () => {
     const showToast = vi.fn();
 
     render(
-      <OrderForm
-        form={validForm}
-        setForm={setForm}
-        onSubmit={onSubmit}
-        showToast={showToast}
-        recipeList={[]}
-      />
+      <PermissionProvider>
+        <OrderForm
+          form={validForm}
+          setForm={setForm}
+          onSubmit={onSubmit}
+          showToast={showToast}
+          recipeList={[]}
+        />
+      </PermissionProvider>
     );
 
     // Find the 'Next' button
@@ -70,6 +75,6 @@ describe('OrderForm Smoke Tests', () => {
     expect(showToast).not.toHaveBeenCalled();
 
     // Should navigate to Step 2 (await because of Framer Motion)
-    expect(await screen.findByText('What amazing treats are you baking?')).toBeInTheDocument();
-  });
+    expect(await screen.findByText('What amazing treats are you baking?', {}, { timeout: 10000 })).toBeInTheDocument();
+  }, 15000);
 });

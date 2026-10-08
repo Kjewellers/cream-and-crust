@@ -24,7 +24,8 @@ import {
 } from '../services/db';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { showToast, triggerHaptic, PullToRefresh, CardSkeleton, SwipeRow, BottomSheet } from '../components/iOS';
+import { showToast, triggerHaptic, PullToRefresh, CardSkeleton, SwipeRow } from '../components/iOS';
+import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
 import { formatCurrency, toISODate } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
@@ -34,6 +35,7 @@ import ModuleTour from '../components/ModuleTour';
 import { expensesTourSteps } from '../components/tours/expensesTour';
 import AnimatedDemo from '../components/AnimatedDemo';
 import { expensesDemoScenes } from '../components/demos/expensesDemo';
+import Platform from '../platform/Platform';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
@@ -559,7 +561,7 @@ export default function Expenses() {
       </div>
       </PullToRefresh>
 
-      <BottomSheet open={showModal} onClose={() => setShowModal(false)} title="Record Expense">
+      <NativeBottomSheet open={showModal} onClose={() => setShowModal(false)} title="Record Expense">
         <p style={{ color: 'var(--text3)', fontSize: '0.95rem', marginTop: -10, marginBottom: 20 }}>
           Financial intelligence starts here
         </p>
@@ -749,25 +751,52 @@ export default function Expenses() {
                   {/* Receipt Upload */}
                   <div className="form-group">
                     <label className="form-label">Receipt Photo / Bill</label>
-                    <div style={{ position: 'relative' }}>
-                      <Paperclip
-                        size={18}
-                        style={{ position: 'absolute', left: 16, top: 18, color: 'var(--text3)' }}
-                      />
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        onChange={(e) => setReceiptFile(e.target.files[0])}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const picked = await Platform.PhotoPicker.pickImage();
+                        if (picked) setReceiptFile(picked.file);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        width: '100%',
+                        height: 56,
+                        paddingLeft: 16,
+                        paddingRight: 16,
+                        borderRadius: 16,
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        color: receiptFile ? 'var(--text)' : 'var(--text3)',
+                        fontWeight: receiptFile ? 600 : 400,
+                        fontSize: 14,
+                      }}
+                    >
+                      <Paperclip size={18} style={{ color: 'var(--text3)', flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {receiptFile ? receiptFile.name : 'Attach receipt (optional)'}
+                      </span>
+                    </button>
+                    {receiptFile && (
+                      <button
+                        type="button"
+                        onClick={() => setReceiptFile(null)}
                         style={{
-                          paddingLeft: 48,
-                          height: 56,
-                          borderRadius: 16,
-                          background: 'var(--bg)',
-                          border: '1px solid var(--border)',
-                          paddingTop: 15,
+                          marginTop: 6,
+                          fontSize: 12,
+                          color: 'var(--text3)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
                         }}
-                      />
-                    </div>
+                      >
+                        ✕ Remove
+                      </button>
+                    )}
                   </div>
 
                   {/* Payment Method */}
@@ -821,7 +850,7 @@ export default function Expenses() {
                   </button>
                 </div>
         </form>
-      </BottomSheet>
+      </NativeBottomSheet>
       <AnimatedDemo moduleId="expenses" title="Track Your Spending" scenes={expensesDemoScenes} />
     </motion.div>
   );

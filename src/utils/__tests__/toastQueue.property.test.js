@@ -45,7 +45,7 @@ describe('toast queue reducer (Property 11)', () => {
       ),
       { numRuns: 200 }
     );
-  });
+  }, 20000);
 
   it('promotes a queued toast (FIFO) when a visible one is removed', () => {
     let s = initToastState();

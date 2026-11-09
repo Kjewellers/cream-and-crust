@@ -5,13 +5,14 @@
  * read-only cache for display metadata written after successful validation.
  */
 import { useState, useEffect } from 'react';
-import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import {
   isNativeAndroidRuntime,
   subscriptionStateFromCustomerInfo,
   syncCustomerInfo,
+  SUBSCRIPTION_REFRESH_EVENT,
 } from '../services/purchases';
 
 const INACTIVE_STATE = {
@@ -68,24 +69,12 @@ function formatStateFromRevenueCat(customerInfo) {
   };
 }
 
-function formatCacheForFirestore(state) {
-  return {
-    subscription: {
-      status: state.isActive ? 'active' : 'not_subscribed',
-      productId: state.productId,
-      planId: state.planId,
-      purchaseDate: state.purchaseDate,
-      expiryDate: state.expiryDate,
-      store: state.store,
-      entitlementName: state.entitlementName,
-      source: 'revenuecat_customer_info',
-      lastSync: serverTimestamp(),
-    },
-  };
-}
-
-function formatCachedDisplayState(subscription, userRef = null) {
-  if (!subscription || subscription.status !== 'active' || subscription.source === 'direct_activation') {
+function formatCachedDisplayState(subscription) {
+  if (
+    !subscription ||
+    subscription.status !== 'active' ||
+    subscription.source !== 'revenuecat_webhook'
+  ) {
     return INACTIVE_STATE;
   }
 
@@ -98,13 +87,14 @@ function formatCachedDisplayState(subscription, userRef = null) {
     }
   }
 
+  if (!expiryDate) {
+    return INACTIVE_STATE;
+  }
+
   const now = Date.now();
 
   // If expiry date is in the past (e.g. 1970-01-01 or expired date), subscription is EXPIRED
   if (expiryDate && expiryDate.getTime() <= now) {
-    if (userRef) {
-      setDoc(userRef, { subscription: { status: 'not_subscribed', lastSync: serverTimestamp() } }, { merge: true }).catch(() => {});
-    }
     return INACTIVE_STATE;
   }
 
@@ -123,20 +113,25 @@ function formatCachedDisplayState(subscription, userRef = null) {
 export function useSubscription() {
   const { currentUser } = useAuth();
   const isNativeApp = isNativeAndroidRuntime();
+  const uid = currentUser?.uid || null;
   const [subscription, setSubscription] = useState({
     ...INACTIVE_STATE,
     loading: true,
   });
+  const [subscriptionUid, setSubscriptionUid] = useState(null);
 
   useEffect(() => {
-    if (!currentUser?.uid) {
+    if (!uid) {
+      setSubscriptionUid(null);
       setSubscription(INACTIVE_STATE);
       return undefined;
     }
 
     let cancelled = false;
     let appStateListener = null;
-    const userRef = doc(db, 'users', currentUser.uid);
+    setSubscriptionUid(uid);
+    setSubscription({ ...INACTIVE_STATE, loading: true });
+    const userRef = doc(db, 'users', uid);
 
     const syncFromRevenueCat = async () => {
       if (!isNativeApp) {
@@ -146,7 +141,7 @@ export function useSubscription() {
 
       try {
         const customerInfo = await withTimeout(
-          syncCustomerInfo(currentUser.uid),
+          syncCustomerInfo(uid),
           REVENUECAT_SYNC_TIMEOUT_MS,
           null
         );
@@ -157,9 +152,6 @@ export function useSubscription() {
           : { ...INACTIVE_STATE, loading: false };
 
         setSubscription(nextState);
-        if (customerInfo) {
-          await setDoc(userRef, formatCacheForFirestore(nextState), { merge: true });
-        }
       } catch (error) {
         console.warn('[useSubscription] RevenueCat sync failed:', error?.message || error);
         if (!cancelled) setSubscription(INACTIVE_STATE);
@@ -169,9 +161,21 @@ export function useSubscription() {
     const unsubscribe = onSnapshot(
       userRef,
       (snapshot) => {
-        if (!snapshot.exists()) return;
+        if (cancelled) return;
+        if (!snapshot.exists()) {
+          if (!isNativeApp) setSubscription(INACTIVE_STATE);
+          return;
+        }
 
-        const cached = formatCachedDisplayState(snapshot.data()?.subscription || {}, userRef);
+        const serverSubscription = snapshot.data()?.subscription;
+        // A missing or legacy client-written cache must never erase a live
+        // RevenueCat entitlement on Android. Web relies on the trusted mirror.
+        if (serverSubscription?.source !== 'revenuecat_webhook') {
+          if (!isNativeApp) setSubscription(INACTIVE_STATE);
+          return;
+        }
+
+        const cached = formatCachedDisplayState(serverSubscription);
         setSubscription((prev) => ({
           ...prev,
           ...cached,
@@ -180,11 +184,16 @@ export function useSubscription() {
       },
       (error) => {
         console.warn('[useSubscription] Cache read failed:', error?.message || error);
-        setSubscription((prev) => ({ ...prev, loading: false }));
+        if (!cancelled) setSubscription((prev) => ({ ...prev, loading: false }));
       }
     );
 
     syncFromRevenueCat();
+
+    const refreshAfterPurchase = () => syncFromRevenueCat();
+    if (typeof window !== 'undefined') {
+      window.addEventListener(SUBSCRIPTION_REFRESH_EVENT, refreshAfterPurchase);
+    }
 
     if (isNativeApp) {
       import('@capacitor/app')
@@ -204,9 +213,19 @@ export function useSubscription() {
     return () => {
       cancelled = true;
       unsubscribe();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(SUBSCRIPTION_REFRESH_EVENT, refreshAfterPurchase);
+      }
       appStateListener?.remove?.();
     };
-  }, [currentUser?.uid, isNativeApp]);
+  }, [uid, isNativeApp]);
+
+  if (subscriptionUid !== uid) {
+    return {
+      ...INACTIVE_STATE,
+      loading: Boolean(uid),
+    };
+  }
 
   return subscription;
 }

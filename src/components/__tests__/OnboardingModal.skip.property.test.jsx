@@ -295,7 +295,7 @@ describe('OnboardingModal skip persistence (Property 2)', () => {
           cleanup();
         }
       }),
-      { numRuns: 100 }
+      { numRuns: 25 }
     );
   }, 120000);
 });

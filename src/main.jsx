@@ -15,7 +15,7 @@ import './index.css';
 //
 // ThemeService initializes the theme before React hydrates to prevent FOUC.
 import { StartupManager } from './core/startup/StartupManager.js';
-import { ThemeService } from './core/theme/ThemeService.js'; // eslint-disable-line no-unused-vars
+import './core/theme/ThemeService.js';
 
 // ThemeService is imported for its side effects (reads localStorage, sets
 // data-theme on <html> before first paint). No explicit call needed.

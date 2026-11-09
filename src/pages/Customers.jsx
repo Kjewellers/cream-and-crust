@@ -8,6 +8,7 @@ import {
   Clock,
   RefreshCw,
   Download,
+  Crown,
   Trash2,
   Edit2,
   X,
@@ -20,6 +21,7 @@ import {
 } from '../services/db';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useSubscriptionContext } from '../context/SubscriptionContext';
 import { formatDate, formatCurrency } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
 import { Skeleton, showToast, triggerHaptic } from '../components/iOS';
@@ -58,6 +60,15 @@ export default function Customers() {
   }, []);
 
   const { currentUser } = useAuth();
+  const { isPro, subscriptionLoading, openPaywall } = useSubscriptionContext();
+  const handleExport = () => {
+    if (subscriptionLoading) return;
+    if (!isPro) {
+      openPaywall('BULK_IMPORT');
+      return;
+    }
+    exportToCSV(customers, 'customers_export');
+  };
 
   // Run deduplication once on mount (background)
   useEffect(() => {
@@ -313,10 +324,10 @@ export default function Customers() {
         </div>
         <button
           className="btn btn-outline"
-          onClick={() => exportToCSV(customers, 'customers_export')}
+          onClick={handleExport}
           style={{ padding: '10px 20px', borderRadius: 12 }}
         >
-          <Download size={18} /> Export CSV
+          {!isPro && <Crown size={14} />} <Download size={18} /> Export CSV
         </button>
       </div>
 

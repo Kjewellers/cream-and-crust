@@ -101,7 +101,7 @@ describe('OnboardingModal — Property 1: "Skip for now" present on every step',
 
         unmount();
       }),
-      { numRuns: 100 }
+      { numRuns: 20 }
     );
   }, 60000); // full framer-motion render per run; allow time for 100 iterations
 

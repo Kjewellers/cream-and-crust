@@ -19,27 +19,8 @@ import {
   subscriptionStateFromCustomerInfo,
 } from '../services/purchases';
 import { showToast, triggerHaptic } from '../components/iOS';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../services/firebase';
 import { useAuth } from '../context/AuthContext';
 import { triggerConfetti } from '../components/DopamineKit';
-
-function buildSubscriptionCache(state, auditField) {
-  return {
-    subscription: {
-      status: 'active',
-      productId: state.productId || 'pro_monthly',
-      planId: state.planId || 'pro_monthly',
-      purchaseDate: state.purchaseDate || new Date().toISOString(),
-      expiryDate: state.expiryDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-      store: state.store || 'google_play',
-      entitlementName: state.entitlementName || 'pro',
-      source: 'revenuecat_customer_info',
-      lastSync: serverTimestamp(),
-      [auditField]: serverTimestamp(),
-    },
-  };
-}
 
 export function usePurchases() {
   const { currentUser } = useAuth();
@@ -69,7 +50,7 @@ export function usePurchases() {
   }, [currentUser?.uid]);
 
   const purchase = useCallback(
-    async (pkg, fallbackPlanId = 'pro_monthly') => {
+    async (pkg) => {
       if (!currentUser?.uid) {
         showToast('Please log in first', 'error');
         return false;
@@ -93,11 +74,6 @@ export function usePurchases() {
         const subscriptionState = subscriptionStateFromCustomerInfo(customerInfo);
 
         if (subscriptionState.isActive) {
-          await setDoc(
-            doc(db, 'users', currentUser.uid),
-            buildSubscriptionCache(subscriptionState, 'purchasedAt'),
-            { merge: true }
-          );
           triggerHaptic('success');
           try { triggerConfetti(); } catch (_) {}
           showToast('🎉 Welcome to Cream & Crust Pro!', 'success');
@@ -140,11 +116,6 @@ export function usePurchases() {
       const subscriptionState = subscriptionStateFromCustomerInfo(customerInfo);
 
       if (subscriptionState.isActive) {
-        await setDoc(
-          doc(db, 'users', currentUser.uid),
-          buildSubscriptionCache(subscriptionState, 'restoredAt'),
-          { merge: true }
-        );
         triggerHaptic('success');
         showToast('Subscription restored! Welcome to Pro', 'success');
         return true;

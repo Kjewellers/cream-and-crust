@@ -3,6 +3,7 @@
 import { getAuth } from 'firebase/auth';
 import Platform from './platform/Platform';
 import { captureAPIError, logAPISuccess, captureAIError, logAISuccess } from './services/ErrorMonitor.js';
+import { dispatchSubscriptionRequired } from './services/subscriptionEvents';
 
 let BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 // Ensure native apps hit the production backend instead of localhost (unless overridden)
@@ -37,7 +38,13 @@ async function req(method, path, body) {
     if (!res.ok) {
       const text = await res.text();
       let msg = text;
-      try { const parsed = JSON.parse(text); msg = parsed.error || parsed.message || parsed.response || text; } catch(e) {}
+      try {
+        const parsed = JSON.parse(text);
+        msg = parsed.message || parsed.response || parsed.error || text;
+        if (res.status === 402 && parsed.error === 'subscription_required') {
+          dispatchSubscriptionRequired(parsed.featureKey);
+        }
+      } catch(e) {}
       
       const error = new Error(msg);
       captureAPIError(error, {
@@ -117,7 +124,10 @@ export const api = {
         console.log(`[AI Response] Status: ${response.status} | ${latencyMs}ms`);
 
         if (response.status >= 400) {
-          const error = new Error(response.data?.error || response.data?.message || 'Server unavailable');
+          if (response.status === 402 && response.data?.error === 'subscription_required') {
+            dispatchSubscriptionRequired(response.data.featureKey);
+          }
+          const error = new Error(response.data?.message || response.data?.error || 'Server unavailable');
           captureAIError(error, { endpoint, status: response.status, latencyMs });
           throw error;
         }
@@ -166,7 +176,10 @@ export const api = {
         });
         const latencyMs = Date.now() - startTime;
         if (response.status >= 400) {
-          const error = new Error(response.data?.error || response.data?.message || 'Server unavailable');
+          if (response.status === 402 && response.data?.error === 'subscription_required') {
+            dispatchSubscriptionRequired(response.data.featureKey);
+          }
+          const error = new Error(response.data?.message || response.data?.error || 'Server unavailable');
           captureAIError(error, { endpoint, status: response.status, latencyMs });
           throw error;
         }

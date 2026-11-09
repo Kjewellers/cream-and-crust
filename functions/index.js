@@ -1,5 +1,6 @@
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 admin.initializeApp();
 
 /**
@@ -68,24 +69,42 @@ exports.validatePlaySubscription = functions.https.onCall(async (data, context) 
  * Setup in RevenueCat dashboard:
  *   Project → Integrations → Webhooks → Add URL:
  *   https://us-central1-cream-and-crust.cloudfunctions.net/revenueCatWebhook
- *   Authorization header: set via `firebase functions:config:set revenuecat.webhook_secret="YOUR_SECRET"`
+ *   Store the authorization token with `firebase functions:secrets:set REVENUECAT_WEBHOOK_SECRET`.
  *
  * The app_user_id in RevenueCat is the Firebase UID (set in initPurchases).
  */
-exports.revenueCatWebhook = functions.https.onRequest(async (req, res) => {
+function getRevenueCatWebhookSecret() {
+  return process.env.REVENUECAT_WEBHOOK_SECRET || null;
+}
+
+function hasValidWebhookAuthorization(header, secret) {
+  if (typeof header !== 'string' || !secret) return false;
+  const supplied = header.replace(/^Bearer\s+/i, '');
+  const expected = String(secret).replace(/^Bearer\s+/i, '');
+  const suppliedBuffer = Buffer.from(supplied);
+  const expectedBuffer = Buffer.from(expected);
+  return suppliedBuffer.length === expectedBuffer.length
+    && crypto.timingSafeEqual(suppliedBuffer, expectedBuffer);
+}
+
+exports.revenueCatWebhook = functions
+  .runWith({ secrets: ['REVENUECAT_WEBHOOK_SECRET'] })
+  .https.onRequest(async (req, res) => {
   // Only accept POST
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
 
-  // Verify the shared secret header RevenueCat sends
-  const secret = functions.config().revenuecat?.webhook_secret;
-  if (secret) {
-    const authHeader = req.headers['authorization'];
-    if (authHeader !== secret) {
-      console.warn('[webhook] Unauthorized request — bad secret');
-      return res.status(401).send('Unauthorized');
-    }
+  // A missing secret must fail closed. Otherwise any caller could activate an
+  // account by posting a made-up RevenueCat event to this Admin SDK endpoint.
+  const secret = getRevenueCatWebhookSecret();
+  if (!secret) {
+    console.error('[webhook] REVENUECAT_WEBHOOK_SECRET is not configured');
+    return res.status(503).send('Subscription verification is unavailable');
+  }
+  if (!hasValidWebhookAuthorization(req.headers.authorization, secret)) {
+    console.warn('[webhook] Unauthorized request — bad secret');
+    return res.status(401).send('Unauthorized');
   }
 
   try {
@@ -94,109 +113,151 @@ exports.revenueCatWebhook = functions.https.onRequest(async (req, res) => {
       return res.status(400).send('Missing event body');
     }
 
-    const {
-      type,                    // e.g. "INITIAL_PURCHASE", "RENEWAL", "CANCELLATION"
-      app_user_id,             // This is the Firebase UID we set in initPurchases()
-      product_id,              // e.g. "pro_monthly"
-      expiration_at_ms,
-      purchased_at_ms,
-      store,
-      entitlement_ids,
-    } = event;
+    const type = String(event.type || '').toUpperCase();
+    const uid = typeof event.app_user_id === 'string' ? event.app_user_id.trim() : '';
+    const eventId = typeof event.id === 'string' ? event.id.trim() : '';
+    if (!uid || !eventId || !type) {
+      return res.status(400).send('Missing event id, type, or app_user_id');
+    }
 
-    // app_user_id is the Firebase UID
-    const uid = app_user_id;
-    if (!uid) {
-      return res.status(400).send('Missing app_user_id');
+    const productId = typeof event.product_id === 'string' ? event.product_id : null;
+    const store = typeof event.store === 'string' ? event.store : 'PLAY_STORE';
+    const expirationAtMs = Number(event.expiration_at_ms) || 0;
+    const gracePeriodExpirationAtMs = Number(event.grace_period_expiration_at_ms) || 0;
+    const purchasedAtMs = Number(event.purchased_at_ms) || 0;
+    const eventAtMs = Number(event.event_timestamp_ms) || Date.now();
+    const purchaseDate = purchasedAtMs > 0
+      ? admin.firestore.Timestamp.fromMillis(purchasedAtMs)
+      : null;
+    const eventEntitlements = [
+      ...(Array.isArray(event.entitlement_ids) ? event.entitlement_ids : []),
+      ...(typeof event.entitlement_id === 'string' ? [event.entitlement_id] : []),
+    ].map((name) => String(name).toLowerCase());
+    const entitlementName = eventEntitlements.find((name) => ['pro', 'premium'].includes(name)) || null;
+    const includesProEntitlement = Boolean(entitlementName);
+
+    const activeEvents = new Set([
+      'INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE',
+      'NON_RENEWING_PURCHASE', 'SUBSCRIPTION_EXTENDED', 'REFUND_REVERSED',
+    ]);
+    const inactiveEvents = new Set(['EXPIRATION', 'REFUND']);
+    // These are recurring subscription products. Missing expiry data must
+    // fail closed instead of creating indefinite premium access.
+    const effectiveExpiryAtMs = type === 'BILLING_ISSUE'
+      || (type === 'CANCELLATION' && event.cancel_reason === 'BILLING_ERROR')
+      ? Math.max(expirationAtMs, gracePeriodExpirationAtMs)
+      : expirationAtMs;
+    const expiryDate = effectiveExpiryAtMs > 0
+      ? admin.firestore.Timestamp.fromMillis(effectiveExpiryAtMs)
+      : null;
+    const periodStillActive = effectiveExpiryAtMs > Date.now();
+    let status = null;
+    let willRenew = typeof event.will_renew === 'boolean' ? event.will_renew : null;
+    let billingIssue = false;
+
+    if (activeEvents.has(type) && includesProEntitlement) {
+      status = periodStillActive ? 'active' : 'not_subscribed';
+    } else if (type === 'CANCELLATION' && includesProEntitlement) {
+      // Cancellation stops renewal; it does not remove already-paid access.
+      status = periodStillActive ? 'active' : 'not_subscribed';
+      willRenew = false;
+      billingIssue = event.cancel_reason === 'BILLING_ERROR' && periodStillActive;
+    } else if (type === 'BILLING_ISSUE' && includesProEntitlement) {
+      // Preserve access through a paid/grace period and flag the account for UI.
+      status = periodStillActive ? 'active' : 'not_subscribed';
+      billingIssue = true;
+    } else if (type === 'SUBSCRIPTION_PAUSED' && includesProEntitlement) {
+      // A pause stops renewal; retain access through the already-paid period.
+      status = periodStillActive ? 'active' : 'not_subscribed';
+      willRenew = false;
+    } else if (inactiveEvents.has(type) && includesProEntitlement) {
+      status = 'not_subscribed';
     }
 
     const db = admin.firestore();
     const userRef = db.collection('users').doc(uid);
+    const eventKey = crypto.createHash('sha256').update(eventId).digest('hex');
+    const eventRef = db.collection('revenuecat_events').doc(eventKey);
+    const auditRef = db.collection('audit_logs').doc(`rc_${eventKey}`);
+    let outcome = 'applied';
 
-    const ACTIVE_EVENTS = ['INITIAL_PURCHASE', 'RENEWAL', 'UNCANCELLATION', 'PRODUCT_CHANGE'];
-    const INACTIVE_EVENTS = ['CANCELLATION', 'EXPIRATION', 'BILLING_ISSUE'];
-    const expiryDate = expiration_at_ms > 0
-      ? admin.firestore.Timestamp.fromMillis(expiration_at_ms)
-      : null;
-    const purchaseDate = purchased_at_ms > 0
-      ? admin.firestore.Timestamp.fromMillis(purchased_at_ms)
-      : null;
-    const entitlementName = Array.isArray(entitlement_ids) && entitlement_ids.length
-      ? entitlement_ids[0]
-      : 'premium';
+    await db.runTransaction(async (transaction) => {
+      const [eventSnapshot, userSnapshot] = await Promise.all([
+        transaction.get(eventRef),
+        transaction.get(userRef),
+      ]);
 
-    if (ACTIVE_EVENTS.includes(type)) {
-
-      await userRef.set({
-        subscription: {
-          status: 'active',
-          productId: product_id || null,
-          planId: product_id || 'pro_monthly',
-          purchaseDate,
-          expiryDate,
-          store: store || 'PLAY_STORE',
-          entitlementName,
-          source: 'revenuecat_webhook',
-          activatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          lastSync: admin.firestore.FieldValue.serverTimestamp(),
-          rcEventType: type,
-        }
-      }, { merge: true });
-
-      console.log(`[webhook] ${type} → uid=${uid} plan=${product_id} active until ${expiration_at_ms}`);
-
-    } else if (INACTIVE_EVENTS.includes(type)) {
-      await userRef.set({
-        subscription: {
-          status: type === 'BILLING_ISSUE' ? 'billing_issue' : 'not_subscribed',
-          productId: product_id || null,
-          planId: product_id || 'pro_monthly',
-          purchaseDate,
-          expiryDate,
-          store: store || 'PLAY_STORE',
-          entitlementName,
-          source: 'revenuecat_webhook',
-          expiredAt: admin.firestore.FieldValue.serverTimestamp(),
-          lastSync: admin.firestore.FieldValue.serverTimestamp(),
-          rcEventType: type,
-        }
-      }, { merge: true });
-
-      console.log(`[webhook] ${type} → uid=${uid} — subscription deactivated`);
-
-      // 🚨 Add Billing Issue / Expiration Notification 🚨
-      if (type === 'BILLING_ISSUE') {
-        await db.collection('notifications').add({
-          userId: uid,
-          type: 'billing_alert',
-          title: 'Action Required: Billing Issue',
-          message: 'There is a billing issue with your Pro subscription. Please update your payment method.',
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-      } else if (type === 'EXPIRATION' || type === 'CANCELLATION') {
-        await db.collection('notifications').add({
-          userId: uid,
-          type: 'billing_alert',
-          title: 'Subscription Ended',
-          message: 'Your Pro subscription has ended. You can renew at any time from Settings.',
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+      if (eventSnapshot.exists) {
+        outcome = 'duplicate';
+        return;
       }
 
-    } else {
-      // Non-critical events (e.g. SUBSCRIBER_ALIAS) — log and ignore
-      console.log(`[webhook] Unhandled event type: ${type} for uid=${uid}`);
-    }
+      const currentSubscription = userSnapshot.data()?.subscription || {};
+      const lastEventAtMs = Number(currentSubscription.lastEventAtMs) || 0;
+      const stale = eventAtMs < lastEventAtMs;
+      outcome = stale ? 'stale' : 'applied';
 
-    // Write to audit log for every event
-    await db.collection('audit_logs').add({
-      action: `rc_${type.toLowerCase()}`,
-      uid,
-      planId: product_id,
-      store,
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      transaction.create(eventRef, {
+        eventId,
+        type,
+        uid,
+        eventAtMs,
+        productId,
+        receivedAt: admin.firestore.FieldValue.serverTimestamp(),
+        outcome,
+      });
+      transaction.create(auditRef, {
+        action: `rc_${type.toLowerCase()}`,
+        uid,
+        planId: productId,
+        store,
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      if (stale || !status) return;
+
+      transaction.set(userRef, {
+        subscription: {
+          status,
+          productId,
+          planId: productId || 'pro_monthly',
+          purchaseDate,
+          expiryDate,
+          store,
+          entitlementName,
+          source: 'revenuecat_webhook',
+          willRenew,
+          billingIssue,
+          lastEventAtMs: eventAtMs,
+          rcEventType: type,
+          lastSync: admin.firestore.FieldValue.serverTimestamp(),
+        },
+      }, { merge: true });
     });
 
+    if (outcome === 'duplicate' || outcome === 'stale') {
+      console.log(`[webhook] ${outcome} event ignored: ${type} uid=${uid}`);
+      return res.status(200).send('OK');
+    }
+
+    if (includesProEntitlement && (type === 'BILLING_ISSUE' || type === 'EXPIRATION' || type === 'CANCELLATION')) {
+      const isBillingProblem = type === 'BILLING_ISSUE' || event.cancel_reason === 'BILLING_ERROR';
+      const billingMessage = isBillingProblem
+        ? 'There is a billing issue. Please update your payment method in Google Play.'
+        : type === 'CANCELLATION'
+          ? 'Auto-renewal is off. Your Pro access remains available until the paid period ends.'
+          : 'Your Pro subscription has ended. You can renew at any time from Settings.';
+      await db.collection('notifications').add({
+        uid,
+        userId: uid,
+        type: 'billing_alert',
+        title: isBillingProblem ? 'Action Required: Billing Issue' : 'Subscription Update',
+        message: billingMessage,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    console.log(`[webhook] ${type} → uid=${uid} plan=${productId || 'unknown'} status=${status || 'unchanged'}`);
     return res.status(200).send('OK');
   } catch (err) {
     console.error('[webhook] Error processing RevenueCat event:', err);

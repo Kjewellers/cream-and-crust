@@ -13,6 +13,7 @@ import {
   Tag,
   Store,
   Download,
+  Crown,
   Paperclip,
   ExternalLink,
 } from 'lucide-react';
@@ -24,6 +25,7 @@ import {
 } from '../services/db';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
+import { useSubscriptionContext } from '../context/SubscriptionContext';
 import { showToast, triggerHaptic, PullToRefresh, CardSkeleton, SwipeRow } from '../components/iOS';
 import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { triggerConfetti, triggerFloatingReward } from '../components/DopamineKit';
@@ -78,6 +80,15 @@ export default function Expenses() {
   const [filterCat, setFilterCat] = useState('All');
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7));
   const { currentUser } = useAuth();
+  const { isPro, subscriptionLoading, openPaywall } = useSubscriptionContext();
+  const handleExport = () => {
+    if (subscriptionLoading) return;
+    if (!isPro) {
+      openPaywall('BULK_IMPORT');
+      return;
+    }
+    exportToCSV(expenses, 'expenses_export');
+  };
 
   useEffect(() => {
     const handleOpenModal = () => setShowModal(true);
@@ -230,10 +241,10 @@ export default function Expenses() {
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               className="btn btn-outline"
-              onClick={() => exportToCSV(expenses, 'expenses_export')}
+              onClick={handleExport}
               style={{ padding: '12px 24px', borderRadius: 14 }}
             >
-              <Download size={20} /> Export
+              {!isPro && <Crown size={14} />} <Download size={20} /> Export
             </button>
             <button
               className="btn btn-primary"

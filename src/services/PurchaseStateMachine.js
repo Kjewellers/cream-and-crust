@@ -177,14 +177,44 @@ export async function executePurchase({ userId, selectedPlan, featureKey, onStat
   setState(PurchaseState.LOADING);
 
   // Dynamically import to avoid bundling RC on web
-  let getOfferings, purchasePackage;
+  let getOfferings, purchasePackage, initPurchases, isNativeAndroidRuntime;
+  let findPackageForPlan, subscriptionStateFromCustomerInfo;
   try {
     const mod = await import('./purchases');
     getOfferings = mod.getOfferings;
     purchasePackage = mod.purchasePackage;
+    initPurchases = mod.initPurchases;
+    isNativeAndroidRuntime = mod.isNativeAndroidRuntime;
+    findPackageForPlan = mod.findPackageForPlan;
+    subscriptionStateFromCustomerInfo = mod.subscriptionStateFromCustomerInfo;
   } catch {
     setState(PurchaseState.RC_UNAVAILABLE);
     return { state: PurchaseState.RC_UNAVAILABLE, friendlyMessage: 'Google Play is unavailable on this device.' };
+  }
+
+  if (typeof isNativeAndroidRuntime === 'function' && !isNativeAndroidRuntime()) {
+    setState(PurchaseState.RC_UNAVAILABLE, { reason: 'unsupported_platform' });
+    return {
+      state: PurchaseState.RC_UNAVAILABLE,
+      friendlyMessage: 'Subscriptions are available in the Cream & Crust Android app.',
+    };
+  }
+
+  if (userId && typeof initPurchases === 'function') {
+    try {
+      const initialized = await Promise.race([
+        initPurchases(userId),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), PURCHASE_TIMEOUT_MS)),
+      ]);
+      if (!initialized) throw new Error('RevenueCat is not ready for this account.');
+    } catch (err) {
+      const result = classifyError(err);
+      setState(result.state, { reason: 'billing_initialization' });
+      return {
+        ...result,
+        friendlyMessage: 'The secure billing service is not ready. Please try again in a moment.',
+      };
+    }
   }
 
   // Timeout-guarded offering fetch
@@ -212,9 +242,21 @@ export async function executePurchase({ userId, selectedPlan, featureKey, onStat
   }
 
   const pkg =
+    (typeof findPackageForPlan === 'function' ? findPackageForPlan(offering, selectedPlan) : null) ||
     packages.find((p) =>
-      selectedPlan === 'yearly' ? (p.packageType === 'ANNUAL' || p.identifier.includes('annual')) : (p.packageType === 'MONTHLY' || p.identifier.includes('monthly'))
-    ) || packages[0];
+      selectedPlan === 'yearly'
+        ? (p.packageType === 'ANNUAL' || (p.identifier && p.identifier.includes('annual')))
+        : (p.packageType === 'MONTHLY' || (p.identifier && p.identifier.includes('monthly')))
+    ) ||
+    packages[0];
+
+  if (!pkg) {
+    setState(PurchaseState.RC_UNAVAILABLE, { reason: `plan_not_configured:${selectedPlan}` });
+    return {
+      state: PurchaseState.RC_UNAVAILABLE,
+      friendlyMessage: `The ${selectedPlan === 'yearly' ? 'annual' : 'monthly'} plan is not available right now. Please choose another plan or try again later.`,
+    };
+  }
 
   log.purchase('flow:offerings_ok', { packageCount: packages.length, packageType: pkg?.packageType });
   setState(PurchaseState.PURCHASING, { packageType: pkg?.packageType });
@@ -226,6 +268,21 @@ export async function executePurchase({ userId, selectedPlan, featureKey, onStat
       setTimeout(() => rej(new Error('timeout')), PURCHASE_TIMEOUT_MS)
     );
     const customerInfo = await Promise.race([purchasePromise, timeout]);
+    const verifiedSubscription =
+      typeof subscriptionStateFromCustomerInfo === 'function'
+        ? subscriptionStateFromCustomerInfo(customerInfo)
+        : null;
+    const hasActiveEntitlement =
+      Boolean(verifiedSubscription?.isActive) ||
+      Boolean(customerInfo?.entitlements?.active && Object.keys(customerInfo.entitlements.active).length > 0);
+
+    if (customerInfo && !hasActiveEntitlement) {
+      setState(PurchaseState.PENDING, { reason: 'entitlement_not_yet_active' });
+      return {
+        state: PurchaseState.PENDING,
+        friendlyMessage: 'Google Play received your purchase. We are waiting for Pro access to be confirmed. Restore purchases or try again shortly.',
+      };
+    }
 
     // Idempotency: don't double-fire unlock
     if (wasRecentlySuccessful()) {
@@ -234,8 +291,9 @@ export async function executePurchase({ userId, selectedPlan, featureKey, onStat
     }
 
     markSuccess();
-    setState(PurchaseState.SUCCESS, { productId: pkg?.product?.productIdentifier });
-    return { state: PurchaseState.SUCCESS, productId: pkg?.product?.productIdentifier, customerInfo };
+    const productId = pkg?.product?.identifier || pkg?.product?.productIdentifier || null;
+    setState(PurchaseState.SUCCESS, { productId });
+    return { state: PurchaseState.SUCCESS, productId, customerInfo };
 
   } catch (err) {
     const result = classifyError(err);

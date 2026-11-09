@@ -8,6 +8,30 @@
 
 export const PREMIUM_FEATURES = {
   // ── AI ──────────────────────────────────────────────────────────────────
+  AI_ASSISTANT: {
+    key: 'AI_ASSISTANT',
+    label: 'AI Bakery Assistant',
+    shortLabel: 'AI Assistant',
+    icon: '🧠',
+    badgeVariant: 'ai',
+    category: 'AI',
+    paywall: {
+      title: 'Unlock Your AI Bakery Assistant',
+      pitch: 'Get practical help with bakery operations, inventory, recipes, and customer insights.',
+      benefits: [
+        'Ask questions about your bakery in plain language',
+        'Get help with orders, recipes, and inventory',
+        'See business insights based on your app data',
+        'Use voice or chat from anywhere in the app',
+      ],
+    },
+    previewScreen: {
+      headline: 'A helpful assistant for your bakery',
+      description: 'Ask for a stock report, a recipe idea, or help managing today’s orders.',
+      previews: ['Ask in plain language', 'Work with your bakery data', 'Get help as you run the app'],
+    },
+  },
+
   AI_INVOICE: {
     key: 'AI_INVOICE',
     label: 'AI Invoice Generator',
@@ -24,10 +48,6 @@ export const PREMIUM_FEATURES = {
         'Branded with your bakery logo and colors',
         'Saves 15–20 minutes per invoice',
       ],
-      testimonial: {
-        text: '"I used to spend 20 minutes per invoice. Now it takes 5 seconds. My customers are impressed."',
-        author: 'Priya M., Sugar & Spice Bakery, Pune',
-      },
     },
     previewScreen: {
       headline: 'AI that writes your invoices',
@@ -53,10 +73,6 @@ export const PREMIUM_FEATURES = {
         'Customer retention & repeat order rates',
         'Custom date range comparisons',
       ],
-      testimonial: {
-        text: '"The analytics showed me that Sunday cakes bring 40% of my revenue. I doubled my Sunday capacity."',
-        author: 'Rajan K., Sweet Moments Bakery, Bengaluru',
-      },
     },
     previewScreen: {
       headline: 'Know your business inside out',
@@ -81,10 +97,6 @@ export const PREMIUM_FEATURES = {
         'GST-ready transaction breakdowns',
         'Custom branding on every report',
       ],
-      testimonial: {
-        text: '"My CA loves the monthly PDF. No more manual Excel sheets."',
-        author: 'Sunita B., The Bake House, Mumbai',
-      },
     },
     previewScreen: {
       headline: 'Professional reports in one tap',
@@ -110,10 +122,6 @@ export const PREMIUM_FEATURES = {
         'Logo placement & signature areas',
         'Impress customers with every invoice',
       ],
-      testimonial: {
-        text: '"Customers compliment my invoices now. It makes the bakery feel more professional."',
-        author: 'Meera S., Flour Power Bakery, Delhi',
-      },
     },
     previewScreen: {
       headline: 'Invoices that reflect your brand',
@@ -138,10 +146,6 @@ export const PREMIUM_FEATURES = {
         'Share via WhatsApp link or QR code',
         'Update instantly — no printing required',
       ],
-      testimonial: {
-        text: '"My WhatsApp menu link gets 200+ views every week. Orders doubled after I launched it."',
-        author: 'Ananya R., Little Bites Cafe, Hyderabad',
-      },
     },
     previewScreen: {
       headline: 'Your menu, beautifully presented',
@@ -167,10 +171,6 @@ export const PREMIUM_FEATURES = {
         'Auto-generates shopping list from forecast',
         'Reduce waste by ordering exactly what you need',
       ],
-      testimonial: {
-        text: '"I stopped over-ordering flour by 30%. The forecast is scarily accurate."',
-        author: 'Kiran V., Sunrise Bakery, Chennai',
-      },
     },
     previewScreen: {
       headline: 'Stock up smart, waste nothing',
@@ -182,29 +182,24 @@ export const PREMIUM_FEATURES = {
   // ── Operations ───────────────────────────────────────────────────────────
   BULK_IMPORT: {
     key: 'BULK_IMPORT',
-    label: 'Bulk Import & Export',
-    shortLabel: 'Bulk Actions',
+    label: 'CSV Data Export',
+    shortLabel: 'CSV Export',
     icon: '📦',
     badgeVariant: 'pro',
     category: 'Operations',
     paywall: {
-      title: 'Unlock Bulk Actions',
-      pitch: 'Import hundreds of products, customers, or orders in one click. Export everything for backup.',
+      title: 'Unlock CSV Exports',
+      pitch: 'Download your bakery records for reporting, bookkeeping, or your own backups.',
       benefits: [
-        'Import products from CSV in seconds',
-        'Export all orders, customers & transactions',
-        'Migrate from any existing system easily',
-        'Schedule automatic data backups',
+        'Export orders, customers, and expenses',
+        'Open your data in spreadsheet apps',
+        'Keep a copy of your operational records',
       ],
-      testimonial: {
-        text: '"Importing my 300 products took 2 minutes. I was ready to go on day one."',
-        author: 'Deepa T., Oven Fresh Bakery, Kolkata',
-      },
     },
     previewScreen: {
-      headline: 'Set up in minutes, not days',
-      description: 'Import your entire product catalog, customer list, and historical orders from a CSV.',
-      previews: ['CSV import for products & customers', 'Full data export for backup', 'One-click migration'],
+      headline: 'Your records, ready to take with you',
+      description: 'Export customer, order, and expense records as CSV files.',
+      previews: ['Customer list export', 'Order history export', 'Expense export'],
     },
   },
 
@@ -224,10 +219,6 @@ export const PREMIUM_FEATURES = {
         'Category-level performance breakdown',
         'Quarterly & annual trend reports',
       ],
-      testimonial: {
-        text: '"The quarterly report helped me decide to open a second location. The data was right there."',
-        author: 'Anil P., Golden Oven Bakery, Jaipur',
-      },
     },
     previewScreen: {
       headline: 'Reports that drive real decisions',
@@ -251,7 +242,6 @@ export function getFeature(key) {
       title: 'Unlock Premium Feature',
       pitch: 'This feature is available on the Pro plan.',
       benefits: [],
-      testimonial: null,
     },
     previewScreen: { headline: 'Premium Feature', description: '', previews: [] },
   };

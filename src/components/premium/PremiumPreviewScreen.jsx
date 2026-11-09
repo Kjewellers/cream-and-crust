@@ -158,28 +158,6 @@ export default function PremiumPreviewScreen() {
                 </div>
               )}
 
-              {/* Testimonial */}
-              {feature.paywall?.testimonial && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                  style={{
-                    background: 'linear-gradient(135deg, #FFF8F0, #FFF3E8)',
-                    border: '1px solid rgba(212,160,80,0.20)',
-                    borderRadius: 16,
-                    padding: '14px 16px',
-                    marginBottom: 20,
-                  }}
-                >
-                  <p style={{ fontSize: 13, color: '#4A3B32', fontStyle: 'italic', lineHeight: 1.5, margin: '0 0 8px' }}>
-                    {feature.paywall.testimonial.text}
-                  </p>
-                  <p style={{ fontSize: 11.5, color: '#D4A050', fontWeight: 700, margin: 0 }}>
-                    — {feature.paywall.testimonial.author}
-                  </p>
-                </motion.div>
-              )}
             </div>
 
             {/* Footer CTAs */}

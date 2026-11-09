@@ -13,24 +13,29 @@
  *  ✓ 15s timeout    — spinner auto-recovers, never freezes
  *
  * Progressive design (3 stages driven by encounter count):
- *  Stage 1: Benefits showcase — no pressure
- *  Stage 2: Testimonials from real bakery owners
- *  Stage 3+: Free Trial CTA front-and-centre
+ *  Stage 1: Benefits showcase
+ *  Stage 2: Benefits and plan selection
+ *  Stage 3+: Free trial availability for eligible accounts
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import {
   X, Check, Crown, Zap,
-  RotateCcw, Shield, Star, ChevronRight,
+  RotateCcw, Shield, ChevronRight,
   WifiOff, AlertTriangle, Clock,
 } from 'lucide-react';
 import { useSubscriptionContext } from '../../context/SubscriptionContext';
 import { useAuth } from '../../context/AuthContext';
 import { getFeature } from '../../services/PremiumFeatureRegistry';
 import { getPaywallEncounterCount, track } from '../../services/PremiumAnalytics';
-import { isNativeAndroidRuntime } from '../../services/purchases';
-import { PLAN, ANNUAL_PLAN } from '../../services/subscription';
+import {
+  findPackageForPlan,
+  getOfferings,
+  initPurchases,
+  isNativeAndroidRuntime,
+} from '../../services/purchases';
 import {
   PurchaseState,
   executePurchase,
@@ -38,64 +43,17 @@ import {
 } from '../../services/PurchaseStateMachine';
 
 // ── Plan data (derived from centralized config) ───────────────────────────────────────────
-const PLANS = [
-  {
-    id: 'monthly',
-    label: 'Monthly',
-    price: `${PLAN.currency}${PLAN.price}`,
-    period: `/${PLAN.period}`,
-    subtext: 'Billed monthly',
-    popular: false,
-  },
-  {
-    id: 'yearly',
-    label: 'Yearly',
-    price: `${ANNUAL_PLAN.currency}${ANNUAL_PLAN.price.toLocaleString('en-IN')}`,
-    period: `/${ANNUAL_PLAN.period}`,
-    subtext: `Save ${ANNUAL_PLAN.currency}${ANNUAL_PLAN.savings} · ${ANNUAL_PLAN.currency}${ANNUAL_PLAN.monthlyEquivalent}/month`,
-    popular: true,
-  },
-];
-
 // Free vs Pro comparison
 const COMPARISON = [
   { feature: 'Orders & Customers', free: true, pro: true },
-  { feature: 'Basic Invoices', free: true, pro: true },
-  { feature: 'Basic Inventory', free: true, pro: true },
-  { feature: 'Basic Reports', free: true, pro: true },
-  { feature: 'AI Invoice Generator', free: false, pro: true },
-  { feature: 'Advanced Analytics', free: false, pro: true },
-  { feature: 'Export Report PDFs', free: false, pro: true },
-  { feature: 'Premium Invoice Themes', free: false, pro: true },
-  { feature: 'Smart Inventory Forecasting', free: false, pro: true },
-  { feature: 'Bulk Import & Export', free: false, pro: true },
-];
-
-const TESTIMONIALS = [
-  {
-    text: '"Premium paid for itself in the first week. The AI invoices alone save me an hour every day."',
-    author: 'Priya M.', bakery: 'Sugar & Spice Bakery, Pune', rating: 5,
-  },
-  {
-    text: '"The analytics showed me Sunday cakes bring 40% of my revenue. I doubled capacity and it worked."',
-    author: 'Rajan K.', bakery: 'Sweet Moments, Bengaluru', rating: 5,
-  },
-  {
-    text: '"My customers keep commenting on how professional my invoices look now. Worth every rupee."',
-    author: 'Meera S.', bakery: 'Flour Power Bakery, Delhi', rating: 5,
-  },
+  { feature: 'Invoices & inventory', free: true, pro: true },
+  { feature: 'AI Bakery Assistant', free: false, pro: true },
+  { feature: 'Advanced analytics', free: false, pro: true },
+  { feature: 'Digital menu builder', free: false, pro: true },
+  { feature: 'CSV exports', free: false, pro: true },
 ];
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-function StarRating({ count = 5 }) {
-  return (
-    <div style={{ display: 'flex', gap: 2 }}>
-      {Array.from({ length: count }).map((_, i) => (
-        <Star key={i} size={11} fill="#F59E0B" color="#F59E0B" />
-      ))}
-    </div>
-  );
-}
 
 function PlanCard({ plan, selected, onSelect, disabled }) {
   return (
@@ -214,7 +172,12 @@ function actionBtnStyle(color) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function PremiumPaywall() {
-  const { paywallOpen, paywallFeatureKey, closePaywall } = useSubscriptionContext();
+  const {
+    paywallOpen,
+    paywallFeatureKey,
+    pendingActionDescriptor,
+    closePaywall,
+  } = useSubscriptionContext();
   const { currentUser } = useAuth();
 
   const [selectedPlan, setSelectedPlan] = useState('yearly');
@@ -223,13 +186,93 @@ export default function PremiumPaywall() {
   const [stage, setStage] = useState(1);
   const [showComparison, setShowComparison] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [offering, setOffering] = useState(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
 
   const feature = paywallFeatureKey ? getFeature(paywallFeatureKey) : null;
   const isNative = isNativeAndroidRuntime();
+  const monthlyPackage = findPackageForPlan(offering, 'monthly');
+  const yearlyPackage = findPackageForPlan(offering, 'yearly');
+  const selectedPackage = selectedPlan === 'yearly' ? yearlyPackage : monthlyPackage;
+  const plans = [
+    {
+      id: 'monthly',
+      label: 'Monthly',
+      price: monthlyPackage?.product?.priceString || (catalogLoading ? 'Loading…' : 'Unavailable'),
+      period: monthlyPackage ? '/month' : '',
+      subtext: monthlyPackage ? 'Billed monthly · Cancel anytime' : 'Not available in Google Play',
+      popular: false,
+      available: Boolean(monthlyPackage),
+    },
+    {
+      id: 'yearly',
+      label: 'Annual',
+      price: yearlyPackage?.product?.priceString || (catalogLoading ? 'Loading…' : 'Unavailable'),
+      period: yearlyPackage ? '/year' : '',
+      subtext: yearlyPackage ? 'Billed yearly · Best value' : 'Not available in Google Play',
+      popular: true,
+      available: Boolean(yearlyPackage),
+    },
+  ];
 
   const isLoading = purchaseState === PurchaseState.LOADING ||
                     purchaseState === PurchaseState.PURCHASING ||
                     purchaseState === PurchaseState.VERIFYING;
+
+  useEffect(() => {
+    if (!paywallOpen || !currentUser?.uid || !isNative) {
+      setOffering(null);
+      setCatalogLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setCatalogLoading(true);
+    initPurchases(currentUser.uid)
+      .then((ready) => ready ? getOfferings() : null)
+      .then((currentOffering) => {
+        if (!cancelled) setOffering(currentOffering);
+      })
+      .catch((error) => {
+        console.warn('[PremiumPaywall] Failed to load store plans:', error?.message || error);
+        if (!cancelled) setOffering(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paywallOpen, currentUser?.uid, isNative]);
+
+  useEffect(() => {
+    if (!offering) return;
+    if (selectedPlan === 'yearly' && !yearlyPackage && monthlyPackage) {
+      setSelectedPlan('monthly');
+    } else if (selectedPlan === 'monthly' && !monthlyPackage && yearlyPackage) {
+      setSelectedPlan('yearly');
+    }
+  }, [offering, selectedPlan, monthlyPackage, yearlyPackage]);
+
+  useEffect(() => {
+    if (!paywallOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && !isLoading) {
+        closePaywall(paywallFeatureKey, { cancelled: true });
+        setPurchaseState(PurchaseState.IDLE);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [paywallOpen, isLoading, closePaywall, paywallFeatureKey]);
 
   // Reset state when paywall opens
   useEffect(() => {
@@ -239,7 +282,12 @@ export default function PremiumPaywall() {
     setPurchaseState(PurchaseState.IDLE);
     setFriendlyMessage('');
     setShowComparison(false);
-  }, [paywallOpen, paywallFeatureKey]);
+    if (['monthly', 'yearly'].includes(pendingActionDescriptor?.planId)) {
+      setSelectedPlan(pendingActionDescriptor.planId);
+    } else {
+      setSelectedPlan('yearly');
+    }
+  }, [paywallOpen, paywallFeatureKey, pendingActionDescriptor]);
 
   const handleClose = useCallback(() => {
     if (isLoading) return; // Don't close while purchase is in-flight
@@ -248,7 +296,7 @@ export default function PremiumPaywall() {
   }, [closePaywall, isLoading, paywallFeatureKey]);
 
   const handlePurchase = useCallback(async () => {
-    if (isLoading) return;
+    if (isLoading || catalogLoading || !isNative || !selectedPackage) return;
 
     track.purchaseStarted(paywallFeatureKey, selectedPlan);
     setFriendlyMessage('');
@@ -279,7 +327,7 @@ export default function PremiumPaywall() {
     // All failure states: show banner, keep paywall open
     setFriendlyMessage(result.friendlyMessage || '');
     setPurchaseState(result.state);
-  }, [isLoading, isNative, paywallFeatureKey, selectedPlan, closePaywall]);
+  }, [isLoading, catalogLoading, isNative, selectedPackage, paywallFeatureKey, selectedPlan, closePaywall]);
 
   const handleRetry = useCallback(() => {
     setPurchaseState(PurchaseState.IDLE);
@@ -318,35 +366,9 @@ export default function PremiumPaywall() {
   // ── Stage content ───────────────────────────────────────────────────────────
   const renderStageContent = () => {
     const benefits = feature?.paywall?.benefits || [];
-    const testimonialIndex = (stage - 2) % TESTIMONIALS.length;
-
-    if (stage >= 2 && TESTIMONIALS[testimonialIndex]) {
-      const t = TESTIMONIALS[testimonialIndex];
-      return (
-        <motion.div
-          key={`stage-${stage}`}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          style={{
-            background: 'linear-gradient(135deg, #FFF8F0, #FFF3E8)',
-            border: '1px solid rgba(212,160,80,0.22)',
-            borderRadius: 16, padding: '16px 18px', marginBottom: 16,
-          }}
-        >
-          <StarRating count={t.rating} />
-          <p style={{ fontSize: 13.5, color: '#4A3B32', fontStyle: 'italic', lineHeight: 1.55, margin: '8px 0 10px' }}>
-            {t.text}
-          </p>
-          <div>
-            <span style={{ fontSize: 13, fontWeight: 800, color: '#2D1B14' }}>{t.author}</span>
-            <span style={{ fontSize: 12, color: '#8C7A6B' }}> · {t.bakery}</span>
-          </div>
-        </motion.div>
-      );
-    }
 
     return (
-      <motion.div key="stage-1" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <motion.div key={`stage-${stage}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
         {benefits.map((b, i) => (
           <div key={i} style={{
             display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -391,6 +413,9 @@ export default function PremiumPaywall() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 40 }}
             transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="premium-paywall-title"
             style={{
               position: 'fixed',
               bottom: 0, left: 0, right: 0,
@@ -425,10 +450,10 @@ export default function PremiumPaywall() {
                   {feature?.icon || '👑'}
                 </div>
                 <div>
-                  <div style={{ fontSize: 17, fontWeight: 900, color: '#2D1B14', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                  <div id="premium-paywall-title" style={{ fontSize: 17, fontWeight: 900, color: '#2D1B14', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
                     {feature?.paywall?.title || 'Unlock Premium'}
                   </div>
-                  {stage === 3 && (
+              {stage === 3 && (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
@@ -441,7 +466,7 @@ export default function PremiumPaywall() {
                       }}
                     >
                       <Zap size={10} fill="#fff" />
-                      3 Months FREE · Then ₹149/month
+                      Free trial for eligible Google Play accounts
                     </motion.div>
                   )}
                 </div>
@@ -475,18 +500,36 @@ export default function PremiumPaywall() {
               {/* Progressive stage content */}
               {renderStageContent()}
 
-              {/* Plan picker — disabled while loading */}
+              {/* Store localized prices are the source of truth for displayed plans. */}
               <div style={{ display: 'flex', gap: 10, margin: '16px 0' }}>
-                {PLANS.map((plan) => (
+                {plans.map((plan) => (
                   <PlanCard
                     key={plan.id}
                     plan={plan}
                     selected={selectedPlan === plan.id}
                     onSelect={setSelectedPlan}
-                    disabled={isLoading}
+                    disabled={isLoading || catalogLoading || !plan.available}
                   />
                 ))}
               </div>
+
+              {!isNative && (
+                <div
+                  role="status"
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    background: '#FFF7ED',
+                    border: '1px solid rgba(212,160,80,0.25)',
+                    color: '#6B5140',
+                    fontSize: 12.5,
+                    lineHeight: 1.5,
+                    marginBottom: 12,
+                  }}
+                >
+                  Subscribe securely through Google Play in the Cream &amp; Crust Android app.
+                </div>
+              )}
 
               {/* Comparison table toggle */}
               <button
@@ -562,7 +605,7 @@ export default function PremiumPaywall() {
               <motion.button
                 whileTap={{ scale: isLoading ? 1 : 0.97 }}
                 onClick={handlePurchase}
-                disabled={isLoading || purchaseState === PurchaseState.PENDING}
+                disabled={isLoading || catalogLoading || !isNative || !selectedPackage || purchaseState === PurchaseState.PENDING}
                 id="paywall-upgrade-btn"
                 style={{
                   width: '100%', padding: '15px 0', borderRadius: 14, border: 'none',
@@ -576,7 +619,9 @@ export default function PremiumPaywall() {
                   letterSpacing: '-0.01em',
                 }}
               >
-                {isLoading ? (
+                {catalogLoading ? (
+                  <>Loading plans…</>
+                ) : isLoading ? (
                   <>
                     <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} />
                     {purchaseState === PurchaseState.PURCHASING ? 'Opening Google Play…' : 'Processing…'}
@@ -584,7 +629,11 @@ export default function PremiumPaywall() {
                 ) : (
                   <>
                     <Crown size={16} fill="#fff" />
-                    {stage >= 3 ? 'Start 3-Month Free Trial' : 'Upgrade to Pro'} · {selectedPlan === 'yearly' ? '₹1,500/yr' : '₹149/mo'}
+                    {!isNative
+                      ? 'Subscribe in the Android app'
+                      : !selectedPackage
+                        ? 'Plan unavailable'
+                        : `Continue with Google Play · ${selectedPackage.product?.priceString || ''}${selectedPlan === 'yearly' ? '/year' : '/month'}`}
                   </>
                 )}
               </motion.button>
@@ -593,7 +642,7 @@ export default function PremiumPaywall() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
                 <button
                   onClick={handleRestore}
-                  disabled={restoring || isLoading}
+                  disabled={!isNative || restoring || isLoading}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 5,
                     background: 'none', border: 'none', color: '#8C7A6B',
@@ -607,7 +656,7 @@ export default function PremiumPaywall() {
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#8C7A6B', fontSize: 11 }}>
                   <Shield size={11} />
-                  30-day money-back guarantee
+                  Secure billing by Google Play
                 </div>
               </div>
 
@@ -627,7 +676,7 @@ export default function PremiumPaywall() {
               </button>
 
               <div style={{ textAlign: 'center', fontSize: 10.5, color: '#C0B4AB', lineHeight: 1.5 }}>
-                Cancel anytime · <span style={{ textDecoration: 'underline', cursor: 'pointer' }}>Privacy Policy</span> · <span style={{ textDecoration: 'underline', cursor: 'pointer' }}>Terms of Use</span>
+                Cancel anytime · <Link to="/privacy" style={{ color: 'inherit' }}>Privacy Policy</Link> · <Link to="/terms" style={{ color: 'inherit' }}>Terms of Use</Link>
               </div>
             </div>
           </motion.div>

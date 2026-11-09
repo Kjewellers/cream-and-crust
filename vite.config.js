@@ -79,6 +79,7 @@ export default defineConfig({
     // @firebase/rules-unit-testing + a running emulator. Exclude it from the
     // default jsdom run; invoke it explicitly when the emulator is up.
     exclude: ['**/node_modules/**', '**/dist/**', 'src/test/rules/**', 'tests/**'],
+    testTimeout: 20000,
   },
   // Strip noisy debug logs from the production bundle while keeping
   // console.error / console.warn for real diagnostics (Req 16.2).

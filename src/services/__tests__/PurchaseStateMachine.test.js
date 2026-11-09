@@ -19,6 +19,18 @@ vi.mock('../purchases', () => ({
   purchasePackage: vi.fn(),
   restorePurchases: vi.fn(),
   isNativeAndroidRuntime: vi.fn(() => true),
+  initPurchases: vi.fn(async () => true),
+  findPackageForPlan: vi.fn((offering, planId) => {
+    const packages = offering?.availablePackages || [];
+    return packages.find((p) =>
+      planId === 'yearly'
+        ? (p.packageType === 'ANNUAL' || (p.identifier && p.identifier.includes('annual')))
+        : (p.packageType === 'MONTHLY' || (p.identifier && p.identifier.includes('monthly')))
+    ) || packages[0] || null;
+  }),
+  subscriptionStateFromCustomerInfo: vi.fn((customerInfo) => ({
+    isActive: Boolean(customerInfo?.entitlements?.active && Object.keys(customerInfo.entitlements.active).length > 0),
+  })),
 }));
 
 vi.mock('../../utils/logger', () => ({

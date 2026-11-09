@@ -10,6 +10,17 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid != null;
     }
 
+    // Premium access is granted only by the trusted RevenueCat webhook.
+    // Client-written subscription fields are never accepted as proof of payment.
+    function hasActiveProSubscription() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.status == 'active'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.source == 'revenuecat_webhook'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.expiryDate is timestamp
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.subscription.expiryDate > request.time;
+    }
+
     function isDocOwner() {
       return isAuthenticated() && resource.data.uid == request.auth.uid;
     }
@@ -35,9 +46,15 @@ service cloud.firestore {
     // ======================================================
     match /users/{userId} {
       allow read:            if isAuthenticated() && request.auth.uid == userId;
-      // Allow create if auth matches, but prevent overwriting existing user data maliciously
-      allow create:          if isAuthenticated() && request.auth.uid == userId;
-      allow update:          if isAuthenticated() && request.auth.uid == userId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'uid']));
+      // Authenticated users use the same admin app experience; the role field
+      // remains server-managed, and subscription state is backend-only.
+      allow create:          if isAuthenticated() && request.auth.uid == userId
+                             && request.resource.data.role == 'admin'
+                             && !request.resource.data.keys().hasAny(['subscription']);
+      allow update:          if isAuthenticated() && request.auth.uid == userId
+                             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'uid', 'subscription'])
+                             && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['menuBuilder'])
+                                 || hasActiveProSubscription());
       allow delete:          if false; // Strict: Users cannot delete their own root doc directly without cloud function
     }
 
@@ -47,8 +64,12 @@ service cloud.firestore {
     // ======================================================
     match /business/{bizId} {
       allow read:  if true;
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
-      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid
+                    && (!request.resource.data.keys().hasAny(['menuSettings', 'menuPublished', 'menuPublishedAt'])
+                        || hasActiveProSubscription());
+      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid
+                    && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['menuSettings', 'menuPublished', 'menuPublishedAt'])
+                        || hasActiveProSubscription());
       allow delete: if false; // Strict: Business profiles shouldn't be deleted by client
     }
 
@@ -175,7 +196,8 @@ service cloud.firestore {
     }
 
     match /subscriptions/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow write: if false; // Subscription lifecycle is owned by trusted backend services.
     }
 
     // ======================================================
@@ -197,7 +219,8 @@ service cloud.firestore {
                     && validString(request.resource.data.bakeryId, 1, 100)
                     && exists(/databases/$(database)/documents/business/$(request.resource.data.bakeryId));
       // Only the bakery owner can read/delete their own events
-      allow read, delete: if isAuthenticated() && resource.data.bakeryId == request.auth.uid;
+      allow read, delete: if isAuthenticated() && resource.data.bakeryId == request.auth.uid
+                          && hasActiveProSubscription();
       allow update: if false;
     }
 
@@ -206,37 +229,37 @@ service cloud.firestore {
     // Only Cloud Functions write. Bakery owners read their own.
     // ======================================================
     match /analytics_summary/{bakeryId} {
-      allow read: if isAuthenticated() && request.auth.uid == bakeryId;
+      allow read: if isAuthenticated() && request.auth.uid == bakeryId && hasActiveProSubscription();
       allow create, update, delete: if false; // Cloud Functions only
     }
 
     match /analytics_products/{docId} {
-      allow read: if isAuthenticated() && resource.data.bakeryId == request.auth.uid;
+      allow read: if isAuthenticated() && resource.data.bakeryId == request.auth.uid && hasActiveProSubscription();
       allow create, update, delete: if false; // Cloud Functions only
     }
 
     match /analytics_peak_hours/{bakeryId} {
-      allow read: if isAuthenticated() && request.auth.uid == bakeryId;
+      allow read: if isAuthenticated() && request.auth.uid == bakeryId && hasActiveProSubscription();
       allow create, update, delete: if false; // Cloud Functions only
     }
 
     match /analytics_cities/{docId} {
-      allow read: if isAuthenticated() && resource.data.bakeryId == request.auth.uid;
+      allow read: if isAuthenticated() && resource.data.bakeryId == request.auth.uid && hasActiveProSubscription();
       allow create, update, delete: if false; // Cloud Functions only
     }
 
     match /analytics_sources/{bakeryId} {
-      allow read: if isAuthenticated() && request.auth.uid == bakeryId;
+      allow read: if isAuthenticated() && request.auth.uid == bakeryId && hasActiveProSubscription();
       allow create, update, delete: if false; // Cloud Functions only
     }
 
     match /analytics_customers/{bakeryId} {
-      allow read: if isAuthenticated() && request.auth.uid == bakeryId;
+      allow read: if isAuthenticated() && request.auth.uid == bakeryId && hasActiveProSubscription();
       allow create, update, delete: if false; // Cloud Functions only
     }
 
     match /analytics_daily/{docId} {
-      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid && hasActiveProSubscription();
       allow create, update, delete: if false; // Cloud Functions only
     }
 

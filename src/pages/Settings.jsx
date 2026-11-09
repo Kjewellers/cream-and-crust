@@ -250,7 +250,7 @@ function PremiumStatusWidget({ navigate }) {
                 <span>Renews {expiryLabel}</span>
               )}
               {!isPro && (
-                <span>Upgrade to unlock AI assistant, analytics & custom domain</span>
+                <span>Upgrade to unlock AI assistant, advanced analytics & digital menus</span>
               )}
             </div>
           </div>
@@ -259,7 +259,7 @@ function PremiumStatusWidget({ navigate }) {
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.96 }}
-            onClick={() => openPaywall('AI_INVOICE')}
+            onClick={() => openPaywall('AI_ASSISTANT')}
             style={{
               padding: '10px 18px', borderRadius: 99, border: 'none', flexShrink: 0,
               background: 'linear-gradient(135deg, #D4A050, #F5D78E)',

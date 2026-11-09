@@ -14,7 +14,7 @@ import { ListenerRegistry } from '../core/listeners/ListenerRegistry';
 export const DataContext = createContext(null);
 
 export function DataProvider({ children }) {
-  const { currentUser, userRole, isAdmin, loading: authLoading, business } = useAuth();
+  const { currentUser, loading: authLoading, business } = useAuth();
   
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -37,9 +37,7 @@ export function DataProvider({ children }) {
     setProducts([]);
     setAnalytics(null);
 
-    const isBakerOrAdmin = isAdmin || userRole === 'baker';
-
-    if (!currentUser?.uid || !isBakerOrAdmin || authLoading) {
+    if (!currentUser?.uid || authLoading) {
       setLoading(false);
       return;
     }
@@ -141,7 +139,7 @@ export function DataProvider({ children }) {
         try { if (typeof unsub === 'function') unsub(); } catch (_) {}
       });
     };
-  }, [currentUser?.uid, userRole, isAdmin, authLoading]);
+  }, [currentUser?.uid, authLoading]);
 
   // Memoize context value to prevent unneeded child component re-renders
   const contextValue = useMemo(() => ({

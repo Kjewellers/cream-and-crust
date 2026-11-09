@@ -16,6 +16,7 @@ const RC_API_KEY = import.meta.env.VITE_REVENUECAT_API_KEY;
 const ENTITLEMENT_NAMES = ['pro', 'premium'];
 const OFFERINGS_CACHE_KEY = 'cc_cached_rc_offerings';
 const CUSTOMER_INFO_CACHE_KEY = 'cc_cached_customer_info';
+export const SUBSCRIPTION_REFRESH_EVENT = 'cc:subscription-refresh';
 
 export const isNativeAndroidRuntime = () => {
   try {
@@ -32,6 +33,8 @@ export const isNativeAndroidRuntime = () => {
 
 let _Purchases = null;
 let _configuredUid = null;
+let _initPromise = null;
+let _initializingUid = null;
 
 export const INIT_STATE = Object.freeze({
   UNINITIALIZED: 'UNINITIALIZED',
@@ -99,40 +102,85 @@ export async function initPurchases(uid) {
     return true;
   }
 
+  if (_initPromise) {
+    if (_initializingUid === uid) return _initPromise;
+    await _initPromise.catch(() => false);
+    return initPurchases(uid);
+  }
+
   _initState = INIT_STATE.INITIALIZING;
   _initError = null;
 
-  try {
-    const Purchases = await getPlugin();
-    if (!Purchases) {
-      _initState = INIT_STATE.FAILED;
-      _initError = 'Billing Plugin Not Available';
-      return false;
-    }
+  _initializingUid = uid;
+  const initPromise = (async () => {
+    try {
+      const Purchases = await getPlugin();
+      if (!Purchases) {
+        _initState = INIT_STATE.FAILED;
+        _initError = 'Billing Plugin Not Available';
+        return false;
+      }
 
-    if (_configuredUid && _configuredUid !== uid) {
-      await Purchases.login({ appUserId: uid });
+      if (_configuredUid && _configuredUid !== uid) {
+        await Purchases.login({ appUserId: uid });
+        _configuredUid = uid;
+        _initState = INIT_STATE.READY;
+        log.purchase('RevenueCat user switched:', uid);
+        return true;
+      }
+
+      await Purchases.initialize({
+        apiKey: RC_API_KEY,
+        appUserId: uid,
+      });
+
       _configuredUid = uid;
       _initState = INIT_STATE.READY;
-      log.purchase('RevenueCat user switched:', uid);
+      log.purchase('RevenueCat configured for UID:', uid);
       return true;
+    } catch (e) {
+      _initState = INIT_STATE.FAILED;
+      _initError = e.message || 'Initialization Exception';
+      log.purchase.warn('RevenueCat init failed:', e.message);
+      return false;
     }
-
-    await Purchases.initialize({
-      apiKey: RC_API_KEY,
-      appUserId: uid,
-    });
-
-    _configuredUid = uid;
-    _initState = INIT_STATE.READY;
-    log.purchase('RevenueCat configured for UID:', uid);
-    return true;
-  } catch (e) {
-    _initState = INIT_STATE.FAILED;
-    _initError = e.message || 'Initialization Exception';
-    log.purchase.warn('RevenueCat init failed:', e.message);
-    return false;
+  })();
+  _initPromise = initPromise;
+  try {
+    return await initPromise;
+  } finally {
+    if (_initPromise === initPromise) {
+      _initPromise = null;
+      _initializingUid = null;
+    }
   }
+}
+
+function cacheCustomerInfo(customerInfo) {
+  if (!customerInfo || !_configuredUid) return;
+  try {
+    localStorage.setItem(
+      CUSTOMER_INFO_CACHE_KEY,
+      JSON.stringify({ uid: _configuredUid, customerInfo })
+    );
+  } catch {
+    // RevenueCat's native cache remains available if browser storage is blocked.
+  }
+}
+
+function getCachedCustomerInfo() {
+  if (!_configuredUid) return null;
+  try {
+    const cached = JSON.parse(localStorage.getItem(CUSTOMER_INFO_CACHE_KEY) || 'null');
+    return cached?.uid === _configuredUid ? cached.customerInfo || null : null;
+  } catch {
+    return null;
+  }
+}
+
+function notifySubscriptionRefresh() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(SUBSCRIPTION_REFRESH_EVENT));
 }
 
 function parseRevenueCatDate(value, millisValue) {
@@ -159,7 +207,7 @@ export function getVerifiedEntitlement(customerInfo) {
         activeEntitlement.expirationDate,
         activeEntitlement.expirationDateMillis
       );
-      if (!exp || exp.getTime() > now) {
+      if (exp && exp.getTime() > now) {
         return { name, entitlement: activeEntitlement };
       }
     }
@@ -170,7 +218,7 @@ export function getVerifiedEntitlement(customerInfo) {
         entitlement.expirationDate,
         entitlement.expirationDateMillis
       );
-      if (!exp || exp.getTime() > now) {
+      if (exp && exp.getTime() > now) {
         return { name, entitlement };
       }
     }
@@ -237,10 +285,7 @@ export async function syncCustomerInfo(uid) {
  */
 export async function getCustomerInfo() {
   const Purchases = await getPlugin();
-  if (!Purchases) {
-    const cached = localStorage.getItem(CUSTOMER_INFO_CACHE_KEY);
-    return cached ? JSON.parse(cached) : null;
-  }
+  if (!Purchases) return getCachedCustomerInfo();
 
   try {
     const customerInfo = await retryWithBackoff(async () => {
@@ -248,15 +293,29 @@ export async function getCustomerInfo() {
       return res.customerInfo;
     });
 
-    if (customerInfo) {
-      localStorage.setItem(CUSTOMER_INFO_CACHE_KEY, JSON.stringify(customerInfo));
-    }
+    cacheCustomerInfo(customerInfo);
     return customerInfo;
   } catch (err) {
     log.purchase.warn('Failed to fetch live CustomerInfo, using cache:', err.message);
-    const cached = localStorage.getItem(CUSTOMER_INFO_CACHE_KEY);
-    return cached ? JSON.parse(cached) : null;
+    return getCachedCustomerInfo();
   }
+}
+
+/** Resolve only the selected billing period; never silently purchase another plan. */
+export function findPackageForPlan(offering, planId) {
+  const packages = offering?.availablePackages;
+  if (!Array.isArray(packages)) return null;
+
+  const yearly = planId === 'yearly';
+  const targetType = yearly ? 'ANNUAL' : 'MONTHLY';
+  const terms = yearly ? ['annual', 'yearly', 'year'] : ['monthly', 'month'];
+
+  return packages.find((pkg) => String(pkg?.packageType || '').toUpperCase() === targetType)
+    || packages.find((pkg) => {
+      const searchable = `${pkg?.identifier || ''} ${pkg?.product?.identifier || pkg?.product?.id || ''}`.toLowerCase();
+      return terms.some((term) => searchable.includes(term));
+    })
+    || null;
 }
 
 /**
@@ -330,8 +389,9 @@ export async function purchasePackage(pkg) {
        throw err;
     }
     if (customerInfo) {
-      localStorage.setItem(CUSTOMER_INFO_CACHE_KEY, JSON.stringify(customerInfo));
+      cacheCustomerInfo(customerInfo);
     }
+    notifySubscriptionRefresh();
     return customerInfo;
   } catch (err) {
     if (err.code === 'PURCHASE_CANCELLED') throw err;
@@ -349,8 +409,9 @@ export async function restorePurchases() {
   try {
     const { customerInfo } = await Purchases.restorePurchases();
     if (customerInfo) {
-      localStorage.setItem(CUSTOMER_INFO_CACHE_KEY, JSON.stringify(customerInfo));
+      cacheCustomerInfo(customerInfo);
     }
+    notifySubscriptionRefresh();
     return customerInfo;
   } catch (err) {
     throw new Error(formatBillingError(err));

@@ -14,6 +14,7 @@ import {
   FileText,
   CheckCircle,
   Download,
+  Crown,
   User,
   Calendar,
   MapPin,
@@ -34,6 +35,7 @@ import {
 import { shareToWhatsApp } from '../services/whatsapp';
 import { nativeShareFile } from '../services/nativeShare';
 import { useAuth } from '../context/AuthContext';
+import { useSubscriptionContext } from '../context/SubscriptionContext';
 import { useData } from '../context/DataContext';
 import { formatDate, formatTime, formatCurrency, formatOrderNumber } from '../utils/date';
 import { exportToCSV } from '../utils/exportUtils';
@@ -980,6 +982,8 @@ const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'Online', 'Partial'];
 
 export default function Orders() {
   const { orders, setOrders, customers, setCustomers, loading } = useData();
+  const { currentUser, isCustomer, business } = useAuth();
+  const { isPro, subscriptionLoading, openPaywall } = useSubscriptionContext();
   const [showModal, setShowModal] = useState(false);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -1014,7 +1018,15 @@ export default function Orders() {
   const [recipeList, setRecipeList] = useState([]); // Task 3.9
   // Status-update WhatsApp modal state (replaces the popup-blocked confirm+setTimeout)
   const [statusUpdate, setStatusUpdate] = useState(null);
-  const { currentUser, isCustomer, business } = useAuth();
+
+  const handleExport = () => {
+    if (subscriptionLoading) return;
+    if (!isPro) {
+      openPaywall('BULK_IMPORT');
+      return;
+    }
+    exportToCSV(orders, 'orders_export');
+  };
 
   useEffect(() => {
     const handleOpenModal = () => setShowModal(true);
@@ -3016,10 +3028,10 @@ export default function Orders() {
 
           <button
             className="btn btn-outline desktop-only"
-            onClick={() => exportToCSV(orders, 'orders_export')}
+            onClick={handleExport}
             style={{ borderRadius: 12, height: 40 }}
           >
-            <Download size={18} /> Export
+            {!isPro && <Crown size={14} />} <Download size={18} /> Export
           </button>
 
           <button

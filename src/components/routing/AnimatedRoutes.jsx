@@ -1,7 +1,6 @@
 import React, { lazy, Suspense } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { useAuth } from '../../context/AuthContext';
 import RouteErrorBoundary from '../RouteErrorBoundary';
 import { PageWrapper, DelayedFallback } from './PageWrapper';
 
@@ -39,8 +38,6 @@ const SubscriptionGate = lazy(() => import('../SubscriptionGate'));
 
 export default function AnimatedRoutes() {
   const location = useLocation();
-  const { isAdmin, userRole } = useAuth();
-  const isBaker = userRole === 'baker';
 
   const renderRoute = (path, element) => (
     <Route
@@ -55,7 +52,7 @@ export default function AnimatedRoutes() {
     />
   );
 
-  const renderPremiumRoute = (path, element) => (
+  const renderPremiumRoute = (path, element, featureKey) => (
     <Route
       path={path}
       element={
@@ -63,7 +60,7 @@ export default function AnimatedRoutes() {
           <Suspense fallback={<DelayedFallback />}>
             <PageWrapper>
               <Suspense fallback={null}>
-                <SubscriptionGate>{element}</SubscriptionGate>
+                <SubscriptionGate featureKey={featureKey}>{element}</SubscriptionGate>
               </Suspense>
             </PageWrapper>
           </Suspense>
@@ -75,41 +72,32 @@ export default function AnimatedRoutes() {
   return (
     <AnimatePresence>
       <Routes location={location} key={location.pathname}>
-        {isAdmin || isBaker ? (
-          <>
+        <>
             {renderRoute('/', <Dashboard />)}
-            {renderPremiumRoute('/ai-assistant', <AIAssistantHub />)}
+            {renderPremiumRoute('/ai-assistant', <AIAssistantHub />, 'AI_ASSISTANT')}
             {renderRoute('/orders', <Orders />)}
             {renderRoute('/calendar', <Calendar />)}
             {renderRoute('/products', <Products />)}
             {renderRoute('/customers', <Customers />)}
             {renderRoute('/inventory', <Inventory />)}
             {renderRoute('/recipes', <Recipes />)}
-            {renderPremiumRoute('/analytics', <Analytics />)}
+            {renderPremiumRoute('/analytics', <Analytics />, 'ADVANCED_ANALYTICS')}
             {renderRoute('/expenses', <Expenses />)}
             {renderRoute('/shopping-list', <ShoppingList />)}
             {renderRoute('/recycle-bin', <RecycleBin />)}
             {renderRoute('/profile', <Profile />)}
             {renderRoute('/settings', <SettingsPage />)}
-            {renderPremiumRoute('/menu-builder', <MenuDashboard />)}
-            {renderPremiumRoute('/menu-builder/analytics', <MenuAnalytics />)}
+            {renderPremiumRoute('/menu-builder', <MenuDashboard />, 'MENU_TEMPLATES')}
+            {renderPremiumRoute('/menu-builder/analytics', <MenuAnalytics />, 'MENU_TEMPLATES')}
             {renderRoute('/debug-analytics', <DebugAnalytics />)}
-            {renderPremiumRoute('/menu-builder/create', <CreateMenu />)}
-            {renderPremiumRoute('/menu-builder/categories', <MenuCategories />)}
-            {renderPremiumRoute('/menu-builder/products', <MenuProducts />)}
-            {renderPremiumRoute('/menu-builder/theme', <MenuThemeCustomizer />)}
-            {renderPremiumRoute('/menu-builder/preview', <MenuLivePreview />)}
+            {renderPremiumRoute('/menu-builder/create', <CreateMenu />, 'MENU_TEMPLATES')}
+            {renderPremiumRoute('/menu-builder/categories', <MenuCategories />, 'MENU_TEMPLATES')}
+            {renderPremiumRoute('/menu-builder/products', <MenuProducts />, 'MENU_TEMPLATES')}
+            {renderPremiumRoute('/menu-builder/theme', <MenuThemeCustomizer />, 'MENU_TEMPLATES')}
+            {renderPremiumRoute('/menu-builder/preview', <MenuLivePreview />, 'MENU_TEMPLATES')}
             {renderRoute('/super-admin', <SuperAdmin />)}
             {renderRoute('/subscribe', <Subscribe />)}
-          </>
-        ) : (
-          <>
-            {renderRoute('/', <Products />)}
-            {renderRoute('/orders', <Orders />)}
-            {renderRoute('/profile', <Profile />)}
-            {renderRoute('/settings', <SettingsPage />)}
-          </>
-        )}
+        </>
         {renderRoute('/menu/:username', <PublishedMenu />)}
         {renderRoute('/order/:username', <PublicOrderForm />)}
         {renderRoute('/privacy', <PrivacyPolicy />)}

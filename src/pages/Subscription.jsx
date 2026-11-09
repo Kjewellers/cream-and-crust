@@ -1,8 +1,8 @@
 /**
  * Subscription.jsx — Upgrade / paywall screen.
  *
- * On native Android: fetches real packages from RevenueCat, launches the
- * Google Play billing sheet on tap, and writes the entitlement to Firestore.
+ * On native Android: fetches RevenueCat packages and launches Google Play.
+ * The trusted webhook mirrors verified subscription state to Firestore.
  *
  * On web / PWA: shows the plan UI with a "Available on Android app" notice
  * so the screen still looks great without crashing.
@@ -13,40 +13,34 @@ import { Crown, Check, ChevronLeft, Loader2, RefreshCw, Smartphone } from 'lucid
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { usePurchases } from '../hooks/usePurchases';
+import { findPackageForPlan } from '../services/purchases';
 import { PLAN, ANNUAL_PLAN } from '../services/subscription';
 
-/* ─── Static plan display data (mirrors what's in Play Console) ─── */
+/* ─── Plan labels; localized prices come from Google Play at runtime. ─── */
 const PLANS_DISPLAY = [
   {
-    id: 'pro_monthly',       // must match Play Console product ID
-    rcIdentifier: 'Monthly', // RevenueCat package identifier (MONTHLY)
+    id: 'pro_monthly',
     name: 'Pro Monthly',
-    price: `${PLAN.currency}${PLAN.price}`,
     period: `/${PLAN.period}`,
-    description: 'Perfect for home bakers & small bakeries.',
+    description: 'Pro access with monthly billing. Cancel through Google Play.',
     features: [
-      'Unlimited Orders',
-      'Invoice PDF & WhatsApp',
-      'Analytics & Reports',
-      'Inventory Management',
-      'Recipe Studio',
-      'Menu Builder & Website',
-      'Priority Support',
+      'AI Bakery Assistant',
+      'Advanced analytics',
+      'Shareable digital menu',
+      'CSV exports for bakery records',
     ],
     popular: false,
   },
   {
     id: 'pro_annual',
-    rcIdentifier: 'Annual',
     name: 'Pro Annual',
-    price: `${ANNUAL_PLAN.currency}${ANNUAL_PLAN.price.toLocaleString('en-IN')}`,
     period: `/${ANNUAL_PLAN.period}`,
-    description: `Best value — save ${ANNUAL_PLAN.currency}${ANNUAL_PLAN.savings} vs monthly.`,
+    description: 'The same Pro features with annual billing through Google Play.',
     features: [
-      'Everything in Monthly',
-      '2 Months Free',
-      'Advanced CSV Export',
-      'Early Access to New Features',
+      'AI Bakery Assistant',
+      'Advanced analytics',
+      'Shareable digital menu',
+      'CSV exports for bakery records',
     ],
     popular: true,
   },
@@ -62,19 +56,7 @@ export default function Subscribe() {
    * If offering isn't loaded yet (web / loading), returns null.
    */
   const getRcPackage = (planDisplay) => {
-    if (!offering?.availablePackages || offering.availablePackages.length === 0) return null;
-    const isYearly = planDisplay.id.includes('annual') || planDisplay.id.includes('yearly') || planDisplay.rcIdentifier.toLowerCase().includes('annual');
-    return offering.availablePackages.find((p) => {
-      const pId = (p.identifier || '').toLowerCase();
-      const prodId = (p.product?.identifier || p.product?.id || '').toLowerCase();
-      const pType = (p.packageType || '').toLowerCase();
-
-      if (isYearly) {
-        return pId.includes('annual') || pId.includes('yearly') || pType === 'annual' || prodId.includes('annual') || prodId.includes('yearly');
-      } else {
-        return pId.includes('monthly') || pType === 'monthly' || prodId.includes('monthly');
-      }
-    }) || offering.availablePackages[0] || null;
+    return findPackageForPlan(offering, planDisplay.id.includes('annual') ? 'yearly' : 'monthly');
   };
 
   const handleSubscribe = async (planDisplay) => {
@@ -84,7 +66,7 @@ export default function Subscribe() {
     }
 
     const pkg = getRcPackage(planDisplay);
-    const success = await purchase(pkg, planDisplay.id);
+    const success = await purchase(pkg);
     if (success) {
       setTimeout(() => {
         navigate('/');
@@ -166,7 +148,7 @@ export default function Subscribe() {
               fontSize: 13, fontWeight: 700, color: '#B8860B',
             }}
           >
-            ✨ 3 months free trial included
+            ✨ Free trial for eligible Google Play accounts
           </div>
         </div>
 
@@ -245,7 +227,9 @@ export default function Subscribe() {
                 {/* Price — show Play Console live price on native, static on web */}
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 22 }}>
                   <span style={{ fontSize: 38, fontWeight: 900, color: '#2D1B14', letterSpacing: '-0.03em' }}>
-                    {rcPkg?.product?.priceString ?? plan.price}
+                    {isNativeApp
+                      ? rcPkg?.product?.priceString ?? (offeringsLoading ? 'Loading…' : 'Unavailable')
+                      : 'View in Google Play'}
                   </span>
                   <span style={{ fontSize: 15, color: '#8A7A6E', fontWeight: 600 }}>
                     {plan.period}
@@ -275,7 +259,7 @@ export default function Subscribe() {
                 <button
                   id={`subscribe-btn-${plan.id}`}
                   onClick={() => handleSubscribe(plan)}
-                  disabled={isPurchasing}
+                  disabled={isPurchasing || offeringsLoading || !isNativeApp || !rcPkg}
                   style={{
                     width: '100%',
                     background: plan.popular
@@ -294,7 +278,13 @@ export default function Subscribe() {
                   {isPurchasing ? (
                     <><Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> Processing...</>
                   ) : (
-                    'Start Free Trial'
+                    !isNativeApp
+                      ? 'Subscribe in Android app'
+                      : offeringsLoading
+                        ? 'Loading plans…'
+                        : !rcPkg
+                          ? 'Plan unavailable'
+                          : 'Continue with Google Play'
                   )}
                 </button>
               </motion.div>

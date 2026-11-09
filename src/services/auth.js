@@ -76,28 +76,15 @@ export const loginUser = async (email, password) => {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Fetch user role
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    let role = 'admin'; // default role is now admin
-    if (userDoc.exists()) {
-      role = userDoc.data().role || 'admin';
-    }
-
-    // Ensure they are promoted if they were a customer
-    if (role === 'customer') {
-      await promoteToAdmin(user.uid);
-      role = 'admin';
-    }
-
-    log.auth('loginUser: success, uid:', user.uid, 'role:', role);
-    return { user, role };
+    log.auth('loginUser: success, uid:', user.uid, 'role: admin');
+    return { user, role: 'admin' };
   } catch (error) {
     log.auth.error('loginUser failed:', error?.code, error?.message);
     throw error;
   }
 };
 
-// Register a new user (defaults to customer)
+// Register a new administrator account.
 export const registerUser = async (email, password, name) => {
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -825,25 +812,9 @@ export const logoutUser = async () => {
   }
 };
 
-// Fetch user role independently
-export const getUserRole = async (uid) => {
-  try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
-    if (userDoc.exists()) {
-      const role = userDoc.data().role || 'admin';
-      if (role === 'customer') {
-        await promoteToAdmin(uid);
-        return 'admin';
-      }
-      return role;
-    }
-    // If user exists in Auth but not in Firestore, create doc with admin role
-    return 'admin';
-  } catch (error) {
-    console.error('Error fetching user role:', error);
-    return 'admin';
-  }
-};
+// Every authenticated account uses the same administrator experience.
+// Access to another user's data remains protected by UID-scoped Firestore rules.
+export const getUserRole = async () => 'admin';
 
 // Initial Setup Helper: Promote a user to admin
 export const promoteToAdmin = async (uid) => {

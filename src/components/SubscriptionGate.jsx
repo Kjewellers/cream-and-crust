@@ -1,13 +1,14 @@
 import React from 'react';
-import { useSubscription } from '../hooks/useSubscription';
 import { Lock, Crown } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import { useSubscriptionContext } from '../context/SubscriptionContext';
+import { useSubscription } from '../hooks/useSubscription';
 
 export default function SubscriptionGate({ children, fallback, featureKey = 'generic' }) {
-  const { isActive, loading } = useSubscription();
-  const { openPaywall } = useSubscriptionContext();
-  const navigate = useNavigate();
+  const context = useSubscriptionContext();
+  const sub = useSubscription();
+  const isActive = Boolean(context?.isPro || sub?.isActive);
+  const loading = Boolean(context?.subscriptionLoading ?? sub?.loading);
+  const openPaywall = context?.openPaywall;
 
   if (loading) {
     return (

@@ -32,6 +32,7 @@ import { capturePaywallState, restorePaywallState } from '../services/PaywallSta
 import { wasRecentlySuccessful } from '../services/PurchaseStateMachine';
 import { log } from '../utils/logger';
 import { useAuth } from './AuthContext';
+import { SUBSCRIPTION_REQUIRED_EVENT } from '../services/subscriptionEvents';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 const HEALTH_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -168,6 +169,17 @@ export function SubscriptionProvider({ children }) {
     setPaywallOpen(true);
     log.purchase('paywall:opened', { featureKey });
   }, []);
+
+  // Backend subscription checks are authoritative. If a feature request is
+  // denied, bring up the same contextual paywall used by in-app feature gates.
+  useEffect(() => {
+    const handleSubscriptionRequired = (event) => {
+      const featureKey = event.detail?.featureKey;
+      if (featureKey) openPaywall(featureKey);
+    };
+    window.addEventListener(SUBSCRIPTION_REQUIRED_EVENT, handleSubscriptionRequired);
+    return () => window.removeEventListener(SUBSCRIPTION_REQUIRED_EVENT, handleSubscriptionRequired);
+  }, [openPaywall]);
 
   const closePaywall = useCallback((featureKey, { cancelled = false } = {}) => {
     if (featureKey && cancelled) {

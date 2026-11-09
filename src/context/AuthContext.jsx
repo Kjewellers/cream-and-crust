@@ -22,7 +22,7 @@ export function AuthProvider({ children }) {
       return null;
     }
   });
-  const [userRole, setUserRole] = useState(() => localStorage.getItem('cc_userRole') || null);
+  const [userRole, setUserRole] = useState('admin');
   const [onboardingCompleted, setOnboardingCompleted] = useState(true);
   const [business, setBusiness] = useState(null);
   const [userDetails, setUserDetails] = useState(null);
@@ -54,7 +54,11 @@ export function AuthProvider({ children }) {
       setLoading(false);
     }, 8000);
 
+    let authEventRevision = 0;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      const eventRevision = ++authEventRevision;
+      const isCurrentEvent = () => eventRevision === authEventRevision;
+
       if (initFailsafe) {
         clearTimeout(initFailsafe);
         initFailsafe = null;
@@ -73,6 +77,7 @@ export function AuthProvider({ children }) {
         if (user?.isAnonymous && !onPublicRoute) {
           console.warn('[CC:Auth] Cleaning up anonymous user');
           try { await user.delete?.(); } catch (_) { /* ignore */ }
+          if (!isCurrentEvent()) return;
           clearAIPrivacyState();
           localStorage.removeItem('cc_currentUser');
           localStorage.removeItem('cc_userRole');
@@ -95,11 +100,12 @@ export function AuthProvider({ children }) {
             clearAIPrivacyState();
             setBusiness(null);
             setUserDetails(null);
-            setUserRole(null);
+            setUserRole('admin');
           }
           lastLoadedUid.current = user.uid;
 
           setCurrentUser(user);
+          setUserRole('admin');
           localStorage.setItem(
             'cc_currentUser',
             JSON.stringify({
@@ -123,6 +129,11 @@ export function AuthProvider({ children }) {
             withTimeout(getDoc(doc(db, 'business', user.uid)), 3000, { exists: () => false }),
             withTimeout(getOnboardingStatus(user.uid), 3000, true),
           ]);
+
+          // Auth callbacks can overlap while these reads are in flight. Never
+          // let an older user's slower Firestore response replace the account
+          // that signed in most recently.
+          if (!isCurrentEvent()) return;
 
           console.warn('[CC:Auth] Parallel reads done in', Date.now() - t0, 'ms — role:', roleResult);
 
@@ -167,33 +178,44 @@ export function AuthProvider({ children }) {
           setUserDetails(null);
         }
       } catch (error) {
+        if (!isCurrentEvent()) return;
         console.error('[CC:Auth] onAuthStateChanged error:', error);
         // Graceful degradation — show app in limited state rather than hanging
         if (user) {
           setCurrentUser(user);
           setUserRole('admin');
+          localStorage.setItem('cc_userRole', 'admin');
           setOnboardingCompleted(true);
         }
       } finally {
-        const elapsed = Date.now() - t0;
-        console.warn('[CC:Auth] setLoading(false) — total init time:', elapsed, 'ms');
-        setLoading(false);
+        if (isCurrentEvent()) {
+          const elapsed = Date.now() - t0;
+          console.warn('[CC:Auth] setLoading(false) — total init time:', elapsed, 'ms');
+          setLoading(false);
+        }
       }
     });
 
-    return unsubscribe;
+    return () => {
+      authEventRevision += 1;
+      if (initFailsafe) clearTimeout(initFailsafe);
+      unsubscribe();
+    };
   }, []);
 
   // ── Real-time Business Sync ──────────────────────────────────────────────
   // Keep the business state perfectly in sync across all tabs and components
   // (Dashboard, Invoice, WhatsApp, Profile) instantly when updated.
   useEffect(() => {
-    if (!currentUser || userRole === 'customer') return;
+    if (!currentUser) return;
 
+    let cancelled = false;
     let unsubBiz = () => {};
     import('../services/db').then(({ subscribeToBusiness }) => {
+      if (cancelled) return;
       unsubBiz = subscribeToBusiness(
         (bizData) => {
+          if (cancelled) return;
           if (bizData) {
             setBusiness(bizData);
           } else {
@@ -201,6 +223,7 @@ export function AuthProvider({ children }) {
           }
         },
         (error) => {
+          if (cancelled) return;
           console.warn('[CC:Auth] Business listener error:', error?.code);
           setBusiness((prev) => prev || { id: currentUser.uid, name: '', logo: '' });
         },
@@ -208,8 +231,11 @@ export function AuthProvider({ children }) {
       );
     }).catch(() => {});
 
-    return () => unsubBiz();
-  }, [currentUser, userRole]);
+    return () => {
+      cancelled = true;
+      unsubBiz();
+    };
+  }, [currentUser?.uid]);
 
   const refreshRole = async () => {
     if (currentUser) {

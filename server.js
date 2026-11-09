@@ -124,7 +124,13 @@ async function requireAuth(req, res, next) {
   
   try {
     if (!admin.apps.length) {
-      console.warn('⚠️ Firebase Admin not initialized — bypassing auth verification for local development');
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+      if (isProduction) {
+        console.error('[ZeroTrust Server] Firebase Admin is not configured in production');
+        return res.status(503).json({ error: 'Authentication service is temporarily unavailable' });
+      }
+
+      console.warn('⚠️ Firebase Admin is not initialized — using local development identity');
       req.uid = req.headers['x-dev-uid'] || 'local-dev-user';
       return next();
     }
@@ -144,6 +150,39 @@ async function requireAuth(req, res, next) {
     }
     return res.status(401).json({ error: 'Invalid or expired token', details: error.message });
   }
+}
+
+function requirePro(featureKey) {
+  return async (req, res, next) => {
+    if (!dbAdmin) {
+      return res.status(503).json({ error: 'Subscription verification is temporarily unavailable' });
+    }
+
+    try {
+      const userSnapshot = await dbAdmin.collection('users').doc(req.uid).get();
+      const subscription = userSnapshot.data()?.subscription;
+      const rawExpiry = subscription?.expiryDate;
+      const expiry = rawExpiry?.toDate ? rawExpiry.toDate() : rawExpiry ? new Date(rawExpiry) : null;
+      const isActive = subscription?.status === 'active'
+        && subscription?.source === 'revenuecat_webhook'
+        && expiry instanceof Date
+        && !Number.isNaN(expiry.getTime())
+        && expiry.getTime() > Date.now();
+
+      if (!isActive) {
+        return res.status(402).json({
+          error: 'subscription_required',
+          message: 'An active Cream & Crust Pro subscription is required for this feature.',
+          featureKey,
+        });
+      }
+
+      return next();
+    } catch (error) {
+      console.error('[Subscription] Verification failed:', error.message);
+      return res.status(503).json({ error: 'Subscription verification is temporarily unavailable' });
+    }
+  };
 }
 
 /**
@@ -453,7 +492,7 @@ app.get('/api/customers', requireAuth, async (req, res) => {
 });
 
 // ─── ANALYTICS ───────────────────────────────────────────────
-app.get('/api/analytics', requireAuth, async (req, res) => {
+app.get('/api/analytics', requireAuth, requirePro('ADVANCED_ANALYTICS'), async (req, res) => {
   try {
     if (!dbAdmin) return res.status(500).json({ error: 'Database not initialized' });
     
@@ -686,7 +725,7 @@ function checkAIRateLimit(uid) {
   return true;
 }
 
-app.post('/api/ai/chat', requireAuth, async (req, res) => {
+app.post('/api/ai/chat', requireAuth, requirePro('AI_ASSISTANT'), async (req, res) => {
   try {
     const apiKey = getNextAIKey();
     if (!apiKey) {
@@ -772,7 +811,7 @@ app.post('/api/ai/chat', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/ai/describe', requireAuth, async (req, res) => {
+app.post('/api/ai/describe', requireAuth, requirePro('AI_ASSISTANT'), async (req, res) => {
   try {
     const { name, category, image } = req.body;
     

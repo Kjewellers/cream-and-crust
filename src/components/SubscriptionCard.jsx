@@ -3,10 +3,9 @@
  *
  * Shows the current plan status, features, and a CTA to subscribe.
  * All billing is handled via Google Play Billing (RevenueCat) on native Android.
- * On web, navigates to the /subscribe page.
+ * The same animated plan sheet is used from settings and feature gates.
  *
- * Monthly: ₹149/month | Annual: ₹1,499/year (save ₹289)
- * 3 months free trial via Play Console.
+ * Store localized prices and trial eligibility are loaded from Google Play.
  *
  * NOTE: No client-side trial activation — all subscription writes come from
  * the RevenueCat webhook (Cloud Function) for security. Removing startFreeTrial()
@@ -15,12 +14,11 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Crown, Check, Sparkles, Star, RefreshCw } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
-import { useSubscription } from '../hooks/useSubscription';
 import { useSubscriptionContext } from '../context/SubscriptionContext';
+import { usePurchases } from '../hooks/usePurchases';
+import { findPackageForPlan } from '../services/purchases';
 import { PLAN, ANNUAL_PLAN } from '../services/subscription';
 import { triggerHaptic } from './iOS';
-import { useNavigate } from 'react-router-dom';
 
 /* ─── Plan toggle pill ────────────────────────────────────────────────────── */
 function PlanToggle({ selected, onSelect }) {
@@ -71,7 +69,7 @@ function PlanToggle({ selected, onSelect }) {
               marginLeft: 4,
               textTransform: 'uppercase',
             }}>
-              Save ₹289
+              Best value
             </span>
           )}
         </button>
@@ -81,17 +79,20 @@ function PlanToggle({ selected, onSelect }) {
 }
 
 export default function SubscriptionCard() {
-  const { currentUser } = useAuth();
-  const navigate = useNavigate();
   const { openPaywall } = useSubscriptionContext();
   const [selectedPlan, setSelectedPlan] = useState('yearly');
-  // useSubscription uses onSnapshot — updates instantly when RevenueCat webhook fires.
-  // No client-side writes — all subscription state comes from the server.
-  const { isActive, isTrial, expiryDate, loading } = useSubscription();
+  const {
+    isPro: isActive,
+    isTrial,
+    expiryDate,
+    subscriptionLoading: loading,
+  } = useSubscriptionContext();
+  const { offering, offeringsLoading, isNativeApp } = usePurchases();
+  const selectedPackage = findPackageForPlan(offering, selectedPlan);
 
   const handleSubscribe = () => {
     triggerHaptic('light');
-    openPaywall('settings_subscription_card', selectedPlan);
+    openPaywall('AI_ASSISTANT', { planId: selectedPlan });
   };
 
   const validExpiryDate = expiryDate && new Date(expiryDate).getTime() > Date.now() ? new Date(expiryDate) : null;
@@ -229,7 +230,7 @@ export default function SubscriptionCard() {
                 letterSpacing: '-0.03em',
               }}
             >
-              ₹{selectedPlan === 'yearly' ? ANNUAL_PLAN.price : PLAN.price}
+              {selectedPackage?.product?.priceString || (offeringsLoading ? 'Loading…' : isNativeApp ? 'Unavailable' : 'Android app')}
             </span>
             <span style={{ fontSize: 14, color: 'var(--text3)', fontWeight: 600 }}>
               /{selectedPlan === 'yearly' ? ANNUAL_PLAN.period : PLAN.period}
@@ -246,7 +247,7 @@ export default function SubscriptionCard() {
                   borderRadius: 99,
                 }}
               >
-                Save ₹{ANNUAL_PLAN.savings} · ₹{ANNUAL_PLAN.monthlyEquivalent}/mo
+                Best value
               </span>
             )}
             <span
@@ -260,7 +261,7 @@ export default function SubscriptionCard() {
                 borderRadius: 99,
               }}
             >
-              3 months FREE
+              Free trial for eligible accounts
             </span>
           </div>
         </>
@@ -275,10 +276,7 @@ export default function SubscriptionCard() {
           marginBottom: 18,
         }}
       >
-        {(selectedPlan === 'yearly' && !isActive
-          ? [...PLAN.features, ...ANNUAL_PLAN.features]
-          : PLAN.features
-        ).map((f) => (
+        {PLAN.features.map((f) => (
           <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Check size={13} color={isActive ? '#D4A050' : '#16A34A'} strokeWidth={3} />
             <span style={{ fontSize: 12, color: 'var(--text2)', fontWeight: 600 }}>{f}</span>
@@ -311,7 +309,7 @@ export default function SubscriptionCard() {
             }}
           >
             <Sparkles size={17} />
-            {status.plan === 'expired' ? 'Resubscribe to Pro' : 'Start 3 Months Free'}
+            {status.plan === 'expired' ? 'Resubscribe to Pro' : 'View plans'}
           </button>
 
           {/* Restore Purchases — required by Play Store policy */}

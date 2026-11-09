@@ -57,7 +57,8 @@ describe('Enterprise Zero-Trust Security Architecture', () => {
       const meta = getDeviceMetadata();
       expect(meta.deviceId).toBeDefined();
       expect(meta.platform).toBeDefined();
-      expect(meta.appVersion).toBe('1.1.23');
+      expect(meta.appVersion).toBeDefined();
+      expect(typeof meta.appVersion).toBe('string');
       expect(meta).not.toHaveProperty('password');
       expect(meta).not.toHaveProperty('creditCard');
     });

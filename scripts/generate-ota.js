@@ -81,7 +81,16 @@ async function generateOTA() {
   // Write Manifest
   fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 2));
   console.log(`✅ Created version.json (Version: ${version})`);
-  console.log('🚀 OTA Bundle Ready in dist/ !');
+
+  // Mirror to dist/ota/ for dedicated pathing
+  const OTA_DIR = path.join(DIST_DIR, 'ota');
+  if (!fs.existsSync(OTA_DIR)) {
+    fs.mkdirSync(OTA_DIR, { recursive: true });
+  }
+  fs.copyFileSync(ZIP_PATH, path.join(OTA_DIR, 'update.zip'));
+  fs.copyFileSync(MANIFEST_PATH, path.join(OTA_DIR, 'version.json'));
+
+  console.log('🚀 Android OTA Bundle Ready in dist/ and dist/ota/ !');
 }
 
 generateOTA().catch(console.error);

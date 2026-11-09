@@ -8,9 +8,14 @@
     "server": "node --env-file=.env server.js",
     "client": "vite",
     "build": "vite build",
-    "postbuild": "node scripts/generate-ota.js",
+    "build:web": "vite build",
+    "deploy:web": "npm run build:web && npx vercel --prod --yes",
+    "build:android": "vite build && npx cap sync android",
+    "ota:android": "vite build && node scripts/generate-ota.js",
+    "bundle:android": "npm run build:android && cd android && .\\gradlew.bat bundleRelease && cd ..",
     "preview": "vite preview",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "test": "vitest run"
   },
   "dependencies": {
     "@capacitor-firebase/analytics": "^7.5.0",

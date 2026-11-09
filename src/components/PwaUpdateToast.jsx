@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Sparkles, X } from 'lucide-react';
+import Platform from '../platform/Platform';
 
 /**
  * PwaUpdateToast — listens to the vite-plugin-pwa service-worker
@@ -8,11 +9,11 @@ import { RefreshCw, Sparkles, X } from 'lucide-react';
  * toast offering "Refresh" so the user gets the latest features
  * without having to hard-reload manually.
  *
- * Uses the virtual module `virtual:pwa-register/react` exposed by
- * vite-plugin-pwa. We dynamic-import it so test/non-PWA environments
- * (where the virtual module doesn't exist) just render nothing.
+ * Web-only: Native Android apps use Google Play and Capgo OTA.
  */
 export default function PwaUpdateToast() {
+  if (Platform.isNative()) return null;
+
   const [Inner, setInner] = useState(null);
 
   useEffect(() => {

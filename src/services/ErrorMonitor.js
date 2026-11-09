@@ -22,6 +22,7 @@
  */
 
 import Platform from '../platform/Platform.js';
+import { getAppVersionInfo } from '../config/version.js';
 
 // ─── Constants ──────────────────────────────────────────────────
 const MAX_QUEUE = 200;
@@ -29,7 +30,7 @@ const MAX_LOGS = 500;
 const STORAGE_KEY = 'cc_error_queue';
 const LOGS_KEY = 'cc_monitor_logs';
 const FLUSH_INTERVAL = 30000; // 30 seconds
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || '1.1.21';
+const APP_VERSION = getAppVersionInfo().version;
 
 // ─── Severity Levels ────────────────────────────────────────────
 export const SEVERITY = {

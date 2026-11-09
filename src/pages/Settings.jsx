@@ -40,8 +40,10 @@ import { restorePurchases, isNativeAndroidRuntime } from '../services/purchases'
 import PremiumBadge from '../components/premium/PremiumBadge';
 import { loadNotificationPreferences, updateNotificationPreferences, DEFAULT_PREFERENCES } from '../services/notifications/NotificationPreferences';
 import BackupSettingsScreen from '../components/backup/BackupSettingsScreen';
+import Platform from '../platform/Platform';
+import { getAppVersionInfo, getDisplayVersion } from '../config/version';
 
-const APP_VERSION = '1.1.16';
+const APP_VERSION = getDisplayVersion();
 
 const LANGUAGES = [
   { code: 'en', label: 'English', native: 'English', flag: '🇬🇧' },
@@ -301,6 +303,34 @@ export default function Settings() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
   const { t, i18n } = useTranslation();
+  const isAndroid = Platform.isAndroid();
+  const appInfo = getAppVersionInfo();
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState(null);
+
+  const handleCheckUpdate = async () => {
+    setCheckingUpdate(true);
+    setUpdateStatus(null);
+    try {
+      if (isAndroid) {
+        const { otaService } = await import('../services/otaService.js');
+        await otaService.checkAndDownloadUpdate();
+        setUpdateStatus('Checked Google Play & OTA channels. You are on the latest Android release!');
+      } else {
+        if ('serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg) await reg.update();
+        }
+        setUpdateStatus('Checked Vercel web updates. Web app is running the latest version!');
+      }
+    } catch {
+      setUpdateStatus('Could not reach update servers. Check your connection.');
+    } finally {
+      setCheckingUpdate(false);
+      setTimeout(() => setUpdateStatus(null), 6000);
+    }
+  };
+
   const [theme, setThemeState] = useState(() => localStorage.getItem('theme') || 'light');
   const [appLang, setAppLang] = useState(() => localStorage.getItem('cc_appLang') || 'en');
   const [uiSounds, setUiSounds] = useState(() => localStorage.getItem('uiSounds') !== 'off');
@@ -918,11 +948,34 @@ export default function Settings() {
           <Row>
             <ShieldCheck size={18} color="var(--text3)" style={{ flexShrink: 0 }} />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>App Version</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+                {isAndroid ? 'Android Edition' : 'Web Edition'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>
+                {appInfo.updateDescription}
+              </div>
             </div>
             <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text2)', background: 'var(--bg2)', padding: '4px 10px', borderRadius: 99 }}>
               v{APP_VERSION}
             </span>
+          </Row>
+          <Row onClick={handleCheckUpdate}>
+            <RefreshCw size={18} color="var(--accent)" className={checkingUpdate ? 'animate-spin' : ''} style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--accent)' }}>
+                {checkingUpdate ? 'Checking for updates…' : isAndroid ? 'Check for Android Update' : 'Check for Web Update'}
+              </div>
+              {updateStatus && (
+                <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 2 }}>
+                  {updateStatus}
+                </div>
+              )}
+            </div>
+            {isAndroid ? (
+              <ExternalLink size={16} color="var(--text3)" style={{ flexShrink: 0 }} />
+            ) : (
+              <RefreshCw size={16} color="var(--text3)" style={{ flexShrink: 0 }} />
+            )}
           </Row>
           <Row onClick={() => navigate('/privacy')}>
             <FileText size={18} color="var(--text3)" style={{ flexShrink: 0 }} />

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { getDisplayVersion } from '../config/version';
 import {
   getLiveLogs, getAPILogs, getAILogs, getCrashHistory,
   getErrorQueue, clearErrorData, forceFlush
@@ -335,7 +336,7 @@ export default function DevConsole() {
               { label: 'Network', value: navigator.onLine ? '🟢 Online' : '🔴 Offline', icon: isOnline ? Wifi : WifiOff },
               { label: 'Connection Type', value: navigator?.connection?.effectiveType || '—', icon: Activity },
               { label: 'User Agent', value: navigator.userAgent.slice(0, 100), icon: Terminal },
-              { label: 'App Version', value: '1.1.16', icon: Shield },
+              { label: 'App Version', value: getDisplayVersion(), icon: Shield },
               { label: 'Heap Used', value: memory?.usedJSHeapSize ? `${Math.round(memory.usedJSHeapSize / 1048576)} MB` : '—', icon: Database },
               { label: 'Heap Limit', value: memory?.jsHeapSizeLimit ? `${Math.round(memory.jsHeapSizeLimit / 1048576)} MB` : '—', icon: Database },
               { label: 'Error Queue', value: `${errorQueue.length} items (${errorQueue.filter(e => !e.uploaded).length} pending)`, icon: AlertTriangle },

@@ -6,6 +6,8 @@
  * and captures trusted device metadata (Device Name, OS/Platform, App Version).
  */
 
+import { getAppVersionInfo } from '../config/version.js';
+
 const INSTALLATION_KEY = 'cc_device_installation_id';
 const DEVICE_TRUST_KEY = 'cc_trusted_devices_registry';
 
@@ -45,12 +47,14 @@ export function getInstallationId() {
  * Capture current device metadata for session registry and security audit logs.
  */
 export function getDeviceMetadata() {
+  const version = getAppVersionInfo().version;
+
   if (typeof window === 'undefined') {
     return {
       deviceId: 'server',
       deviceName: 'Server Environment',
       platform: 'NodeJS',
-      appVersion: '1.1.23',
+      appVersion: version,
     };
   }
 
@@ -74,7 +78,7 @@ export function getDeviceMetadata() {
     platform,
     userLanguage: navigator.language || 'en-US',
     screenResolution: `${window.screen?.width || 0}x${window.screen?.height || 0}`,
-    appVersion: '1.1.23',
+    appVersion: version,
     timestamp: new Date().toISOString(),
   };
 }

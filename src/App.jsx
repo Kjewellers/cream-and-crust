@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import Platform from './platform/Platform';
 
 import SystemGuard from './components/SystemGuard';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -57,8 +58,8 @@ const PrivacyPolicy = lazy(() => import('./pages/legal/PrivacyPolicy'));
 const TermsOfService = lazy(() => import('./pages/legal/TermsOfService'));
 
 function MainLayout() {
-  const { openDrawer, closeOverlay, overlays } = useOverlay();
-  const isDrawerOpen = overlays.some((o) => o.type === 'drawer');
+  const { openDrawer, closeOverlay, overlays = [] } = useOverlay();
+  const isDrawerOpen = Array.isArray(overlays) && overlays.some((o) => o.type === 'drawer');
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [notificationCenterOpen, setNotificationCenterOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -76,7 +77,7 @@ function MainLayout() {
     if (Math.abs(diffX) > Math.abs(diffY)) {
       if (diffX > 50 && isDrawerOpen) {
         // Find drawer and close it
-        const drawer = overlays.find((o) => o.type === 'drawer');
+        const drawer = Array.isArray(overlays) ? overlays.find((o) => o.type === 'drawer') : null;
         if (drawer) closeOverlay(drawer.id);
         setTouchStart(null);
       } else if (diffX < -50 && !isDrawerOpen && touchStart.x < 40) {
@@ -158,6 +159,7 @@ function MainLayout() {
     if (!showSplash && currentUser !== undefined && inventory !== undefined) {
       const markHealthy = async () => {
         try {
+          if (!Platform.isNative()) return;
           const { Preferences } = await import('@capacitor/preferences');
           await Preferences.set({ key: 'cc_ota_crashes', value: '0' });
           await CapacitorUpdater.notifyAppReady();
@@ -345,31 +347,33 @@ function PremiumOverlays() {
 
 export default function App() {
   return (
-    <OverlayProvider>
-      <HashRouter>
-        <MotionProvider>
-          <PermissionProvider>
-            <AuthProvider>
-              <SubscriptionProvider>
-                <DataProvider>
-                  <AmbientCanvas />
-                  <MainLayout />
-                  <ErrorPresenter />
-                  <OfflineBanner />
-                  <CreamCrustLiveBanner />
-                  <ConfettiCanvas />
-                  <SuccessBurstOverlay />
-                  <FloatingRewardLayer />
-                  <PwaUpdateToast />
-                  <MotionDebugPanel />
-                  <MotionDebugger />
-                  <PremiumOverlays />
-                </DataProvider>
-              </SubscriptionProvider>
-            </AuthProvider>
-          </PermissionProvider>
-        </MotionProvider>
-      </HashRouter>
-    </OverlayProvider>
+    <AppErrorBoundary>
+      <OverlayProvider>
+        <HashRouter>
+          <MotionProvider>
+            <PermissionProvider>
+              <AuthProvider>
+                <SubscriptionProvider>
+                  <DataProvider>
+                    <AmbientCanvas />
+                    <MainLayout />
+                    <ErrorPresenter />
+                    <OfflineBanner />
+                    <CreamCrustLiveBanner />
+                    <ConfettiCanvas />
+                    <SuccessBurstOverlay />
+                    <FloatingRewardLayer />
+                    <PwaUpdateToast />
+                    <MotionDebugPanel />
+                    <MotionDebugger />
+                    <PremiumOverlays />
+                  </DataProvider>
+                </SubscriptionProvider>
+              </AuthProvider>
+            </PermissionProvider>
+          </MotionProvider>
+        </HashRouter>
+      </OverlayProvider>
+    </AppErrorBoundary>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "cream-and-crust",
-  "version": "1.1.23",
+  "version": "1.1.24",
   "type": "module",
   "scripts": {
     "start": "node --env-file=.env server.js",

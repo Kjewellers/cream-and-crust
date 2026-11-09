@@ -75,7 +75,7 @@ export function OverlayProvider({ children }) {
   const openDrawer = useCallback((config) => openOverlay({ ...config, type: 'drawer' }), [openOverlay]);
 
   return (
-    <OverlayContext.Provider value={{ openOverlay, closeOverlay, closeAll, openSheet, openModal, openDrawer }}>
+    <OverlayContext.Provider value={{ overlays, openOverlay, closeOverlay, closeAll, openSheet, openModal, openDrawer }}>
       {children}
       {typeof document !== 'undefined' && createPortal(
         <div 

@@ -222,7 +222,7 @@ class StartupManagerEngine {
   async _initOTA() {
     try {
       const Platform = (await import('../../platform/Platform.js')).default;
-      if (!Platform.isNative) return STEP_STATUS.SKIPPED;
+      if (!Platform.isNative()) return STEP_STATUS.SKIPPED;
       const { otaService } = await import('../../services/otaService.js');
       otaService.startBackgroundCheck();
       return STEP_STATUS.HEALTHY;

@@ -3,6 +3,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Device } from '@capacitor/device';
 import { Network } from '@capacitor/network';
 import { Preferences } from '@capacitor/preferences';
+import Platform from '../platform/Platform.js';
 
 const OTA_URL = 'https://www.creamandcrust.online';
 const OTA_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
@@ -82,6 +83,7 @@ function hashToPercent(str) {
 export const otaService = {
   // Call this EARLY in App.jsx (e.g. before rendering router)
   applyPendingUpdateOnBoot: async () => {
+    if (!Platform.isNative()) return false;
     try {
       const { value: pendingVersion } = await Preferences.get({ key: 'ota_pending_version' });
       if (pendingVersion) {
@@ -98,6 +100,7 @@ export const otaService = {
   },
 
   startBackgroundCheck: () => {
+    if (!Platform.isNative()) return;
     // Wait 5 seconds after boot so we don't block anything
     setTimeout(async () => {
       try {
@@ -109,6 +112,7 @@ export const otaService = {
   },
 
   checkAndDownloadUpdate: async () => {
+    if (!Platform.isNative()) return;
     console.log('[OTA] Checking for updates...');
     
     let manifest;

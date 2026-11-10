@@ -9,7 +9,6 @@ import {
   handleGoogleRedirectResult,
 } from '../services/auth';
 import { withAuthTimeout } from '../utils/authTimeout';
-import { clearAIPrivacyState } from '../ai/auditLog';
 
 const AuthContext = createContext();
 
@@ -78,7 +77,6 @@ export function AuthProvider({ children }) {
           console.warn('[CC:Auth] Cleaning up anonymous user');
           try { await user.delete?.(); } catch (_) { /* ignore */ }
           if (!isCurrentEvent()) return;
-          clearAIPrivacyState();
           localStorage.removeItem('cc_currentUser');
           localStorage.removeItem('cc_userRole');
           setCurrentUser(null);
@@ -97,7 +95,6 @@ export function AuthProvider({ children }) {
           if (lastLoadedUid.current && lastLoadedUid.current !== user.uid) {
             console.warn('[CC:Auth] Account switch detected! Purging stale state.',
               'old:', lastLoadedUid.current, '→ new:', user.uid);
-            clearAIPrivacyState();
             setBusiness(null);
             setUserDetails(null);
             setUserRole('admin');
@@ -167,7 +164,6 @@ export function AuthProvider({ children }) {
         } else {
           // ── Signed-out ────────────────────────────────────────────────────────
           console.warn('[CC:Auth] Signed out — clearing all state');
-          clearAIPrivacyState();
           lastLoadedUid.current = null;
           localStorage.removeItem('cc_currentUser');
           localStorage.removeItem('cc_userRole');
@@ -246,7 +242,6 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     console.warn('[CC:Auth] logout() called');
-    clearAIPrivacyState();
     // Optimistically clear React state for instant UI response (no flicker)
     setCurrentUser(null);
     setUserRole(null);

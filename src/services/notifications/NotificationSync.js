@@ -27,20 +27,32 @@ export function subscribeToNotificationSync(userId, onUpdate) {
     unsubscribeListener();
   }
 
+  // Query by uid (owner identity) without requiring a composite index
   const q = query(
     collection(db, 'notifications'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('uid', '==', userId)
   );
 
   unsubscribeListener = onSnapshot(
     q,
     (snapshot) => {
-      const notifications = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-        createdAt: docSnap.data().createdAt?.toDate ? docSnap.data().createdAt.toDate() : new Date(),
-      }));
+      const notifications = snapshot.docs.map((docSnap) => {
+        const data = docSnap.data() || {};
+        let createdAt = new Date();
+        if (data.createdAt?.toDate) {
+          createdAt = data.createdAt.toDate();
+        } else if (data.createdAt) {
+          createdAt = new Date(data.createdAt);
+        }
+        return {
+          id: docSnap.id,
+          ...data,
+          createdAt,
+        };
+      });
+
+      // Sort client-side descending by createdAt
+      notifications.sort((a, b) => (b.createdAt?.getTime?.() || 0) - (a.createdAt?.getTime?.() || 0));
 
       const unreadCount = notifications.filter((n) => !n.read && !n.archived).length;
 
@@ -49,7 +61,7 @@ export function subscribeToNotificationSync(userId, onUpdate) {
       }
     },
     (err) => {
-      console.error('[NotificationSync] Real-time sync listener error:', err);
+      console.warn('[NotificationSync] Real-time sync listener notice:', err?.message || err);
     }
   );
 

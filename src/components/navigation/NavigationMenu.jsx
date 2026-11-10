@@ -26,11 +26,17 @@ import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 
 import { usePendingOrders } from '../../hooks/usePendingOrders';
-export default function NavigationMenu({ onClose, theme, toggleTheme }) {
+import { useTheme } from '../../core/theme/ThemeService';
+
+export default function NavigationMenu({ onClose, theme: propTheme, toggleTheme: propToggleTheme }) {
   const auth = useAuth() || {};
   const { isAdmin = false, userRole = 'admin', logout = () => {} } = auth;
   const { t } = useTranslation();
   const pendingCount = usePendingOrders();
+  const { theme: serviceTheme, toggle: serviceToggleTheme } = useTheme();
+
+  const theme = propTheme || serviceTheme;
+  const toggleTheme = propToggleTheme || serviceToggleTheme;
 
   const adminNavItems = [
     {
@@ -222,31 +228,34 @@ export default function NavigationMenu({ onClose, theme, toggleTheme }) {
             >
               {section.section}
             </div>
-            {section.items.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end
-                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                onClick={onClose}
-                style={{ opacity: item.locked ? 0.6 : 1 }}
-              >
-                <item.icon />
-                {item.label}
-                {item.badge != null && (
-                  <motion.span
-                    key={typeof item.badge === 'string' || typeof item.badge === 'number' ? item.badge : item.to}
-                    initial={{ scale: 0.6, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', stiffness: 500, damping: 20 }}
-                    className="nav-badge"
-                  >
-                    {item.badge}
-                  </motion.span>
-                )}
-                {item.locked && <Lock size={12} style={{ marginLeft: 'auto' }} />}
-              </NavLink>
-            ))}
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end
+                  className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                  onClick={onClose}
+                  style={{ opacity: item.locked ? 0.6 : 1 }}
+                >
+                  {Icon && <Icon size={18} />}
+                  {item.label}
+                  {item.badge != null && (
+                    <motion.span
+                      key={typeof item.badge === 'string' || typeof item.badge === 'number' ? item.badge : item.to}
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 20 }}
+                      className="nav-badge"
+                    >
+                      {item.badge}
+                    </motion.span>
+                  )}
+                  {item.locked && <Lock size={12} style={{ marginLeft: 'auto' }} />}
+                </NavLink>
+              );
+            })}
           </div>
         ))}
       </div>
@@ -272,7 +281,10 @@ export default function NavigationMenu({ onClose, theme, toggleTheme }) {
           {theme === 'dark' ? t('nav.lightMode') : t('nav.darkMode')}
         </button>
         <button
-          onClick={logout}
+          onClick={() => {
+            if (typeof onClose === 'function') onClose();
+            logout();
+          }}
           className="nav-item"
           style={{
             width: '100%',

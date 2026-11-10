@@ -66,9 +66,13 @@ function MainLayout() {
   const [minSplashTimeElapsed, setMinSplashTimeElapsed] = useState(false);
   const [touchStart, setTouchStart] = useState(null);
 
-  const handleTouchStart = (e) => setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+  const handleTouchStart = (e) => {
+    if (e?.touches?.[0]) {
+      setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    }
+  };
   const handleTouchMove = (e) => {
-    if (!touchStart) return;
+    if (!touchStart || !e?.touches?.[0]) return;
     const currentX = e.touches[0].clientX;
     const currentY = e.touches[0].clientY;
     const diffX = touchStart.x - currentX;

@@ -315,9 +315,13 @@ function GlobalModal({ id, title, subtitle, content, showClose = true, onClose, 
 // ── Global Drawer Implementation ──────────────────────────────
 function GlobalDrawer({ id, content, onClose }) {
   return (
-    <div
+    <motion.div
       role="navigation"
       aria-modal="true"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
       style={{
         position: 'absolute', inset: 0, pointerEvents: 'auto',
       }}
@@ -326,7 +330,7 @@ function GlobalDrawer({ id, content, onClose }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.3 }}
+        transition={{ duration: 0.25 }}
         onClick={onClose}
         style={{
           position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.4)',
@@ -337,12 +341,13 @@ function GlobalDrawer({ id, content, onClose }) {
         initial={{ x: '-100%' }}
         animate={{ x: 0 }}
         exit={{ x: '-100%' }}
-        transition={{ type: 'spring', damping: 25, stiffness: 250 }}
+        transition={{ type: 'spring', damping: 28, stiffness: 280 }}
         drag="x"
-        dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={{ left: 0.2, right: 0 }}
+        dragDirectionLock
+        dragConstraints={{ right: 0 }}
+        dragElastic={{ left: 0.1, right: 0 }}
         onDragEnd={(e, info) => {
-          if (info.velocity.x < -200 || info.offset.x < -80) onClose();
+          if (info.velocity.x < -150 || info.offset.x < -60) onClose();
         }}
         style={{
           position: 'absolute', top: 0, bottom: 0, left: 0,
@@ -356,6 +361,6 @@ function GlobalDrawer({ id, content, onClose }) {
       >
         {content}
       </motion.div>
-    </div>
+    </motion.div>
   );
 }

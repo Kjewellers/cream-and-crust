@@ -174,16 +174,16 @@ service cloud.firestore {
     // NOTIFICATIONS
     // ======================================================
     match /notifications/{notifId} {
-      allow read, delete: if isDocOwner();
+      allow read, delete: if isDocOwner() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       // Owner self-creates (in-app actions on baker's dashboard)
-      allow create:       if isCreatingAsOwner();
+      allow create:       if isCreatingAsOwner() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
       // Public website / WhatsApp / Instagram channel — customer event
       // pings the bakery. Doc must be tagged channel and route to an
       // existing public business profile.
       allow create:       if request.resource.data.channel in ['website', 'whatsapp', 'instagram']
                           && request.resource.data.keys().hasAll(['uid', 'channel'])
                           && exists(/databases/$(database)/documents/business/$(request.resource.data.uid));
-      allow update:       if isDocOwner();
+      allow update:       if isDocOwner() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
     // ======================================================
@@ -294,6 +294,19 @@ service cloud.firestore {
       allow read:   if isAuthenticated() && resource.data.uid == request.auth.uid;
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if false; // Audit logs are append-only and immutable
+    }
+
+    // ======================================================
+    // ERROR & CRASH REPORTING (Append-only)
+    // ======================================================
+    match /crash_reports/{reportId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
+
+    match /error_reports/{reportId} {
+      allow create: if true;
+      allow read, update, delete: if false;
     }
 
     // ======================================================

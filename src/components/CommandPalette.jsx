@@ -15,7 +15,6 @@ import {
   Plus,
   ArrowRight,
   X,
-  Sparkles,
 } from 'lucide-react';
 import { useData } from '../context/DataContext';
 

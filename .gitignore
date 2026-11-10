@@ -48,6 +48,11 @@ verify_step1.js
 # ── Playwright ─────────────────────────────────
 /test-results/
 /playwright-report/
+
+# ── Android release binaries ───────────────────
+*.apk
+*.aab
+
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/

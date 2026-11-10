@@ -97,51 +97,6 @@ export default function PrivacyPolicy() {
         for our own marketing. We do <strong>not</strong> serve advertisements.
       </P>
 
-      <H2>AI Features &amp; Data Processing</H2>
-      <P>
-        Cream &amp; Crust includes an AI assistant called <strong>Cream AI</strong> that helps you
-        manage orders, analyse inventory, generate recipes, and provide business insights. To
-        produce these responses, Cream AI sends a portion of your bakery data to a large language
-        model (LLM).
-      </P>
-      <P>
-        <strong>What data is sent</strong> — When you use Cream AI, a snapshot of your relevant
-        app data is included in the request. This may include:
-      </P>
-      <UL
-        items={[
-          'Recent orders (customer name, product, delivery date, total, payment status).',
-          'Inventory items (item name, stock level, minimum stock, expiry date).',
-          'Products (name, category, price).',
-          'Customers (name, phone number).',
-          'Expenses (title, amount, category).',
-          'Memories you have explicitly asked Cream AI to remember.',
-          'The current message and recent conversation history (up to 6 turns).',
-        ]}
-      />
-      <P>
-        <strong>How it is processed</strong> — Requests are routed through{' '}
-        <strong>OpenRouter</strong>, a model API gateway, to a language model (currently{' '}
-        <em>openai/gpt-oss-120b</em> or equivalent free-tier model). OpenRouter and the underlying
-        model provider do <strong>not</strong> store your data for training or any purpose beyond
-        generating the immediate response. Data is transmitted over encrypted HTTPS.
-      </P>
-      <P>
-        <strong>What is not sent</strong> — Your account password, Firebase auth tokens, UPI PIN,
-        payment credentials, and full raw database records are never included in AI requests. Only
-        the summarised fields listed above are sent.
-      </P>
-      <P>
-        <strong>Rate limits</strong> — AI usage is limited to {500} requests per user per day to
-        prevent abuse. This limit is enforced on our server and does not involve any additional
-        personal data collection.
-      </P>
-      <P>
-        <strong>Opting out</strong> — AI features are optional. You can use all core bakery
-        management features (orders, inventory, recipes, customers) without ever using Cream AI.
-        Simply do not open the AI chat or AI hub to avoid any data being sent to the LLM.
-      </P>
-
       <H2>Services we rely on</H2>
       <P>The app uses trusted third-party providers to function:</P>
       <UL
@@ -150,7 +105,6 @@ export default function PrivacyPolicy() {
           'Cloudinary — image hosting for product, recipe and logo photos.',
           'Google Play Billing — subscription purchases and renewal management on Android.',
           'RevenueCat — subscription analytics, receipt validation, and entitlement management. RevenueCat receives your anonymous user ID, subscription status and purchase history. It does not receive your name, email or personal data.',
-          'OpenRouter — AI model API gateway used to route Cream AI requests to a large language model. Requests include a summarised snapshot of your bakery data as described in the AI Features section above. OpenRouter does not retain your data after generating a response.',
           'Vercel — hosting and delivery of the web version of the app.',
         ]}
       />

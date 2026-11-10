@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, ShoppingBag, Flame, Truck, CheckCircle, ChevronRight, X, Sparkles } from 'lucide-react';
+import { Bell, ShoppingBag, Flame, Truck, CheckCircle, ChevronRight, X } from 'lucide-react';
 import { subscribeToLiveActivity } from '../../services/notifications/LiveActivityEngine';
 import { handleNotificationTap } from '../../services/notifications/DeepLinkRouter';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -87,10 +87,10 @@ export default function CreamCrustLiveBanner() {
     <div
       style={{
         position: 'fixed',
-        top: 'calc(env(safe-area-inset-top, 12px) + 8px)',
+        top: 'calc(env(safe-area-inset-top, 0px) + 70px)',
         left: 0,
         right: 0,
-        zIndex: 9999,
+        zIndex: 10050,
         pointerEvents: 'none',
         display: 'flex',
         justifyContent: 'center',

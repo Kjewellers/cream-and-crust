@@ -36,6 +36,7 @@ import NotificationCenterModal from './components/notifications/NotificationCent
 // ── Navigation, Routing & Startup Components ──────────────────────────────
 import NavigationMenu from './components/navigation/NavigationMenu';
 import MobileHeader from './components/navigation/MobileHeader';
+import DesktopHeader from './components/navigation/DesktopHeader';
 import BottomNav from './components/navigation/BottomNav';
 import SplashScreen from './components/startup/SplashScreen';
 import AnimatedRoutes from './components/routing/AnimatedRoutes';
@@ -260,6 +261,12 @@ function MainLayout() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Desktop Persistent Sidebar */}
+      <aside className="sidebar desktop-only" aria-label="Main Navigation">
+        <NavigationMenu theme={theme} toggleTheme={toggleTheme} />
+      </aside>
+
+      {/* Mobile Top Header */}
       <MobileHeader
         onMenuClick={() =>
           openDrawer({
@@ -276,11 +283,20 @@ function MainLayout() {
         onClose={() => setNotificationCenterOpen(false)}
       />
       <main className="main">
-        <AppErrorBoundary uid={currentUser?.uid ?? null}>
-          <Suspense fallback={<DelayedFallback />}>
-            <AnimatedRoutes />
-          </Suspense>
-        </AppErrorBoundary>
+        {/* Desktop Header Top Bar */}
+        <DesktopHeader
+          onSearchClick={() => setCommandPaletteOpen(true)}
+          onNotificationClick={() => setNotificationCenterOpen(true)}
+          theme={theme}
+          toggleTheme={toggleTheme}
+        />
+        <div className="main-content-container">
+          <AppErrorBoundary uid={currentUser?.uid ?? null}>
+            <Suspense fallback={<DelayedFallback />}>
+              <AnimatedRoutes />
+            </Suspense>
+          </AppErrorBoundary>
+        </div>
       </main>
       <BottomNav />
       <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />

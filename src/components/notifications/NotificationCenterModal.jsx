@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, CheckCheck, Trash2, Filter, X, ShoppingBag, Package, Shield, Sparkles, ChevronRight } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, Filter, X, ShoppingBag, Package, Shield, ChevronRight } from 'lucide-react';
 import {
   subscribeToNotificationSync,
   markNotificationAsRead,
@@ -37,8 +37,6 @@ export default function NotificationCenterModal({ isOpen, onClose }) {
     return () => unsubscribe();
   }, [currentUser, isOpen]);
 
-  if (!isOpen) return null;
-
   const filteredNotifications = notifications.filter((item) => {
     if (item.archived) return false;
     if (activeTab === 'unread') return !item.read;
@@ -64,35 +62,38 @@ export default function NotificationCenterModal({ isOpen, onClose }) {
   };
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 99999,
-        display: 'flex',
-        justifyContent: 'flex-end',
-        background: 'rgba(45, 27, 20, 0.4)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-      }}
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ x: '100%' }}
-        animate={{ x: 0 }}
-        exit={{ x: '100%' }}
-        transition={{ type: 'spring', stiffness: 350, damping: 30 }}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          maxWidth: 440,
-          height: '100%',
-          background: '#FDFBF7',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '-10px 0 40px rgba(0,0,0,0.15)',
-        }}
-      >
+    <AnimatePresence>
+      {isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 10040,
+            display: 'flex',
+            justifyContent: 'flex-end',
+            background: 'rgba(0, 0, 0, 0.45)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+          }}
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 440,
+              height: '100%',
+              background: 'var(--surface-elevated, #FDFBF7)',
+              color: 'var(--text, #2D1B14)',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '-10px 0 40px rgba(0,0,0,0.15)',
+            }}
+          >
         {/* Header */}
         <div
           style={{
@@ -299,5 +300,7 @@ export default function NotificationCenterModal({ isOpen, onClose }) {
         </div>
       </motion.div>
     </div>
+      )}
+    </AnimatePresence>
   );
 }

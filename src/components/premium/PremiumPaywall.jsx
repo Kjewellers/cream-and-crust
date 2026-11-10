@@ -462,6 +462,8 @@ export default function PremiumPaywall() {
             style={{
               position: 'fixed',
               bottom: 0, left: 0, right: 0,
+              maxWidth: 580,
+              margin: '0 auto',
               zIndex: 10101,
               maxHeight: '92dvh',
               background: '#FFFDF9',

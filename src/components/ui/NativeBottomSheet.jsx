@@ -17,7 +17,7 @@ export default function NativeBottomSheet({ open, onClose, title, subtitle, chil
   }, [onClose]);
 
   useEffect(() => {
-    if (!overlayCtx) return;
+    if (!overlayCtx || overlayCtx.isFallback) return;
     if (open) {
       overlayCtx.openSheet({
         id,
@@ -34,11 +34,11 @@ export default function NativeBottomSheet({ open, onClose, title, subtitle, chil
   }, [open, title, subtitle, children, overlayCtx, id]);
 
   useEffect(() => {
-    if (!overlayCtx) return;
+    if (!overlayCtx || overlayCtx.isFallback) return;
     return () => overlayCtx.closeOverlay(id);
   }, [overlayCtx, id]);
 
-  if (!overlayCtx) {
+  if (!overlayCtx || overlayCtx.isFallback) {
     if (!open) return null;
     return (
       <div role="dialog">

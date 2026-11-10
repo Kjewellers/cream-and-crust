@@ -34,7 +34,12 @@ import AnimatedDemo from '../components/AnimatedDemo';
 import { customersDemoScenes } from '../components/demos/customersDemo';
 
 export default function Customers() {
-  const { customers, setCustomers, orders, loading } = useData();
+  const {
+    customers = [],
+    setCustomers = () => {},
+    orders = [],
+    loading = false,
+  } = useData() || {};
   const [search, setSearch] = useState('');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [showEditModal, setShowEditModal] = useState(false);

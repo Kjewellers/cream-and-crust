@@ -72,7 +72,11 @@ const emptyForm = {
 };
 
 export default function Expenses() {
-  const { expenses, setExpenses, loading } = useData();
+  const {
+    expenses = [],
+    setExpenses = () => {},
+    loading = false,
+  } = useData() || {};
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [receiptFile, setReceiptFile] = useState(null);

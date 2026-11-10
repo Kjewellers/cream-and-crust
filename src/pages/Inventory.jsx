@@ -147,7 +147,7 @@ const QuickOrderApps = () => (
 
 export default function Inventory() {
   const { currentUser } = useAuth();
-  const { inventory, loading } = useData();
+  const { inventory = [], loading = false } = useData() || {};
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All'); // All, Low, Healthy
 

@@ -17,7 +17,7 @@ export default function NativeModal({ open, onClose, title, subtitle, children }
   }, [onClose]);
 
   useEffect(() => {
-    if (!overlayCtx) return;
+    if (!overlayCtx || overlayCtx.isFallback) return;
     if (open) {
       overlayCtx.openModal({
         id,
@@ -34,11 +34,11 @@ export default function NativeModal({ open, onClose, title, subtitle, children }
   }, [open, title, subtitle, children, overlayCtx, id]);
 
   useEffect(() => {
-    if (!overlayCtx) return;
+    if (!overlayCtx || overlayCtx.isFallback) return;
     return () => overlayCtx.closeOverlay(id);
   }, [overlayCtx, id]);
 
-  if (!overlayCtx) {
+  if (!overlayCtx || overlayCtx.isFallback) {
     if (!open) return null;
     return (
       <div role="dialog">

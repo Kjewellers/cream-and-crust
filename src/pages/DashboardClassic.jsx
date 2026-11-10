@@ -71,7 +71,15 @@ import { useAchievements } from '../utils/achievements';
 export default function DashboardClassic() {
   const navigate = useNavigate();
   const { currentUser, userDetails } = useAuth();
-  const { orders, customers, expenses, inventory, shoppingItems, business, loading } = useData();
+  const {
+    orders = [],
+    customers = [],
+    expenses = [],
+    inventory = [],
+    shoppingItems = [],
+    business = {},
+    loading = false,
+  } = useData() || {};
   // Auto business report (weekly + monthly-on-the-1st)
   const [activeReport, setActiveReport] = useState(null);
   const [search, setSearch] = useState('');

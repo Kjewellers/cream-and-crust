@@ -478,7 +478,12 @@ const ItemRow = ({ item, onToggle, onPrompt, onDelete }) => (
 );
 
 export default function ShoppingList() {
-  const { shoppingItems: items, setShoppingItems: setItems, inventory, loading } = useData();
+  const {
+    shoppingItems: items = [],
+    setShoppingItems: setItems = () => {},
+    inventory = [],
+    loading = false,
+  } = useData() || {};
   const [showModal, setShowModal] = useState(false);
   const [showPrompt, setShowPrompt] = useState(null); // Item to prompt for expense conversion
   const [form, setForm] = useState(emptyForm);

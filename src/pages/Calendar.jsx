@@ -82,7 +82,7 @@ function isPickupOrder(o) {
 export default function Calendar() {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const { orders, loading } = useData();
+  const { orders = [], loading = false } = useData() || {};
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [showSheet, setShowSheet] = useState(false);

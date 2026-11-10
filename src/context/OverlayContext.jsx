@@ -5,10 +5,20 @@ import { X } from 'lucide-react';
 
 export const OverlayContext = createContext(null);
 
+const DEFAULT_OVERLAY_CONTEXT = {
+  isFallback: true,
+  overlays: [],
+  openOverlay: () => '',
+  closeOverlay: () => {},
+  closeAll: () => {},
+  openSheet: () => '',
+  openModal: () => '',
+  openDrawer: () => '',
+};
+
 export function useOverlay() {
   const ctx = useContext(OverlayContext);
-  if (!ctx) throw new Error('useOverlay must be used within an OverlayProvider');
-  return ctx;
+  return ctx || DEFAULT_OVERLAY_CONTEXT;
 }
 
 // Global stack manager

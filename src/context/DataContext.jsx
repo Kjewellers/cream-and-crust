@@ -143,15 +143,21 @@ export function DataProvider({ children }) {
 
   // Memoize context value to prevent unneeded child component re-renders
   const contextValue = useMemo(() => ({
-    orders, setOrders,
-    customers, setCustomers,
-    inventory, setInventory,
-    expenses, setExpenses,
-    shoppingItems, setShoppingItems,
-    products, setProducts,
-    business,
-    analytics,
-    loading
+    orders: Array.isArray(orders) ? orders : [],
+    setOrders,
+    customers: Array.isArray(customers) ? customers : [],
+    setCustomers,
+    inventory: Array.isArray(inventory) ? inventory : [],
+    setInventory,
+    expenses: Array.isArray(expenses) ? expenses : [],
+    setExpenses,
+    shoppingItems: Array.isArray(shoppingItems) ? shoppingItems : [],
+    setShoppingItems,
+    products: Array.isArray(products) ? products : [],
+    setProducts,
+    business: business || {},
+    analytics: analytics || null,
+    loading: Boolean(loading),
   }), [orders, customers, inventory, expenses, shoppingItems, products, business, analytics, loading]);
 
   return (
@@ -161,10 +167,25 @@ export function DataProvider({ children }) {
   );
 }
 
+const DEFAULT_DATA_CONTEXT = {
+  orders: [],
+  setOrders: () => {},
+  customers: [],
+  setCustomers: () => {},
+  inventory: [],
+  setInventory: () => {},
+  expenses: [],
+  setExpenses: () => {},
+  shoppingItems: [],
+  setShoppingItems: () => {},
+  products: [],
+  setProducts: () => {},
+  business: {},
+  analytics: null,
+  loading: false,
+};
+
 export function useData() {
   const context = useContext(DataContext);
-  if (!context) {
-    throw new Error('useData must be used within a DataProvider');
-  }
-  return context;
+  return context || DEFAULT_DATA_CONTEXT;
 }

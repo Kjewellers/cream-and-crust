@@ -981,7 +981,13 @@ const ORDER_SOURCES = ['Instagram', 'WhatsApp', 'Walk-in', 'Website', 'Referral'
 const PAYMENT_METHODS = ['Cash', 'UPI', 'Card', 'Online', 'Partial'];
 
 export default function Orders() {
-  const { orders, setOrders, customers, setCustomers, loading } = useData();
+  const {
+    orders = [],
+    setOrders = () => {},
+    customers = [],
+    setCustomers = () => {},
+    loading = false,
+  } = useData() || {};
   const { currentUser, isCustomer, business } = useAuth();
   const { isPro, subscriptionLoading, openPaywall } = useSubscriptionContext();
   const [showModal, setShowModal] = useState(false);

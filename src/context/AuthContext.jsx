@@ -313,4 +313,23 @@ export function AuthProvider({ children }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export const useAuth = () => useContext(AuthContext);
+const DEFAULT_AUTH_CONTEXT = {
+  currentUser: null,
+  userRole: 'admin',
+  onboardingCompleted: true,
+  business: null,
+  userDetails: null,
+  isAdmin: true,
+  isCustomer: false,
+  loading: false,
+  logout: () => {},
+  refreshRole: () => {},
+  finishOnboarding: () => {},
+  hasSeenTourV1: true,
+  finishTour: () => {},
+};
+
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  return ctx || DEFAULT_AUTH_CONTEXT;
+};

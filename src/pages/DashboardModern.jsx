@@ -72,7 +72,12 @@ function ActionButton({ icon: Icon, label, caption, onClick }) {
 export default function DashboardModern() {
   const navigate = useNavigate();
   const { userDetails } = useAuth();
-  const { orders = [], inventory = [], expenses = [], loading } = useData();
+  const {
+    orders = [],
+    inventory = [],
+    expenses = [],
+    loading = false,
+  } = useData() || {};
 
   const businessName = userDetails?.businessName || userDetails?.name || 'Cream & Crust';
   const firstName = businessName.split(' ')[0] || 'Baker';

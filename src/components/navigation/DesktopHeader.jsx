@@ -101,3 +101,4 @@ export default function DesktopHeader({ onSearchClick, onNotificationClick, them
     </header>
   );
 }
+

@@ -27,20 +27,29 @@ let globalOverlayId = 0;
 export function OverlayProvider({ children }) {
   const [overlays, setOverlays] = useState([]);
 
-  // Lock body scroll when any overlay is active
+  // Lock body scroll when any overlay is active (Instagram / Airbnb standard)
   useEffect(() => {
     if (overlays.length > 0) {
-      const origOverflow = document.body.style.getPropertyValue('overflow');
-      const origTouchAction = document.body.style.getPropertyValue('touch-action');
-      document.body.style.setProperty('overflow', 'hidden', 'important');
-      document.body.style.setProperty('touch-action', 'none', 'important');
-      
+      const scrollY = window.scrollY || window.pageYOffset || 0;
+      const origOverflow = document.body.style.overflow;
+      const origHtmlOverflow = document.documentElement.style.overflow;
+      const origPosition = document.body.style.position;
+      const origTop = document.body.style.top;
+      const origWidth = document.body.style.width;
+
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${scrollY}px`;
+      document.body.style.width = '100%';
+
       return () => {
-        if (origOverflow) document.body.style.setProperty('overflow', origOverflow);
-        else document.body.style.removeProperty('overflow');
-        
-        if (origTouchAction) document.body.style.setProperty('touch-action', origTouchAction);
-        else document.body.style.removeProperty('touch-action');
+        document.documentElement.style.overflow = origHtmlOverflow;
+        document.body.style.overflow = origOverflow;
+        document.body.style.position = origPosition;
+        document.body.style.top = origTop;
+        document.body.style.width = origWidth;
+        window.scrollTo(0, scrollY);
       };
     }
   }, [overlays.length]);
@@ -144,106 +153,174 @@ class OverlayErrorBoundary extends React.Component {
 function OverlayRenderer({ overlay, onClose, isTop }) {
   const { type } = overlay;
 
+  const handleClose = useCallback(() => {
+    if (typeof overlay.onClose === 'function') {
+      try { overlay.onClose(); } catch (err) { console.error(err); }
+    }
+    if (typeof onClose === 'function') {
+      onClose();
+    }
+  }, [overlay, onClose]);
+
   let component = null;
   if (type === 'sheet') {
-    component = <GlobalSheet {...overlay} onClose={onClose} />;
+    component = <GlobalSheet {...overlay} onClose={handleClose} />;
   } else if (type === 'modal') {
-    component = <GlobalModal {...overlay} onClose={onClose} />;
+    component = <GlobalModal {...overlay} onClose={handleClose} />;
   } else if (type === 'drawer') {
-    component = <GlobalDrawer {...overlay} onClose={onClose} />;
+    component = <GlobalDrawer {...overlay} onClose={handleClose} />;
   }
 
   if (!component) return null;
-  return <OverlayErrorBoundary onClose={onClose}>{component}</OverlayErrorBoundary>;
+  return <OverlayErrorBoundary onClose={handleClose}>{component}</OverlayErrorBoundary>;
 }
 
 // ── Global Sheet Implementation ──────────────────────────────
-function GlobalSheet({ id, title, subtitle, content, showClose = true, onClose, maxHeight = '90dvh' }) {
-  const closingRef = useRef(false);
-  const dragControls = useDragControls();
+function GlobalSheet({ id, title, subtitle, content, showClose = true, onClose, maxHeight = '88dvh' }) {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : false
+  );
 
-  const handleClose = () => {
-    if (closingRef.current) return;
-    closingRef.current = true;
-    onClose();
-  };
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       className="cc-sheet-wrapper"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100000,
+        display: 'flex',
+        alignItems: isDesktop ? 'center' : 'flex-end',
+        justifyContent: 'center',
+        padding: isDesktop ? '24px' : '0',
+        pointerEvents: 'auto',
+      }}
     >
+      {/* Crisp dark scrim backdrop - NO heavy blur that blurs out the app */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.25 }}
-        onClick={handleClose}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
         style={{
-          position: 'absolute',
+          position: 'fixed',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.45)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          background: 'rgba(0, 0, 0, 0.48)',
           touchAction: 'none',
+          zIndex: 1,
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
         }}
       />
       <motion.div
-        initial={{ y: '100%', opacity: 0.6 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: '100%', opacity: 0 }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-        drag="y"
-        dragControls={dragControls}
-        dragListener={false}
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.25 }}
-        onDragEnd={(e, info) => {
-          if (info.velocity.y > 200 || info.offset.y > 100) handleClose();
-        }}
+        initial={isDesktop ? { opacity: 0, scale: 0.95, y: 15 } : { y: '100%' }}
+        animate={isDesktop ? { opacity: 1, scale: 1, y: 0 } : { y: 0 }}
+        exit={isDesktop ? { opacity: 0, scale: 0.95, y: 15 } : { y: '100%' }}
+        transition={{ type: 'spring', damping: 28, stiffness: 320 }}
         className="cc-sheet-card"
-        style={{ maxHeight }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: '600px',
+          maxHeight,
+          background: 'var(--surface-elevated, #FFF)',
+          color: 'var(--text, #1C1917)',
+          borderRadius: isDesktop ? 24 : '24px 24px 0 0',
+          boxShadow: isDesktop ? '0 24px 64px rgba(0, 0, 0, 0.22)' : '0 -10px 40px rgba(0, 0, 0, 0.18)',
+          display: 'flex',
+          flexDirection: 'column',
+          paddingBottom: isDesktop ? 0 : 'max(env(safe-area-inset-bottom, 16px), 16px)',
+          overflow: 'hidden',
+          zIndex: 2,
+        }}
       >
-        {/* Grab Handle Header - Draggable */}
-        <div
-          onPointerDown={(e) => dragControls.start(e)}
-          style={{
-            width: '100%',
-            display: 'flex',
-            justifyContent: 'center',
-            paddingTop: 12,
-            paddingBottom: 6,
-            touchAction: 'none',
-            cursor: 'grab',
-          }}
-        >
-          <div style={{ width: 44, height: 5, borderRadius: 3, background: 'var(--text-muted, #ccc)', opacity: 0.6 }} />
-        </div>
+        {/* Mobile Grab Handle Bar */}
+        {!isDesktop && (
+          <div
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'center',
+              paddingTop: 10,
+              paddingBottom: 4,
+              touchAction: 'none',
+            }}
+          >
+            <div style={{ width: 38, height: 4.5, borderRadius: 3, background: 'var(--text-muted, #B0A8A0)', opacity: 0.5 }} />
+          </div>
+        )}
 
         {(title || showClose) && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 20px 14px', flexShrink: 0, borderBottom: '1px solid var(--hairline)' }}>
-            <div>
-              {title && <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }}>{title}</h2>}
-              {subtitle && <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text2)' }}>{subtitle}</p>}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: isDesktop ? '18px 24px 14px' : '10px 20px 12px',
+              borderBottom: '1px solid var(--hairline, rgba(0,0,0,0.08))',
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
+              {title && <h2 style={{ margin: 0, fontSize: isDesktop ? '1.25rem' : '1.15rem', fontWeight: 800, color: 'var(--text, #1C1917)' }}>{title}</h2>}
+              {subtitle && <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--text2, #6B6B6B)' }}>{subtitle}</p>}
             </div>
             {showClose && (
               <button
-                onClick={handleClose}
-                style={{
-                  background: 'var(--surface-sunken)', border: 'none', borderRadius: '50%',
-                  width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', color: 'var(--text)', flexShrink: 0,
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
                 }}
+                style={{
+                  background: 'var(--surface-sunken, rgba(0,0,0,0.06))',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 36,
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--text, #1C1917)',
+                  flexShrink: 0,
+                  transition: 'background 0.15s ease, transform 0.15s ease',
+                }}
+                onPointerDown={(e) => e.currentTarget.style.transform = 'scale(0.92)'}
+                onPointerUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                onPointerLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                 aria-label="Close"
               >
-                <X size={18} />
+                <X size={18} strokeWidth={2.4} />
               </button>
             )}
           </div>
         )}
 
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', padding: '16px 20px 24px', WebkitOverflowScrolling: 'touch' }}>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            padding: isDesktop ? '20px 24px 28px' : '16px 20px 24px',
+            touchAction: 'pan-y',
+          }}
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {content}
         </div>
       </motion.div>
@@ -252,55 +329,123 @@ function GlobalSheet({ id, title, subtitle, content, showClose = true, onClose, 
 }
 
 // ── Global Modal Implementation ──────────────────────────────
-function GlobalModal({ id, title, subtitle, content, showClose = true, onClose, maxWidth = 480 }) {
+function GlobalModal({ id, title, subtitle, content, showClose = true, onClose, maxWidth = 520 }) {
   return (
     <div
       role="dialog"
       aria-modal="true"
       className="cc-modal-wrapper"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+        pointerEvents: 'auto',
+      }}
     >
+      {/* Crisp dark scrim backdrop - NO heavy blur */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
+        transition={{ duration: 0.18 }}
         onClick={onClose}
         style={{
-          position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)',
-          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', touchAction: 'none',
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.48)',
+          touchAction: 'none',
+          zIndex: 1,
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
         }}
       />
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 14 }}
+        initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+        exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ type: 'spring', damping: 26, stiffness: 360 }}
         className="cc-modal-card"
-        style={{ maxWidth }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth,
+          background: 'var(--surface-elevated, #FFF)',
+          color: 'var(--text, #1C1917)',
+          borderRadius: 24,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: 'min(90dvh, 740px)',
+          overflow: 'hidden',
+          zIndex: 2,
+        }}
       >
         {(title || showClose) && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: '1px solid var(--hairline)', flexShrink: 0 }}>
-            <div>
-              {title && <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>{title}</h3>}
-              {subtitle && <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--text3)' }}>{subtitle}</p>}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '18px 24px 14px',
+              borderBottom: '1px solid var(--hairline, rgba(0,0,0,0.08))',
+              flexShrink: 0,
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
+              {title && <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text, #1C1917)' }}>{title}</h3>}
+              {subtitle && <p style={{ margin: '3px 0 0', fontSize: '0.82rem', color: 'var(--text3, #8C7A6B)' }}>{subtitle}</p>}
             </div>
             {showClose && (
               <button
-                onClick={onClose}
-                style={{
-                  background: 'var(--surface-sunken)', border: 'none', borderRadius: '50%',
-                  width: 32, height: 32, display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                  color: 'var(--text2)', padding: 0,
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
                 }}
+                style={{
+                  background: 'var(--surface-sunken, rgba(0,0,0,0.06))',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 36,
+                  height: 36,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: 'var(--text, #1C1917)',
+                  flexShrink: 0,
+                  transition: 'background 0.15s ease, transform 0.15s ease',
+                }}
+                onPointerDown={(e) => e.currentTarget.style.transform = 'scale(0.92)'}
+                onPointerUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                onPointerLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                 aria-label="Close"
               >
-                <X size={18} />
+                <X size={18} strokeWidth={2.4} />
               </button>
             )}
           </div>
         )}
-        <div style={{ padding: '20px', flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+        <div
+          style={{
+            padding: '20px 24px 28px',
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-y',
+          }}
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           {content}
         </div>
       </motion.div>
@@ -317,57 +462,84 @@ function GlobalDrawer({ id, content, onClose }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
+      transition={{ duration: 0.2 }}
       style={{
-        position: 'absolute', inset: 0, pointerEvents: 'auto',
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100000,
+        pointerEvents: 'auto',
       }}
     >
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.25 }}
+        transition={{ duration: 0.2 }}
         onClick={onClose}
         style={{
-          position: 'absolute', inset: 0, background: 'rgba(0, 0, 0, 0.45)',
-          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', touchAction: 'none',
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.48)',
+          touchAction: 'none',
+          zIndex: 1,
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
         }}
       />
       <motion.div
         initial={{ x: '-100%' }}
         animate={{ x: 0 }}
         exit={{ x: '-100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 280 }}
-        drag="x"
-        dragDirectionLock
-        dragConstraints={{ right: 0 }}
-        dragElastic={{ left: 0.1, right: 0 }}
-        onDragEnd={(e, info) => {
-          if (info.velocity.x < -150 || info.offset.x < -60) onClose();
-        }}
+        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
         className="cc-drawer-card"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'fixed',
+          top: 0,
+          bottom: 0,
+          left: 0,
+          width: '300px',
+          maxWidth: '85vw',
+          height: '100dvh',
+          background: 'var(--surface-elevated, #FFF)',
+          boxShadow: '18px 0 60px rgba(0, 0, 0, 0.2)',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: 'env(safe-area-inset-top, 16px) 0 env(safe-area-inset-bottom, 16px) 0',
+          overscrollBehavior: 'contain',
+          touchAction: 'pan-y',
+          zIndex: 2,
+        }}
       >
         <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '12px 14px 4px', flexShrink: 0 }}>
           <button
-            onClick={onClose}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             aria-label="Close navigation"
             style={{
-              width: 32,
-              height: 32,
+              width: 36,
+              height: 36,
               borderRadius: '50%',
-              background: 'var(--surface-sunken)',
+              background: 'var(--surface-sunken, rgba(0,0,0,0.06))',
               border: 'none',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--text)',
+              color: 'var(--text, #1C1917)',
             }}
           >
-            <X size={16} />
+            <X size={18} strokeWidth={2.4} />
           </button>
         </div>
-        {content}
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+          {content}
+        </div>
       </motion.div>
     </motion.div>
   );

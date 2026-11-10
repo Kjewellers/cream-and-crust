@@ -230,7 +230,9 @@ export default function SubscriptionCard() {
                 letterSpacing: '-0.03em',
               }}
             >
-              {selectedPackage?.product?.priceString || (offeringsLoading ? 'Loading…' : isNativeApp ? 'Unavailable' : 'Android app')}
+              {isNativeApp
+                ? (selectedPackage?.product?.priceString || (offeringsLoading ? 'Loading…' : 'Unavailable'))
+                : (selectedPlan === 'yearly' ? '₹1,499' : '₹149')}
             </span>
             <span style={{ fontSize: 14, color: 'var(--text3)', fontWeight: 600 }}>
               /{selectedPlan === 'yearly' ? ANNUAL_PLAN.period : PLAN.period}

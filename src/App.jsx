@@ -30,7 +30,6 @@ import PremiumPaywall from './components/premium/PremiumPaywall';
 import PremiumPreviewScreen from './components/premium/PremiumPreviewScreen';
 import UnlockCelebration from './components/premium/UnlockCelebration';
 import SubscriptionErrorBoundary from './components/premium/SubscriptionErrorBoundary';
-import LiveStatusIsland from './components/system/LiveStatusIsland';
 import CreamCrustLiveBanner from './components/notifications/CreamCrustLiveBanner';
 import NotificationCenterModal from './components/notifications/NotificationCenterModal';
 
@@ -262,7 +261,6 @@ function MainLayout() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      <LiveStatusIsland />
       <MobileHeader
         onMenuClick={() =>
           openDrawer({

@@ -41,6 +41,7 @@ import {
   executePurchase,
   executeRestore,
 } from '../../services/PurchaseStateMachine';
+import { activateWebSubscription } from '../../services/webSubscriptionService';
 
 // ── Plan data (derived from centralized config) ───────────────────────────────────────────
 // Free vs Pro comparison
@@ -194,7 +195,7 @@ export default function PremiumPaywall() {
   const monthlyPackage = findPackageForPlan(offering, 'monthly');
   const yearlyPackage = findPackageForPlan(offering, 'yearly');
   const selectedPackage = selectedPlan === 'yearly' ? yearlyPackage : monthlyPackage;
-  const plans = [
+  const plans = isNative ? [
     {
       id: 'monthly',
       label: 'Monthly',
@@ -212,6 +213,25 @@ export default function PremiumPaywall() {
       subtext: yearlyPackage ? 'Billed yearly · Best value' : 'Not available in Google Play',
       popular: true,
       available: Boolean(yearlyPackage),
+    },
+  ] : [
+    {
+      id: 'monthly',
+      label: 'Monthly',
+      price: '₹149',
+      period: '/month',
+      subtext: 'Billed monthly · 14-day trial',
+      popular: false,
+      available: true,
+    },
+    {
+      id: 'yearly',
+      label: 'Annual',
+      price: '₹1,499',
+      period: '/year',
+      subtext: '₹125/mo · Save 17%',
+      popular: true,
+      available: true,
     },
   ];
 
@@ -296,7 +316,30 @@ export default function PremiumPaywall() {
   }, [closePaywall, isLoading, paywallFeatureKey]);
 
   const handlePurchase = useCallback(async () => {
-    if (isLoading || catalogLoading || !isNative || !selectedPackage) return;
+    if (isLoading || catalogLoading) return;
+
+    if (!isNative) {
+      // 🌐 First-class Web Pro subscription activation
+      setPurchaseState(PurchaseState.PURCHASING);
+      track.purchaseStarted(paywallFeatureKey, selectedPlan);
+      setFriendlyMessage('');
+      try {
+        const planId = selectedPlan === 'yearly' ? 'web_pro_annual' : 'web_pro_monthly';
+        await activateWebSubscription({ planId, isTrial: true });
+        setPurchaseState(PurchaseState.SUCCESS);
+        track.purchaseCompleted(planId, paywallFeatureKey);
+        setTimeout(() => {
+          closePaywall(paywallFeatureKey, { success: true });
+        }, 800);
+      } catch (err) {
+        console.error('[WebPaywall] Activation error:', err);
+        setFriendlyMessage(err.message || 'Web subscription activation failed.');
+        setPurchaseState(PurchaseState.FAILED);
+      }
+      return;
+    }
+
+    if (!selectedPackage) return;
 
     track.purchaseStarted(paywallFeatureKey, selectedPlan);
     setFriendlyMessage('');
@@ -605,7 +648,7 @@ export default function PremiumPaywall() {
               <motion.button
                 whileTap={{ scale: isLoading ? 1 : 0.97 }}
                 onClick={handlePurchase}
-                disabled={isLoading || catalogLoading || !isNative || !selectedPackage || purchaseState === PurchaseState.PENDING}
+                disabled={isLoading || (isNative && (!selectedPackage || catalogLoading)) || purchaseState === PurchaseState.PENDING}
                 id="paywall-upgrade-btn"
                 style={{
                   width: '100%', padding: '15px 0', borderRadius: 14, border: 'none',
@@ -624,13 +667,15 @@ export default function PremiumPaywall() {
                 ) : isLoading ? (
                   <>
                     <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 0.8s linear infinite' }} />
-                    {purchaseState === PurchaseState.PURCHASING ? 'Opening Google Play…' : 'Processing…'}
+                    {purchaseState === PurchaseState.PURCHASING
+                      ? (isNative ? 'Opening Google Play…' : 'Activating Web Pro…')
+                      : 'Processing…'}
                   </>
                 ) : (
                   <>
                     <Crown size={16} fill="#fff" />
                     {!isNative
-                      ? 'Subscribe in the Android app'
+                      ? `Start 14-Day Free Trial · ${selectedPlan === 'yearly' ? '₹1,499/yr' : '₹149/mo'}`
                       : !selectedPackage
                         ? 'Plan unavailable'
                         : `Continue with Google Play · ${selectedPackage.product?.priceString || ''}${selectedPlan === 'yearly' ? '/year' : '/month'}`}
@@ -640,23 +685,29 @@ export default function PremiumPaywall() {
 
               {/* Secondary row */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-                <button
-                  onClick={handleRestore}
-                  disabled={!isNative || restoring || isLoading}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    background: 'none', border: 'none', color: '#8C7A6B',
-                    fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0,
-                    opacity: (restoring || isLoading) ? 0.5 : 1,
-                  }}
-                >
-                  <RotateCcw size={12} />
-                  {restoring ? 'Restoring…' : 'Restore Purchases'}
-                </button>
+                {!isNative ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#8C7A6B', fontSize: 12 }}>
+                    <span>🌐 Web Pro Edition · Instant Browser Access</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleRestore}
+                    disabled={!isNative || restoring || isLoading}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      background: 'none', border: 'none', color: '#8C7A6B',
+                      fontSize: 12.5, fontWeight: 600, cursor: 'pointer', padding: 0,
+                      opacity: (restoring || isLoading) ? 0.5 : 1,
+                    }}
+                  >
+                    <RotateCcw size={12} />
+                    {restoring ? 'Restoring…' : 'Restore Purchases'}
+                  </button>
+                )}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#8C7A6B', fontSize: 11 }}>
                   <Shield size={11} />
-                  Secure billing by Google Play
+                  {isNative ? 'Secure billing by Google Play' : 'Secure Cloud Billing · Cancel anytime'}
                 </div>
               </div>
 

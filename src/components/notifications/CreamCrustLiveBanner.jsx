@@ -6,19 +6,26 @@
  * glassmorphism backdrop blur, live order progress bars, and soft haptics.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, ShoppingBag, Flame, Truck, CheckCircle, ChevronRight, X, Sparkles } from 'lucide-react';
 import { subscribeToLiveActivity } from '../../services/notifications/LiveActivityEngine';
 import { handleNotificationTap } from '../../services/notifications/DeepLinkRouter';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { triggerHaptic } from '../iOS';
 
 export default function CreamCrustLiveBanner() {
   const [activeBanner, setActiveBanner] = useState(null);
   const [liveOrder, setLiveOrder] = useState(null);
+  const [dismissedOrderIds, setDismissedOrderIds] = useState(new Set());
   const [expanded, setExpanded] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Clear transient banners on route change so they don't linger across screens
+  useEffect(() => {
+    setActiveBanner(null);
+  }, [location.pathname]);
 
   // Listen to Live Activity Engine updates
   useEffect(() => {
@@ -38,13 +45,11 @@ export default function CreamCrustLiveBanner() {
       setActiveBanner(notification);
       triggerHaptic('medium');
 
-      // Auto-hide non-live notifications after 5 seconds
-      if (notification.type !== 'LIVE_ORDER') {
-        clearTimeout(window.bannerTimeout);
-        window.bannerTimeout = setTimeout(() => {
-          setActiveBanner(null);
-        }, 5500);
-      }
+      // Auto-hide notifications after 5.5 seconds
+      clearTimeout(window.bannerTimeout);
+      window.bannerTimeout = setTimeout(() => {
+        setActiveBanner(null);
+      }, 5500);
     };
 
     return () => {
@@ -52,12 +57,22 @@ export default function CreamCrustLiveBanner() {
     };
   }, []);
 
-  const displayData = activeBanner || (liveOrder ? {
-    title: `Order #${liveOrder.id?.slice(-4) || '1042'} • ${liveOrder.stageLabel}`,
-    body: `${liveOrder.emoji} ${liveOrder.percentage}% Complete • ${liveOrder.customerName || 'Customer'}`,
+  const dismiss = useCallback(() => {
+    setActiveBanner(null);
+    if (liveOrder?.id) {
+      setDismissedOrderIds((prev) => new Set(prev).add(liveOrder.id));
+    }
+  }, [liveOrder]);
+
+  const isOrderDismissed = liveOrder?.id && dismissedOrderIds.has(liveOrder.id);
+  const currentLive = isOrderDismissed ? null : liveOrder;
+
+  const displayData = activeBanner || (currentLive ? {
+    title: `Order #${currentLive.id?.slice(-4) || '1042'} • ${currentLive.stageLabel}`,
+    body: `${currentLive.emoji} ${currentLive.percentage}% Complete • ${currentLive.customerName || 'Customer'}`,
     type: 'ORDER_STATUS',
-    orderId: liveOrder.id,
-    percentage: liveOrder.percentage,
+    orderId: currentLive.id,
+    percentage: currentLive.percentage,
     isLiveOrder: true,
   } : null);
 
@@ -65,7 +80,7 @@ export default function CreamCrustLiveBanner() {
 
   const onTap = () => {
     handleNotificationTap(displayData, navigate);
-    setActiveBanner(null);
+    dismiss();
   };
 
   return (
@@ -93,7 +108,7 @@ export default function CreamCrustLiveBanner() {
           dragConstraints={{ top: -100, bottom: 0 }}
           onDragEnd={(e, info) => {
             if (info.offset.y < -20) {
-              setActiveBanner(null);
+              dismiss();
             }
           }}
           style={{
@@ -154,7 +169,7 @@ export default function CreamCrustLiveBanner() {
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setActiveBanner(null);
+                  dismiss();
                 }}
                 style={{
                   background: 'rgba(0,0,0,0.05)',

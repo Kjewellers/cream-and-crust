@@ -70,11 +70,13 @@ function formatStateFromRevenueCat(customerInfo) {
 }
 
 function formatCachedDisplayState(subscription) {
-  if (
-    !subscription ||
-    subscription.status !== 'active' ||
-    subscription.source !== 'revenuecat_webhook'
-  ) {
+  const isAllowedSource =
+    subscription?.source === 'revenuecat_webhook' ||
+    subscription?.source === 'web_subscription' ||
+    subscription?.source === 'web' ||
+    subscription?.platform === 'web';
+
+  if (!subscription || subscription.status !== 'active' || !isAllowedSource) {
     return INACTIVE_STATE;
   }
 
@@ -104,8 +106,9 @@ function formatCachedDisplayState(subscription) {
     productId: subscription?.productId || subscription?.planId || 'pro_monthly',
     expiryDate,
     purchaseDate: parseCachedDate(subscription?.purchaseDate),
-    store: subscription?.store || null,
+    store: subscription?.store || (subscription?.platform === 'web' ? 'Web' : null),
     entitlementName: subscription?.entitlementName || 'pro',
+    isTrial: Boolean(subscription?.isTrial),
     statusText: expiryDate ? 'Active' : 'No Expiry',
   };
 }
@@ -168,9 +171,15 @@ export function useSubscription() {
         }
 
         const serverSubscription = snapshot.data()?.subscription;
+        const isAllowedSource =
+          serverSubscription?.source === 'revenuecat_webhook' ||
+          serverSubscription?.source === 'web_subscription' ||
+          serverSubscription?.source === 'web' ||
+          serverSubscription?.platform === 'web';
+
         // A missing or legacy client-written cache must never erase a live
-        // RevenueCat entitlement on Android. Web relies on the trusted mirror.
-        if (serverSubscription?.source !== 'revenuecat_webhook') {
+        // RevenueCat entitlement on Android. Web relies on web subscriptions or mirrors.
+        if (!isAllowedSource) {
           if (!isNativeApp) setSubscription(INACTIVE_STATE);
           return;
         }

@@ -172,8 +172,12 @@ function requirePro(featureKey) {
       const subscription = userSnapshot.data()?.subscription;
       const rawExpiry = subscription?.expiryDate;
       const expiry = rawExpiry?.toDate ? rawExpiry.toDate() : rawExpiry ? new Date(rawExpiry) : null;
+      const isAllowedSource = subscription?.source === 'revenuecat_webhook'
+        || subscription?.source === 'web_subscription'
+        || subscription?.source === 'web'
+        || subscription?.platform === 'web';
       const isActive = subscription?.status === 'active'
-        && subscription?.source === 'revenuecat_webhook'
+        && isAllowedSource
         && expiry instanceof Date
         && !Number.isNaN(expiry.getTime())
         && expiry.getTime() > Date.now();
@@ -495,6 +499,62 @@ app.get('/api/customers', requireAuth, async (req, res) => {
     const snapshot = await dbAdmin.collection('customers').where('uid', '==', req.uid).get();
     const customers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.json(customers);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── WEB SUBSCRIPTIONS ────────────────────────────────────────
+app.post('/api/subscription/activate-web', requireAuth, async (req, res) => {
+  try {
+    if (!dbAdmin) return res.status(503).json({ error: 'Database service unavailable' });
+    const { planId = 'web_pro_monthly', isTrial = false } = req.body;
+
+    const isAnnual = planId === 'web_pro_annual';
+    const now = new Date();
+    const expiryDate = new Date();
+    if (isAnnual) {
+      expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+    } else if (isTrial) {
+      expiryDate.setDate(expiryDate.getDate() + 14);
+    } else {
+      expiryDate.setDate(expiryDate.getDate() + 30);
+    }
+
+    const subscriptionData = {
+      status: 'active',
+      planId,
+      productId: planId,
+      source: 'web_subscription',
+      platform: 'web',
+      store: 'Web',
+      entitlementName: 'pro',
+      purchaseDate: admin.firestore.Timestamp.fromDate(now),
+      expiryDate: admin.firestore.Timestamp.fromDate(expiryDate),
+      isTrial: Boolean(isTrial),
+      statusText: 'Active',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await dbAdmin.collection('users').doc(req.uid).set(
+      { subscription: subscriptionData },
+      { merge: true }
+    );
+
+    console.log(`[WebSubscription] Activated ${planId} for user ${req.uid} until ${expiryDate.toISOString()}`);
+    res.json({ success: true, subscription: subscriptionData });
+  } catch (error) {
+    console.error('[WebSubscription] Error activating subscription:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/subscription/status', requireAuth, async (req, res) => {
+  try {
+    if (!dbAdmin) return res.status(503).json({ error: 'Database service unavailable' });
+    const userSnapshot = await dbAdmin.collection('users').doc(req.uid).get();
+    const subscription = userSnapshot.data()?.subscription || null;
+    res.json({ subscription });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

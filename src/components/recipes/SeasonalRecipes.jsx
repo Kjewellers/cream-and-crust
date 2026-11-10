@@ -67,10 +67,8 @@ export default function SeasonalRecipes({ recipes, getIngCost, onSelectRecipe, o
         }
         .hero-banner {
           flex-direction: row;
-          background: rgba(255, 255, 255, 0.4) !important;
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(255, 255, 255, 0.6);
+          background: #ffffff !important;
+          border: 1px solid rgba(232, 106, 140, 0.2);
         }
         .hero-img-container {
           position: absolute;
@@ -94,11 +92,10 @@ export default function SeasonalRecipes({ recipes, getIngCost, onSelectRecipe, o
         .season-card {
           min-width: 130px;
           padding: 24px 16px;
-          backdrop-filter: blur(10px);
-          -webkit-backdrop-filter: blur(10px);
+          background: #ffffff;
         }
         .season-card.active {
-          background: rgba(255, 255, 255, 0.9) !important;
+          background: #ffffff !important;
           border: 2px solid #E86A8C !important;
           box-shadow: 0 16px 32px rgba(232, 106, 140, 0.15) !important;
         }
@@ -108,13 +105,11 @@ export default function SeasonalRecipes({ recipes, getIngCost, onSelectRecipe, o
           gap: 28px;
         }
         .recipe-card {
-          background: rgba(255, 255, 255, 0.6);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
+          background: #ffffff;
           border-radius: 24px;
           overflow: hidden;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.03);
-          border: 1px solid rgba(255,255,255,0.8);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.04);
+          border: 1px solid rgba(0, 0, 0, 0.06);
           cursor: pointer;
           transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
         }
@@ -266,10 +261,8 @@ export default function SeasonalRecipes({ recipes, getIngCost, onSelectRecipe, o
             width: '100%', 
             padding: '20px 20px 20px 60px', 
             borderRadius: 99, 
-            border: '2px solid rgba(255,255,255,0.8)', 
-            background: 'rgba(255,255,255,0.6)', 
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
+            border: '2px solid rgba(0, 0, 0, 0.08)', 
+            background: '#ffffff', 
             fontSize: '1.05rem',
             color: '#2D2323',
             boxShadow: '0 8px 32px rgba(232, 106, 140, 0.08)',

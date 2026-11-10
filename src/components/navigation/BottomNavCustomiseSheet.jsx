@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import NativeBottomSheet from '../ui/NativeBottomSheet';
 import {
   LayoutDashboard,
   Sparkles,
@@ -118,105 +119,15 @@ export default function BottomNavCustomiseSheet({ open, currentIds, onClose, onS
   if (!open) return null;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        onClick={onClose}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 200,
-          background: 'rgba(15, 15, 15, 0.28)',
-          backdropFilter: 'blur(2px)',
-          WebkitBackdropFilter: 'blur(2px)',
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'center',
-        }}
-      >
-        <motion.div
-          initial={{ y: 60, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 60, opacity: 0 }}
-          transition={{ duration: 0.28, ease: [0.25, 1, 0.5, 1] }}
-          onClick={(e) => e.stopPropagation()}
-          style={{
-            width: '100%',
-            maxWidth: 520,
-            maxHeight: '88vh',
-            background: 'var(--card)',
-            borderRadius: '24px 24px 0 0',
-            display: 'flex',
-            flexDirection: 'column',
-            boxShadow: '0 -24px 60px rgba(0,0,0,0.25)',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              paddingTop: 10,
-              paddingBottom: 4,
-              flexShrink: 0,
-            }}
-          >
-            <div
-              style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--border-md)' }}
-            />
-          </div>
-
-          <div
-            style={{
-              padding: '12px 22px 16px',
-              borderBottom: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 14,
-              flexShrink: 0,
-            }}
-          >
-            <div>
-              <h3
-                style={{
-                  margin: 0,
-                  fontSize: 17,
-                  fontWeight: 800,
-                  letterSpacing: '-0.015em',
-                  color: 'var(--text)',
-                }}
-              >
-                Customise footer
-              </h3>
-              <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--text3)' }}>
-                Pick 4 shortcuts to pin · {selected.length}/4
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              aria-label="Close"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 10,
-                background: 'var(--bg)',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text2)',
-                cursor: 'pointer',
-                flexShrink: 0,
-              }}
-            >
-              <X size={16} />
-            </button>
-          </div>
-
-          <div style={{ padding: '14px 22px 8px', flexShrink: 0 }}>
+    <NativeBottomSheet
+      open={open}
+      onClose={onClose}
+      title="Customise footer"
+      subtitle={`Pick 4 shortcuts to pin · ${selected.length}/4`}
+      maxWidth={540}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div>
             <div
               style={{
                 fontSize: 11,
@@ -431,8 +342,7 @@ export default function BottomNavCustomiseSheet({ open, currentIds, onClose, onS
               Save layout
             </button>
           </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+      </div>
+    </NativeBottomSheet>
   );
 }

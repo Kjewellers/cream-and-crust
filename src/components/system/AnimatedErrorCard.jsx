@@ -24,9 +24,7 @@ export function AnimatedErrorCard({ error, onDismiss, onRetry }) {
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.4)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          background: 'rgba(0, 0, 0, 0.48)',
           zIndex: -1,
         }}
       />
@@ -40,9 +38,7 @@ export function AnimatedErrorCard({ error, onDismiss, onRetry }) {
         style={{
           width: '100%',
           maxWidth: 360,
-          background: 'rgba(255, 253, 249, 0.85)',
-          backdropFilter: 'blur(40px)',
-          WebkitBackdropFilter: 'blur(40px)',
+          background: '#fffdf9',
           borderRadius: 32,
           padding: '32px 24px',
           boxShadow: '0 32px 64px rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.8)',

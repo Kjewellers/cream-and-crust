@@ -298,8 +298,7 @@ export default function MenuDashboard() {
                 borderRadius: 16,
                 border: 'none',
                 cursor: 'pointer',
-                background: 'rgba(255,255,255,0.75)',
-                backdropFilter: 'blur(8px)',
+                background: 'var(--card, #ffffff)',
                 textAlign: 'left',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
               }}
@@ -696,8 +695,7 @@ export default function MenuDashboard() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
                 <div style={{
                   width: 46, height: 46, borderRadius: 14,
-                  background: 'rgba(255,255,255,0.15)',
-                  backdropFilter: 'blur(8px)',
+                  background: 'rgba(255,255,255,0.22)',
                   color: '#FFF',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
@@ -714,12 +712,11 @@ export default function MenuDashboard() {
                 </div>
               </div>
               <div style={{ 
-                background: 'rgba(255,255,255,0.15)', 
+                background: 'rgba(255,255,255,0.22)', 
                 borderRadius: '50%', 
                 width: 34, height: 34, 
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                position: 'relative', zIndex: 1,
-                backdropFilter: 'blur(4px)'
+                position: 'relative', zIndex: 1
               }}>
                 <ArrowRight size={18} color="#FFF" />
               </div>

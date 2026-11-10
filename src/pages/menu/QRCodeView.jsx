@@ -110,14 +110,14 @@ export default function QRCodeView({ username }) {
 
       {/* URL preview */}
       <div style={{
-        background: 'rgba(255,255,255,0.7)',
+        background: 'rgba(255, 255, 255, 0.9)',
+        border: '1px solid var(--hairline, rgba(0,0,0,0.08))',
         borderRadius: 12,
         padding: '8px 14px',
         marginBottom: 16,
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        backdropFilter: 'blur(8px)',
       }}>
         <span style={{ fontSize: '0.72rem', color: '#8C7A6B', fontFamily: 'monospace', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {url}

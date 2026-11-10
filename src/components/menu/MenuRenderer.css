@@ -16,8 +16,7 @@
   justify-content: space-between;
   gap: 18px;
   padding: 14px clamp(16px, 4vw, 44px);
-  background: rgba(255,255,255,0.9);
-  backdrop-filter: blur(14px);
+  background: #ffffff;
   position: sticky;
   top: 0;
   z-index: 20;

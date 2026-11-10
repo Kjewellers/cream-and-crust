@@ -31,6 +31,40 @@ export default function BusinessReportModal({ open, report, onClose, bakery = {}
     setMounted(true);
   }, []);
 
+  // Lock body scroll (Instagram / Airbnb standard)
+  React.useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && typeof onClose === 'function') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [open, onClose]);
+
   if (!open || !report || !mounted) return null;
 
   const isMonthly = report.type === 'monthly';
@@ -127,10 +161,8 @@ export default function BusinessReportModal({ open, report, onClose, bakery = {}
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(20, 14, 12, 0.75)',
-          backdropFilter: 'blur(16px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-          zIndex: 10050,
+          background: 'rgba(0, 0, 0, 0.48)',
+          zIndex: 100000,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -142,20 +174,22 @@ export default function BusinessReportModal({ open, report, onClose, bakery = {}
       >
         <motion.div
           key="report-sheet"
-          initial={{ y: 40, opacity: 0, scale: 0.97 }}
+          initial={{ y: 20, opacity: 0, scale: 0.96 }}
           animate={{ y: 0, opacity: 1, scale: 1 }}
-          exit={{ y: 40, opacity: 0, scale: 0.97 }}
-          transition={{ type: 'spring', stiffness: 320, damping: 32 }}
+          exit={{ y: 20, opacity: 0, scale: 0.96 }}
+          transition={{ type: 'spring', stiffness: 320, damping: 30 }}
           onClick={(e) => e.stopPropagation()}
           style={{
             width: '100%',
-            maxWidth: 440,
-            maxHeight: 'calc(100vh - 48px)',
+            maxWidth: 460,
+            maxHeight: 'min(90dvh, 760px)',
             overflowY: 'auto',
+            overscrollBehavior: 'contain',
             WebkitOverflowScrolling: 'touch',
             background: 'var(--card, #FFFFFF)',
             borderRadius: 24,
-            boxShadow: '0 24px 80px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.06)',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
+            border: '1px solid var(--hairline, rgba(0,0,0,0.08))',
             paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 8px))',
           }}
         >
@@ -187,20 +221,22 @@ export default function BusinessReportModal({ open, report, onClose, bakery = {}
                 position: 'absolute',
                 top: 16,
                 right: 16,
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 borderRadius: '50%',
                 border: 'none',
-                background: 'rgba(255,255,255,0.25)',
+                background: 'rgba(255,255,255,0.28)',
                 color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                backdropFilter: 'blur(8px)',
               }}
+              onPointerDown={(e) => e.currentTarget.style.transform = 'scale(0.92)'}
+              onPointerUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              onPointerLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
             >
-              <X size={16} strokeWidth={2.4} />
+              <X size={18} strokeWidth={2.4} />
             </button>
 
             {/* floating sparkles */}

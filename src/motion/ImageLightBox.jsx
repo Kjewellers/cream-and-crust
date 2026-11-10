@@ -25,9 +25,8 @@ export default function ImageLightBox({ src, alt = 'Image view', isOpen, onClose
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 1200,
+            zIndex: 100000,
             background: 'rgba(0, 0, 0, 0.92)',
-            backdropFilter: 'blur(12px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

@@ -467,7 +467,7 @@ function useKeyboardHeight() {
 /* ── Single Toast Card ──────────────────────────────────────────── */
 const TOAST_STYLES = {
   success: {
-    bg: 'rgba(240, 253, 244, 0.92)',
+    bg: '#f0fdf4',
     border: 'rgba(74, 167, 116, 0.28)',
     color: '#1A3C28',
     iconBg: 'rgba(74, 167, 116, 0.14)',
@@ -476,7 +476,7 @@ const TOAST_STYLES = {
     title: 'Success!',
   },
   error: {
-    bg: 'rgba(254, 242, 242, 0.92)',
+    bg: '#fef2f2',
     border: 'rgba(205, 92, 92, 0.25)',
     color: '#4A1C1C',
     iconBg: 'rgba(205, 92, 92, 0.12)',
@@ -485,7 +485,7 @@ const TOAST_STYLES = {
     title: 'Oops!',
   },
   warning: {
-    bg: 'rgba(255, 251, 235, 0.92)',
+    bg: '#fffbeb',
     border: 'rgba(202, 160, 56, 0.25)',
     color: '#3D2E06',
     iconBg: 'rgba(202, 160, 56, 0.14)',
@@ -494,7 +494,7 @@ const TOAST_STYLES = {
     title: 'Heads up!',
   },
   info: {
-    bg: 'rgba(239, 246, 255, 0.92)',
+    bg: '#eff6ff',
     border: 'rgba(96, 132, 200, 0.25)',
     color: '#1A2744',
     iconBg: 'rgba(96, 132, 200, 0.12)',
@@ -541,8 +541,6 @@ function ToastCard({ toast, onDismiss }) {
           '0 1px 3px rgba(0,0,0,0.06)',
         pointerEvents: 'auto',
         cursor: 'pointer',
-        backdropFilter: 'blur(24px) saturate(1.6)',
-        WebkitBackdropFilter: 'blur(24px) saturate(1.6)',
         wordBreak: 'break-word',
         overflowWrap: 'break-word',
         touchAction: 'pan-x',
@@ -978,6 +976,17 @@ export function OnboardingTutorial({ onFinish }) {
   const [showSheet, setShowSheet] = useState(false);
 
   useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     if (step === 3) {
       setTimeout(() => setShowSheet(true), 500);
     }
@@ -988,7 +997,9 @@ export function OnboardingTutorial({ onFinish }) {
     if (step < 3) setStep(step + 1);
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
@@ -997,9 +1008,8 @@ export function OnboardingTutorial({ onFinish }) {
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 9999,
-          background: 'rgba(0,0,0,0.4)',
-          backdropFilter: 'blur(8px)',
+          zIndex: 100000,
+          background: 'rgba(0,0,0,0.48)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -1022,12 +1032,11 @@ export function OnboardingTutorial({ onFinish }) {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               style={{
-                background: 'rgba(255,255,255,0.9)',
-                backdropFilter: 'blur(12px)',
+                background: '#ffffff',
                 padding: '16px 24px',
                 borderRadius: 24,
-                boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
-                border: '1px solid rgba(255,255,255,0.3)',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+                border: '1px solid rgba(0,0,0,0.08)',
                 maxWidth: 280,
                 textAlign: 'center',
                 marginBottom: 40,
@@ -1093,12 +1102,11 @@ export function OnboardingTutorial({ onFinish }) {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               style={{
-                background: 'rgba(255,255,255,0.9)',
-                backdropFilter: 'blur(12px)',
+                background: '#ffffff',
                 padding: '16px 24px',
                 borderRadius: 24,
-                boxShadow: '0 12px 32px rgba(0,0,0,0.15)',
-                border: '1px solid rgba(255,255,255,0.3)',
+                boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+                border: '1px solid rgba(0,0,0,0.08)',
                 maxWidth: 280,
                 textAlign: 'center',
                 marginBottom: 40,
@@ -1185,6 +1193,7 @@ export function OnboardingTutorial({ onFinish }) {
           )}
         </AnimatePresence>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

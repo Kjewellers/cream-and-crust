@@ -6,7 +6,8 @@
  * Keep Local, Keep Cloud, or Merge.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Smartphone, Cloud, ArrowRight, Check, CheckCircle2 } from 'lucide-react';
 import { RESOLUTION_STRATEGIES, getConflictSummary } from '../../services/backup/ConflictResolver';
@@ -62,20 +63,79 @@ export default function ConflictResolverModal({ conflicts, onResolve }) {
 
   const isComplete = Object.keys(resolutions).length === conflicts.length;
 
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
-      zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 20,
-    }}>
+  // Lock body scroll (Instagram / Airbnb standard)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    return () => {
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+        pointerEvents: 'auto',
+      }}
+    >
+      {/* Backdrop Scrim - Crisp darkening without blinding heavy blur */}
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.48)',
+          touchAction: 'none',
+          zIndex: 1,
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      />
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         style={{
-          background: 'var(--bg)', borderRadius: 24, width: '100%', maxWidth: 500,
-          boxShadow: '0 24px 48px rgba(0,0,0,0.2)', overflow: 'hidden',
-          display: 'flex', flexDirection: 'column', maxHeight: '90vh',
+          position: 'relative',
+          background: 'var(--bg)',
+          borderRadius: 24,
+          width: '100%',
+          maxWidth: 500,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
+          border: '1px solid var(--hairline, rgba(0,0,0,0.08))',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: 'min(90dvh, 720px)',
+          zIndex: 2,
         }}
       >
         {/* Header */}
@@ -234,6 +294,7 @@ export default function ConflictResolverModal({ conflicts, onResolve }) {
           </div>
         )}
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

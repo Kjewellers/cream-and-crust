@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, ZoomIn } from 'lucide-react';
 
@@ -27,7 +28,43 @@ export default function ImageLightbox({ src, alt = '', title = '', onClose }) {
     }
   };
 
-  return (
+  // Lock body scroll (Instagram standard)
+  useEffect(() => {
+    if (!src || typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && typeof onClose === 'function') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [src, onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
@@ -37,15 +74,18 @@ export default function ImageLightbox({ src, alt = '', title = '', onClose }) {
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 99999,
-          background: 'rgba(10, 8, 7, 0.92)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
+          zIndex: 100000,
+          background: 'rgba(0, 0, 0, 0.92)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           padding: 16,
+          pointerEvents: 'auto',
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
         }}
       >
         {/* Top Controls Bar */}
@@ -79,14 +119,13 @@ export default function ImageLightbox({ src, alt = '', title = '', onClose }) {
                 width: 40,
                 height: 40,
                 borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.12)',
+                background: 'rgba(255, 255, 255, 0.22)',
                 border: 'none',
                 color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                backdropFilter: 'blur(8px)',
               }}
             >
               <Download size={18} />
@@ -97,17 +136,19 @@ export default function ImageLightbox({ src, alt = '', title = '', onClose }) {
                 width: 40,
                 height: 40,
                 borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.18)',
+                background: 'rgba(255, 255, 255, 0.22)',
                 border: 'none',
                 color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                backdropFilter: 'blur(8px)',
               }}
+              onPointerDown={(e) => e.currentTarget.style.transform = 'scale(0.92)'}
+              onPointerUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+              onPointerLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
             >
-              <X size={20} />
+              <X size={20} strokeWidth={2.4} />
             </button>
           </div>
         </div>
@@ -142,6 +183,7 @@ export default function ImageLightbox({ src, alt = '', title = '', onClose }) {
           />
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

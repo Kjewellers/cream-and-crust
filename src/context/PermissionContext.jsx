@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Camera, Image as ImageIcon, Bell, Mic, FileText, Settings, X, ShieldAlert, MapPin } from 'lucide-react';
 import { PermissionManager, PERMISSION_TYPES } from '../services/PermissionManager';
@@ -117,34 +118,45 @@ export const PermissionProvider = ({ children }) => {
     }
   };
 
+  useEffect(() => {
+    if (!activeRequest) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, [activeRequest]);
+
   return (
     <PermissionContext.Provider value={{ requirePermission }}>
       {children}
 
-      <AnimatePresence>
-        {activeRequest && (
-          <div style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 99999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 20
-          }}>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              style={{
-                position: 'absolute',
-                inset: 0,
-                background: 'rgba(0,0,0,0.4)',
-                backdropFilter: 'blur(4px)',
-                WebkitBackdropFilter: 'blur(4px)',
-              }}
-              onClick={handleNotNow}
-            />
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {activeRequest && (
+            <div style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 100000,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 20
+            }}>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.48)',
+                }}
+                onClick={handleNotNow}
+              />
 
             <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
@@ -295,7 +307,9 @@ export const PermissionProvider = ({ children }) => {
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
     </PermissionContext.Provider>
   );
 };

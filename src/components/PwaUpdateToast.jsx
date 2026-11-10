@@ -75,12 +75,9 @@ function makeInner(useRegisterSW) {
               gap: 12,
               padding: '12px 14px',
               borderRadius: 18,
-              background:
-                'linear-gradient(135deg, rgba(255,253,250,0.97) 0%, rgba(255,247,242,0.97) 100%)',
-              backdropFilter: 'blur(18px)',
-              WebkitBackdropFilter: 'blur(18px)',
-              border: '1px solid rgba(181, 96, 106, 0.18)',
-              boxShadow: '0 14px 40px rgba(181, 96, 106, 0.18), 0 4px 12px rgba(0,0,0,0.06)',
+              background: '#fffdfa',
+              border: '1px solid rgba(181, 96, 106, 0.22)',
+              boxShadow: '0 14px 40px rgba(0, 0, 0, 0.16), 0 4px 12px rgba(0,0,0,0.06)',
               color: '#2D1B14',
               fontFamily: '"Inter", system-ui, sans-serif',
             }}

@@ -59,6 +59,17 @@ function Particle({ x, y, color, rotation, scale, delay }) {
 }
 
 export default function UnlockCelebration({ visible, featureLabel }) {
+  useEffect(() => {
+    if (!visible) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, [visible]);
 
   if (typeof document === 'undefined') return null;
 
@@ -74,13 +85,12 @@ export default function UnlockCelebration({ visible, featureLabel }) {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 99999,
+            zIndex: 100000,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'rgba(0,0,0,0.72)',
-            backdropFilter: 'blur(6px)',
+            background: 'rgba(0,0,0,0.85)',
             fontFamily: '"Inter", system-ui, sans-serif',
           }}
         >

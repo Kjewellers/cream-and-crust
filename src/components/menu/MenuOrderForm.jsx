@@ -17,6 +17,7 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, MessageCircle, X, User, Phone, MapPin, Calendar, Package, Map as MapIcon, Loader2 } from 'lucide-react';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
@@ -240,59 +241,110 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
     }
   };
 
-  if (!open) return null;
+  // Lock body scroll (Instagram / Airbnb standard)
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
 
-  return (
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && typeof onClose === 'function' && !submitting) {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [open, onClose, submitting]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
-      <motion.div
-        key="cc-order-form"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.2 }}
-        onClick={() => {
-          if (!submitting) {
-            if (!submitted && business?.id) {
-              trackEvent('checkout_abandoned', business.id, data?.username || 'default', product?.id, { channel: 'website', reason: 'backdrop_click' });
-            }
-            onClose();
-          }
-        }}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Order form"
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(20, 14, 16, 0.55)',
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
-          zIndex: 10001,
+          zIndex: 100000,
           display: 'flex',
           alignItems: 'flex-end',
           justifyContent: 'center',
           padding: 16,
+          pointerEvents: 'auto',
         }}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Order form"
       >
+        {/* Backdrop Scrim - Crisp darkening without blinding heavy blur */}
         <motion.div
-          initial={{ y: 80, opacity: 0 }}
+          key="cc-order-form-backdrop"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          onClick={() => {
+            if (!submitting) {
+              if (!submitted && business?.id) {
+                trackEvent('checkout_abandoned', business.id, data?.username || 'default', product?.id, { channel: 'website', reason: 'backdrop_click' });
+              }
+              onClose();
+            }
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.48)',
+            touchAction: 'none',
+            zIndex: 1,
+          }}
+          onTouchMove={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        />
+
+        <motion.div
+          key="cc-order-form-card"
+          initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 80, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 260, damping: 28 }}
+          exit={{ y: 50, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 280, damping: 28 }}
           onClick={(e) => e.stopPropagation()}
           style={{
+            position: 'relative',
             width: '100%',
             maxWidth: 480,
             background: '#FFFFFF',
             borderRadius: 24,
             padding: '20px 20px 24px',
-            boxShadow: '0 -10px 40px rgba(0,0,0,0.18)',
-            position: 'relative',
-            maxHeight: '92vh',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
+            maxHeight: 'min(92dvh, 760px)',
             overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            touchAction: 'pan-y',
             color: INK,
-            marginBottom: 'max(env(safe-area-inset-bottom), 24px)',
+            marginBottom: 'max(env(safe-area-inset-bottom), 16px)',
             fontFamily: '"Inter", system-ui, sans-serif',
+            zIndex: 2,
           }}
         >
           <div
@@ -656,8 +708,9 @@ export default function MenuOrderForm({ open, onClose, business, data, product }
             </>
           )}
         </motion.div>
-      </motion.div>
-    </AnimatePresence>
+      </div>
+    </AnimatePresence>,
+    document.body
   );
 }
 

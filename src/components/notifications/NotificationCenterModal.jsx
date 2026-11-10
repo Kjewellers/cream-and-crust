@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, CheckCheck, Trash2, Filter, X, ShoppingBag, Package, Shield, ChevronRight } from 'lucide-react';
 import {
@@ -61,29 +62,85 @@ export default function NotificationCenterModal({ isOpen, onClose }) {
     onClose();
   };
 
-  return (
+  // Lock body scroll (Instagram / Airbnb standard)
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && typeof onClose === 'function') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [isOpen, onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <div
+          role="dialog"
+          aria-modal="true"
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 10040,
+            zIndex: 100000,
             display: 'flex',
             justifyContent: 'flex-end',
-            background: 'rgba(0, 0, 0, 0.45)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            pointerEvents: 'auto',
           }}
-          onClick={onClose}
         >
+          {/* Backdrop Scrim - Crisp darkening without blinding heavy blur */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={onClose}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.48)',
+              touchAction: 'none',
+              zIndex: 1,
+            }}
+            onTouchMove={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          />
+
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 32 }}
             onClick={(e) => e.stopPropagation()}
             style={{
+              position: 'relative',
               width: '100%',
               maxWidth: 440,
               height: '100%',
@@ -91,7 +148,9 @@ export default function NotificationCenterModal({ isOpen, onClose }) {
               color: 'var(--text, #2D1B14)',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '-10px 0 40px rgba(0,0,0,0.15)',
+              boxShadow: '-10px 0 40px rgba(0,0,0,0.22)',
+              zIndex: 2,
+              overflow: 'hidden',
             }}
           >
         {/* Header */}
@@ -301,6 +360,7 @@ export default function NotificationCenterModal({ isOpen, onClose }) {
       </motion.div>
     </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

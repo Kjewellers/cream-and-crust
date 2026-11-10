@@ -55,14 +55,13 @@ export default function OfflineBanner() {
               display: 'inline-flex',
               alignItems: 'center',
               gap: 8,
-              background: syncState === 'offline' ? 'rgba(74, 59, 50, 0.95)' : 'rgba(52, 168, 83, 0.95)',
+              background: syncState === 'offline' ? '#4a3b32' : '#2e7d32',
               color: '#FFF7F2',
               borderRadius: 999,
               padding: '10px 18px',
               fontSize: 13,
               fontWeight: 600,
               boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-              backdropFilter: 'blur(8px)',
             }}
           >
             {syncState === 'offline' ? (

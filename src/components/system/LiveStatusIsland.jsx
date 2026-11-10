@@ -29,8 +29,7 @@ export default function LiveStatusIsland() {
         onClick={toggleExpand}
         whileTap={{ scale: 0.95 }}
         style={{
-          background: 'rgba(28, 20, 16, 0.92)',
-          backdropFilter: 'blur(16px)',
+          background: '#1c1410',
           border: '1px solid rgba(255, 255, 255, 0.15)',
           borderRadius: expanded ? 22 : 99,
           padding: expanded ? '14px 20px' : '6px 14px',

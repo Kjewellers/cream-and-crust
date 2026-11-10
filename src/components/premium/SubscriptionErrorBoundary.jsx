@@ -57,7 +57,7 @@ export default class SubscriptionErrorBoundary extends React.Component {
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 99998,
-          background: 'rgba(45,27,20,0.92)',
+          background: '#2d1b14',
           color: '#fff',
           padding: '12px 20px',
           borderRadius: 12,
@@ -66,7 +66,6 @@ export default class SubscriptionErrorBoundary extends React.Component {
           boxShadow: '0 4px 20px rgba(0,0,0,0.35)',
           maxWidth: 340,
           textAlign: 'center',
-          backdropFilter: 'blur(8px)',
         }}
       >
         <span style={{ marginRight: 8 }}>⚠️</span>

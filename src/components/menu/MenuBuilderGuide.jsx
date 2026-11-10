@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { X, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
@@ -286,11 +287,39 @@ export default function MenuBuilderGuide({ onClose }) {
     navigate(current.action.path);
   };
 
-  // Prevent scroll behind overlay
+  // Prevent scroll behind overlay (Instagram / Airbnb standard)
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
-  }, []);
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && typeof onClose === 'function') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [onClose]);
 
   const slideVariants = {
     enter: (dir) => ({ x: dir > 0 ? 60 : -60, opacity: 0, scale: 0.97 }),
@@ -298,34 +327,61 @@ export default function MenuBuilderGuide({ onClose }) {
     exit: (dir) => ({ x: dir > 0 ? -60 : 60, opacity: 0, scale: 0.97 }),
   };
 
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
       style={{
-        position: 'fixed', inset: 0, zIndex: 2000,
-        background: 'rgba(10, 8, 6, 0.65)',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         padding: '16px',
+        pointerEvents: 'auto',
       }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
+      {/* Backdrop Scrim - Crisp darkening without blinding heavy blur */}
       <motion.div
-        initial={{ scale: 0.94, opacity: 0, y: 20 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={onClose}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0, 0, 0, 0.48)',
+          touchAction: 'none',
+          zIndex: 1,
+        }}
+        onTouchMove={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+      />
+
+      <motion.div
+        initial={{ scale: 0.94, opacity: 0, y: 15 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.94, opacity: 0, y: 20 }}
+        exit={{ scale: 0.94, opacity: 0, y: 15 }}
         transition={{ type: 'spring', stiffness: 300, damping: 28 }}
         style={{
           background: 'white',
           borderRadius: 28,
           width: '100%',
           maxWidth: 480,
+          maxHeight: 'min(90dvh, 720px)',
           overflow: 'hidden',
-          boxShadow: '0 32px 80px rgba(0,0,0,0.25)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
+          border: '1px solid var(--hairline, rgba(0,0,0,0.08))',
           position: 'relative',
+          zIndex: 2,
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         {/* ── Header Bar ── */}
@@ -535,6 +591,7 @@ export default function MenuBuilderGuide({ onClose }) {
           </motion.button>
         </div>
       </motion.div>
-    </motion.div>
+    </div>,
+    document.body
   );
 }

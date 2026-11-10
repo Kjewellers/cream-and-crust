@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import {
   LayoutDashboard,
@@ -409,7 +410,21 @@ export default function PremiumAppTour({ onComplete }) {
     }),
   };
 
-  return (
+  useEffect(() => {
+    if (isExiting) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, [isExiting]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {!isExiting && (
         <motion.div
@@ -420,14 +435,12 @@ export default function PremiumAppTour({ onComplete }) {
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 9999,
+            zIndex: 100000,
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'rgba(250, 247, 245, 0.88)',
-            backdropFilter: 'blur(36px)',
-            WebkitBackdropFilter: 'blur(36px)',
+            background: 'rgba(250, 247, 245, 0.98)',
             padding: 16,
             userSelect: 'none',
           }}
@@ -745,9 +758,8 @@ export default function PremiumAppTour({ onComplete }) {
                   marginTop: 18,
                   padding: '9px 18px',
                   borderRadius: 999,
-                  background: 'rgba(255, 255, 255, 0.88)',
-                  backdropFilter: 'blur(16px)',
-                  border: '1px solid rgba(0,0,0,0.06)',
+                  background: '#ffffff',
+                  border: '1px solid rgba(0,0,0,0.08)',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
                   color: '#6A5A54',
                   fontSize: '0.82rem',
@@ -774,6 +786,7 @@ export default function PremiumAppTour({ onComplete }) {
           </AnimatePresence>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

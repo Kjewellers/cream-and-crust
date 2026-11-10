@@ -1,4 +1,5 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -377,20 +378,92 @@ export default function OnboardingModal({ user, business, onComplete }) {
     );
   };
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(250, 247, 245, 0.85)', backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+  // Lock body scroll while onboarding is visible
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    return () => {
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, []);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100000,
+        background: 'rgba(0, 0, 0, 0.48)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        pointerEvents: 'auto',
+      }}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) {
+          e.preventDefault();
+        }
+      }}
+    >
       <motion.div
-        initial={{ scale: 0.94, opacity: 0, y: 20 }}
+        initial={{ scale: 0.95, opacity: 0, y: 15 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 320 }}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        style={{ background: 'var(--bg)', borderRadius: 28, width: '100%', maxWidth: 520, maxHeight: '92vh', overflow: 'hidden', boxShadow: '0 24px 70px rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.35)', touchAction: 'pan-y' }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--surface-elevated, #FFF)',
+          borderRadius: 24,
+          width: '100%',
+          maxWidth: 520,
+          maxHeight: 'min(90dvh, 760px)',
+          overflow: 'hidden',
+          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.22)',
+          border: '1px solid var(--hairline, rgba(0,0,0,0.08))',
+          display: 'flex',
+          flexDirection: 'column',
+          touchAction: 'pan-y',
+        }}
       >
-        <div style={{ height: 7, background: 'var(--bg2)' }}>
+        <div style={{ height: 6, background: 'var(--surface-sunken, rgba(0,0,0,0.06))', flexShrink: 0 }}>
           <motion.div animate={{ width: `${((step + 1) / steps.length) * 100}%` }} style={{ height: '100%', background: 'linear-gradient(90deg, var(--accent), #D9A06F)' }} />
         </div>
 
-        <div style={{ padding: 26, maxHeight: 'calc(92vh - 7px)', overflowY: 'auto' }}>
+        <div
+          style={{
+            padding: 24,
+            flex: 1,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-y',
+          }}
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 22 }}>
             <div style={{ width: 48, height: 48, borderRadius: 16, background: 'var(--cream)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
               <current.icon size={24} />
@@ -425,6 +498,7 @@ export default function OnboardingModal({ user, business, onComplete }) {
           </div>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

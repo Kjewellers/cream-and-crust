@@ -234,6 +234,34 @@ export default function Recipes() {
     if (selectedRecipe) setCachedRecipe(selectedRecipe);
   }, [selectedRecipe]);
 
+  // Lock body scroll when recipe detail or editor is open (Instagram / Airbnb standard)
+  useEffect(() => {
+    const isOverlayOpen = Boolean(selectedRecipe || showCreate || activeModal);
+    if (!isOverlayOpen || typeof window === 'undefined') return;
+
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    return () => {
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [selectedRecipe, showCreate, activeModal]);
+
   // Safe wrapper — never set a bad recipe object, log when one is tapped
   const openRecipe = useCallback((recipe) => {
     if (!recipe || typeof recipe !== 'object') {
@@ -525,9 +553,7 @@ export default function Recipes() {
                 alignItems: 'center',
                 gap: 12,
                 padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 12px',
-                background: 'rgba(255,255,255,0.82)',
-                backdropFilter: 'blur(18px)',
-                WebkitBackdropFilter: 'blur(18px)',
+                background: 'var(--surface-elevated, #FFF)',
                 borderBottom: '1px solid var(--rv-border, rgba(60,60,67,0.08))',
               }}
             >
@@ -1220,9 +1246,8 @@ export default function Recipes() {
                 style={{
                   position: 'fixed',
                   inset: 0,
-                  background: 'rgba(0,0,0,0.4)',
-                  backdropFilter: 'blur(4px)',
-                  zIndex: 120,
+                  background: 'rgba(0,0,0,0.48)',
+                  zIndex: 100000,
                 }}
               />
               <motion.div

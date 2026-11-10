@@ -187,10 +187,8 @@
 }
 
 .glass-morphism {
-  background: var(--glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: var(--card, #ffffff);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 /* ── Automatic Dark Mode (warm, brand-tinted) ────────────────────────
@@ -428,8 +426,6 @@ textarea::placeholder {
 .sidebar {
   width: var(--nav-w);
   background: var(--surface-elevated);
-  backdrop-filter: blur(32px) saturate(180%);
-  -webkit-backdrop-filter: blur(32px) saturate(180%);
   border-right: 1px solid var(--hairline);
   padding: 18px 12px;
   position: fixed;
@@ -591,9 +587,7 @@ textarea::placeholder {
   position: sticky;
   top: 0;
   z-index: 70;
-  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  background: var(--surface-elevated);
   border-bottom: 1px solid var(--hairline);
   padding: 0 32px;
   user-select: none;
@@ -839,9 +833,7 @@ textarea::placeholder {
   left: 0;
   right: 0;
   padding-top: env(safe-area-inset-top, 0px); /* iPhone notch support */
-  background: color-mix(in srgb, var(--surface-elevated) 86%, transparent);
-  backdrop-filter: blur(50px) saturate(180%);
-  -webkit-backdrop-filter: blur(50px) saturate(180%);
+  background: var(--surface-elevated);
   border-bottom: 0.5px solid var(--hairline);
   z-index: 99;
   user-select: none;
@@ -874,10 +866,8 @@ textarea::placeholder {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-  z-index: 99;
+  background: rgba(0, 0, 0, 0.48);
+  z-index: 9999;
   animation: fadeIn 0.22s var(--ease);
 }
 .overlay.show {
@@ -891,9 +881,7 @@ textarea::placeholder {
   bottom: 0;
   left: 0;
   right: 0;
-  background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
-  backdrop-filter: blur(50px) saturate(180%);
-  -webkit-backdrop-filter: blur(50px) saturate(180%);
+  background: var(--surface-elevated);
   border-top: 0.5px solid var(--hairline);
   z-index: 98;
   padding-bottom: env(safe-area-inset-bottom, 20px); /* Crucial for iOS home indicator */
@@ -954,33 +942,11 @@ textarea::placeholder {
     box-shadow 0.3s var(--ease),
     border-color 0.3s var(--ease);
 }
-.card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -75%;
-  width: 50%;
-  height: 100%;
-  background: linear-gradient(
-    115deg,
-    transparent 25%,
-    rgba(255, 255, 255, 0.32) 50%,
-    transparent 75%
-  );
-  transform: skewX(-18deg);
-  transition: left 0.7s var(--ease);
-  pointer-events: none;
-  opacity: 0;
-}
-.card:hover::before {
-  left: 130%;
-  opacity: 1;
-}
 .card:hover {
   box-shadow:
     0 18px 46px rgba(74, 59, 50, 0.1),
     0 2px 8px rgba(74, 59, 50, 0.04);
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: var(--border-md);
 }
 

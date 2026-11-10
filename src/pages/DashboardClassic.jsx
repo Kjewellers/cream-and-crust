@@ -67,6 +67,7 @@ import BusinessReportModal from '../components/reports/BusinessReportModal';
 import { buildReport, weekKey, monthKey, previousPeriodRange } from '../utils/businessReport';
 import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { useAchievements } from '../utils/achievements';
+import DailyBakeSheetModal from '../components/orders/DailyBakeSheetModal';
 
 export default function DashboardClassic() {
   const navigate = useNavigate();
@@ -82,6 +83,7 @@ export default function DashboardClassic() {
   } = useData() || {};
   // Auto business report (weekly + monthly-on-the-1st)
   const [activeReport, setActiveReport] = useState(null);
+  const [showBakeSheet, setShowBakeSheet] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState({ orders: [], customers: [] });
   const [isListening, setIsListening] = useState(false);
@@ -111,7 +113,7 @@ export default function DashboardClassic() {
     const saved = localStorage.getItem('dashVisibleActions');
     return saved
       ? JSON.parse(saved)
-      : ['orders', 'customers', 'products', 'menu', 'expenses', 'recipes'];
+      : ['orders', 'bakesheet', 'customers', 'products', 'menu', 'recipes'];
   });
 
   const toggleAction = (id) => {
@@ -1140,16 +1142,28 @@ export default function DashboardClassic() {
                 </div>
                 <div style={{ borderTop: '1px dashed rgba(255,255,255,0.3)', margin: '18px 0' }} />
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-                  <div>
+                  <div
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      triggerHaptic('light');
+                      setShowBakeSheet(true);
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    title="Open Kitchen Bake Sheet"
+                  >
                     <div
                       style={{
                         fontSize: '0.65rem',
-                        opacity: 0.8,
+                        opacity: 0.85,
                         fontWeight: 700,
                         textTransform: 'uppercase',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
                       }}
                     >
-                      Active Orders
+                      <span>Active Orders</span>
+                      <span style={{ fontSize: 9, background: 'rgba(255,255,255,0.22)', padding: '1px 5px', borderRadius: 4 }}>Bake Sheet 📋</span>
                     </div>
                     <div
                       style={{
@@ -1332,9 +1346,8 @@ export default function DashboardClassic() {
             <div
               style={{
                 width: '100%',
-                background: 'rgba(255, 255, 255, 0.8)',
-                backdropFilter: 'blur(12px)',
-                border: '1px solid rgba(74,59,50,0.06)',
+                background: 'var(--card, #ffffff)',
+                border: '1px solid rgba(74,59,50,0.08)',
                 borderRadius: 20,
                 padding: '14px 16px',
                 display: 'flex',
@@ -1547,6 +1560,57 @@ export default function DashboardClassic() {
                   }}
                 >
                   New Order
+                </span>
+              </motion.div>
+            )}
+
+            {/* Daily Bake Sheet */}
+            {visibleActions.includes('bakesheet') && (
+              <motion.div
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  setShowBakeSheet(true);
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(181, 96, 106, 0.18)',
+                  boxShadow: '0 4px 12px rgba(181, 96, 106, 0.04)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    background: '#FFF0EE',
+                    color: '#B5606A',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <ChefHat size={16} strokeWidth={2.6} />
+                </div>
+                <span
+                  style={{
+                    fontSize: '0.58rem',
+                    fontWeight: 800,
+                    color: 'var(--text)',
+                    whiteSpace: 'nowrap',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  Bake Sheet
                 </span>
               </motion.div>
             )}
@@ -2731,6 +2795,7 @@ export default function DashboardClassic() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[
             { id: 'orders', label: 'New Order', icon: Plus, color: '#E15A3E' },
+            { id: 'bakesheet', label: 'Daily Bake Sheet', icon: ChefHat, color: '#B5606A' },
             { id: 'customers', label: 'Customers', icon: Users, color: '#9333EA' },
             { id: 'products', label: 'Products', icon: Package, color: '#CA8A04' },
             { id: 'menu', label: 'View Menu', icon: LayoutGrid, color: '#0284C7' },
@@ -2805,6 +2870,12 @@ export default function DashboardClassic() {
           })}
         </div>
       </NativeBottomSheet>
+
+      <DailyBakeSheetModal
+        open={showBakeSheet}
+        onClose={() => setShowBakeSheet(false)}
+        orders={orders}
+      />
 
       <AnimatedDemo
         moduleId="dashboard"

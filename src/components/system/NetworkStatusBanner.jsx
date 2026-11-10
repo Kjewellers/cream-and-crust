@@ -49,10 +49,8 @@ export function NetworkStatusBanner() {
         >
           <div
             style={{
-              background: 'rgba(250, 240, 240, 0.95)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
-              border: '1px solid rgba(205, 92, 92, 0.2)',
+              background: '#faf0f0',
+              border: '1px solid rgba(205, 92, 92, 0.25)',
               borderRadius: 20,
               padding: '6px 14px',
               display: 'flex',

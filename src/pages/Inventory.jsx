@@ -128,8 +128,6 @@ const QuickOrderApps = () => (
             gap: 6,
             boxShadow: `0 8px 24px ${app.color}40`,
             transition: 'all 0.2s var(--spring)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
           }}
         >
           <span style={{ fontSize: '1.6rem', lineHeight: 1 }}>{app.emoji}</span>

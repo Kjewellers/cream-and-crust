@@ -22,6 +22,7 @@ import {
   Scale,
   Bike,
   Truck,
+  ChefHat,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -54,6 +55,7 @@ import StatusUpdateModal from '../components/orders/StatusUpdateModal';
 import CalendarView from '../components/orders/CalendarView';
 import CustomerProfileSheet from '../components/orders/CustomerProfileSheet';
 import InvoicePreviewModal from '../components/orders/InvoicePreviewModal';
+import DailyBakeSheetModal from '../components/orders/DailyBakeSheetModal';
 import OrderForm from '../components/orders/OrderForm';
 import PaymentToggle from '../components/orders/PaymentToggle';
 import AnimatedNumber from '../components/AnimatedNumber';
@@ -1008,6 +1010,7 @@ export default function Orders() {
   const [viewMode, setViewMode] = useState('list');
   const [previewOrder, setPreviewOrder] = useState(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [showBakeSheet, setShowBakeSheet] = useState(false);
   // Payment filter: 'all' | 'pending' | 'paid'
   const [paymentFilter, setPaymentFilter] = useState('all');
   // Saved categories (persisted per user)
@@ -3002,6 +3005,34 @@ export default function Orders() {
             <SlidersHorizontal size={17} strokeWidth={2.5} />
           </button>
 
+          {/* Daily Bake Sheet Button */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('light');
+              setShowBakeSheet(true);
+            }}
+            style={{
+              height: 36,
+              padding: '0 12px',
+              borderRadius: 18,
+              background: '#FFF9F5',
+              color: '#B5606A',
+              border: '1.5px solid rgba(181, 96, 106, 0.28)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: 12.5,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 6px rgba(181, 96, 106, 0.08)',
+            }}
+            title="Daily Bake Sheet & Kitchen Batch Planner"
+          >
+            <ChefHat size={16} strokeWidth={2.4} /> <span>Bake Sheet</span>
+          </button>
+
           {/* New Order — primary CTA on mobile (always visible) */}
           <button
             className="mobile-only"
@@ -3877,6 +3908,11 @@ export default function Orders() {
         order={previewOrder}
         business={business}
         showToast={showToast}
+      />
+      <DailyBakeSheetModal
+        open={showBakeSheet}
+        onClose={() => setShowBakeSheet(false)}
+        orders={orders}
       />
       <AnimatedDemo moduleId="orders" title="How to Create an Order" scenes={ordersDemoScenes} />
     </motion.div>

@@ -100,6 +100,18 @@ export default function MenuThemeCustomizer() {
   const [saving, setSaving] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState(null); // template id being previewed
 
+  useEffect(() => {
+    if (!previewTemplate) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, [previewTemplate]);
+
   useEffect(() => setTheme(menu.theme), [menu.theme]);
 
   const update = (key, value) => setTheme((prev) => ({ ...prev, [key]: value }));
@@ -546,10 +558,8 @@ export default function MenuThemeCustomizer() {
               style={{
                 position: 'fixed',
                 inset: 0,
-                zIndex: 10000,
-                background: 'rgba(20, 14, 16, 0.85)',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
+                zIndex: 100000,
+                background: 'rgba(20, 14, 16, 0.92)',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -586,10 +596,9 @@ export default function MenuThemeCustomizer() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     gap: 12,
-                    background: 'rgba(255, 255, 255, 0.95)',
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
+                    background: '#FFFFFF',
                     borderBottom: '1px solid var(--border)',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.06)',
                     flexShrink: 0,
                   }}
                 >
@@ -687,10 +696,9 @@ export default function MenuThemeCustomizer() {
                     padding: '14px 18px max(env(safe-area-inset-bottom), 14px)',
                     display: 'flex',
                     gap: 10,
-                    background: 'rgba(255, 255, 255, 0.95)',
-                    backdropFilter: 'blur(12px)',
-                    WebkitBackdropFilter: 'blur(12px)',
+                    background: '#FFFFFF',
                     borderTop: '1px solid var(--border)',
+                    boxShadow: '0 -2px 10px rgba(0,0,0,0.06)',
                   }}
                 >
                   <button

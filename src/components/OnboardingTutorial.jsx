@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, ShoppingBag, Package, Receipt, BarChart3, 
@@ -99,6 +100,18 @@ export default function OnboardingTutorial({ onComplete }) {
   const [particles, setParticles] = useState([]);
 
   useEffect(() => {
+    if (!isVisible) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, [isVisible]);
+
+  useEffect(() => {
     // Generate static particles positions
     const newParticles = Array.from({ length: 12 }).map((_, i) => ({
       id: i,
@@ -145,19 +158,18 @@ export default function OnboardingTutorial({ onComplete }) {
 
   const step = steps[currentStep];
 
-  if (!isVisible) return null;
+  if (!isVisible || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div style={{
       position: 'fixed',
       inset: 0,
-      zIndex: 3000,
+      zIndex: 100000,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '20px',
-      background: 'rgba(20, 15, 12, 0.8)',
-      backdropFilter: 'blur(12px)',
+      background: 'rgba(0, 0, 0, 0.48)',
       pointerEvents: 'auto'
     }}>
       <motion.div
@@ -361,6 +373,7 @@ export default function OnboardingTutorial({ onComplete }) {
           }}
         />
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

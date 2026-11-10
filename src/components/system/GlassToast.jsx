@@ -20,11 +20,11 @@ export function GlassToast({ error, onDismiss }) {
   const getStyle = () => {
     switch (error.category) {
       case 'success':
-        return { bg: 'rgba(240, 253, 244, 0.85)', color: '#1A3C28', iconColor: '#2D8F54' };
+        return { bg: '#f0fdf4', color: '#1A3C28', iconColor: '#2D8F54' };
       case 'info':
-        return { bg: 'rgba(239, 246, 255, 0.85)', color: '#1A2744', iconColor: '#4A7AC7' };
+        return { bg: '#eff6ff', color: '#1A2744', iconColor: '#4A7AC7' };
       default: // default is level 1 minor error/warning
-        return { bg: 'rgba(254, 242, 242, 0.85)', color: '#4A1C1C', iconColor: '#C0504D' };
+        return { bg: '#fef2f2', color: '#4A1C1C', iconColor: '#C0504D' };
     }
   };
 
@@ -50,12 +50,10 @@ export function GlassToast({ error, onDismiss }) {
         alignItems: 'center',
         gap: 10,
         background: style.bg,
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        border: `1px solid rgba(255, 255, 255, 0.4)`,
+        border: `1px solid rgba(0, 0, 0, 0.08)`,
         borderRadius: 24,
         padding: '10px 16px 10px 12px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.04)',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.04)',
         cursor: 'pointer',
         pointerEvents: 'auto',
         marginBottom: 8,

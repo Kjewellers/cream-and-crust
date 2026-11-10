@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, ShoppingBag, ShieldCheck, Globe, Package, X, ChevronRight, Share2, PhoneCall } from 'lucide-react';
 import { triggerHaptic, showToast } from '../iOS';
@@ -86,6 +87,18 @@ export default function BakeryStoriesBar() {
   const navigate = useNavigate();
   const [activeStory, setActiveStory] = useState(null);
   const [slideIndex, setSlideIndex] = useState(0);
+
+  useEffect(() => {
+    if (!activeStory) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, [activeStory]);
 
   const openStory = (story) => {
     triggerHaptic('light');
@@ -212,26 +225,26 @@ export default function BakeryStoriesBar() {
       </div>
 
       {/* ── Full Screen Story Viewer Modal (Instagram / YouTube Stories style) ── */}
-      <AnimatePresence>
-        {activeStory && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.25 }}
-            onClick={closeStory}
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 9999,
-              background: 'rgba(15, 12, 10, 0.92)',
-              backdropFilter: 'blur(16px)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 16,
-            }}
-          >
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {activeStory && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+              onClick={closeStory}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 100000,
+                background: 'rgba(15, 12, 10, 0.95)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 16,
+              }}
+            >
             <motion.div
               onClick={(e) => e.stopPropagation()}
               style={{
@@ -339,7 +352,9 @@ export default function BakeryStoriesBar() {
             </motion.div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Share2, Eye } from 'lucide-react';
 import InvoiceTemplate from './InvoiceTemplate';
@@ -22,6 +23,40 @@ export default function InvoicePreviewModal({ isOpen, onClose, order, business, 
     window.addEventListener('resize', updateScale);
     return () => window.removeEventListener('resize', updateScale);
   }, [isOpen]);
+
+  // Lock body scroll (Instagram / Airbnb standard)
+  useEffect(() => {
+    if (!isOpen || typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && typeof onClose === 'function') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen || !order) return null;
 
@@ -83,24 +118,31 @@ export default function InvoicePreviewModal({ isOpen, onClose, order, business, 
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       <div style={styles.overlay}>
-        {/* Backdrop glassmorphic click-away */}
+        {/* Backdrop Scrim - Crisp darkening without blinding heavy blur */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
           style={styles.backdrop}
           onClick={isBusy ? null : onClose}
+          onTouchMove={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
         />
 
         {/* Modal Card */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+          exit={{ opacity: 0, scale: 0.95, y: 15 }}
+          transition={{ type: 'spring', damping: 26, stiffness: 350 }}
           style={styles.modalCard}
         >
           {/* Header */}
@@ -174,47 +216,47 @@ export default function InvoicePreviewModal({ isOpen, onClose, order, business, 
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 
 const styles = {
   overlay: {
     position: 'fixed',
-    top: 0,
-    left: 0,
+    inset: 0,
     width: '100vw',
-    height: '100vh',
-    zIndex: 9999,
+    height: '100dvh',
+    zIndex: 100000,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     padding: '16px',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    pointerEvents: 'auto',
   },
   backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
+    position: 'fixed',
+    inset: 0,
     width: '100%',
     height: '100%',
-    background: 'rgba(23, 17, 14, 0.45)',
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)'
+    background: 'rgba(0, 0, 0, 0.48)',
+    touchAction: 'none',
   },
   modalCard: {
     position: 'relative',
-    zIndex: 1,
+    zIndex: 2,
     width: '100%',
     maxWidth: '760px',
-    maxHeight: '90vh',
+    maxHeight: 'min(90dvh, 780px)',
     background: '#FAF6F0',
     borderRadius: '24px',
-    boxShadow: '0 20px 50px rgba(45, 27, 20, 0.15)',
+    boxShadow: '0 24px 64px rgba(0, 0, 0, 0.22)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    border: '1px solid rgba(140, 122, 107, 0.1)'
+    border: '1px solid rgba(140, 122, 107, 0.1)',
+    overscrollBehavior: 'contain',
   },
   header: {
     display: 'flex',
@@ -279,8 +321,7 @@ const styles = {
     left: 0,
     width: '100%',
     height: '100%',
-    background: 'rgba(243, 237, 226, 0.8)',
-    backdropFilter: 'blur(4px)',
+    background: 'rgba(243, 237, 226, 0.92)',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',

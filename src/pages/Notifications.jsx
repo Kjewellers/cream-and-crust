@@ -86,9 +86,7 @@ export default function Notifications() {
       <div style={{ 
         padding: 'env(safe-area-inset-top, 44px) 20px 20px', 
         position: 'sticky', top: 0, zIndex: 10,
-        background: 'rgba(255, 241, 242, 0.85)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
+        background: '#FFF1F2',
         borderBottom: '1px solid rgba(244, 63, 94, 0.08)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
@@ -147,8 +145,7 @@ export default function Notifications() {
                     exit={{ opacity: 0, scale: 0.9, x: -20 }}
                     onClick={() => markAsRead(notif.id, notif.read)}
                     style={{
-                      background: 'rgba(255, 255, 255, 0.95)',
-                      backdropFilter: 'blur(10px)',
+                      background: '#FFFFFF',
                       borderRadius: 24,
                       padding: '16px',
                       display: 'flex',

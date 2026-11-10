@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -131,34 +132,69 @@ export default function CommandPalette({ open, onClose }) {
     }
   };
 
-  if (!open) return null;
+  // Lock body scroll (Instagram / Airbnb standard)
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
 
-  return (
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    return () => {
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [open]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       <div
+        role="dialog"
+        aria-modal="true"
         style={{
           position: 'fixed',
           inset: 0,
-          zIndex: 99990,
+          zIndex: 100000,
           display: 'flex',
           alignItems: 'flex-start',
           justifyContent: 'center',
           paddingTop: 'clamp(40px, 10vh, 120px)',
           paddingLeft: 16,
           paddingRight: 16,
+          pointerEvents: 'auto',
         }}
-        onClick={onClose}
       >
+        {/* Backdrop Scrim - Crisp darkening without blinding heavy blur */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          onClick={onClose}
           style={{
-            position: 'absolute',
+            position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 12, 11, 0.45)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            background: 'rgba(0, 0, 0, 0.48)',
+            touchAction: 'none',
+            zIndex: 1,
+          }}
+          onTouchMove={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
         />
 
@@ -172,11 +208,12 @@ export default function CommandPalette({ open, onClose }) {
             position: 'relative',
             width: '100%',
             maxWidth: 560,
-            background: 'var(--card, #fff)',
+            background: 'var(--surface-elevated, #FFF)',
             borderRadius: 24,
             overflow: 'hidden',
             boxShadow: '0 25px 60px -12px rgba(0, 0, 0, 0.3)',
-            border: '1px solid var(--border-md, rgba(0,0,0,0.1))',
+            border: '1px solid var(--hairline, rgba(0,0,0,0.1))',
+            zIndex: 2,
           }}
         >
           {/* Input Bar */}
@@ -285,6 +322,7 @@ export default function CommandPalette({ open, onClose }) {
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

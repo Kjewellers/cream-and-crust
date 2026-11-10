@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Check, Phone, MapPin, CreditCard, Instagram, MessageCircle, Globe,
@@ -135,59 +136,119 @@ export default function QuickProfileModal({ open, onClose, business, currentUser
     }
   };
 
-  return (
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Lock body scroll (Instagram / Airbnb standard)
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const origOverflow = document.body.style.overflow;
+    const origHtmlOverflow = document.documentElement.style.overflow;
+    const origPosition = document.body.style.position;
+    const origTop = document.body.style.top;
+    const origWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    return () => {
+      document.documentElement.style.overflow = origHtmlOverflow;
+      document.body.style.overflow = origOverflow;
+      document.body.style.position = origPosition;
+      document.body.style.top = origTop;
+      document.body.style.width = origWidth;
+      try { window.scrollTo(0, scrollY); } catch (_) {}
+    };
+  }, [open]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
+        <div
+          role="dialog"
+          aria-modal="true"
           style={{
             position: 'fixed',
             inset: 0,
-            zIndex: 1000,
-            background: 'rgba(28, 21, 18, 0.6)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            zIndex: 100000,
             display: 'flex',
-            alignItems: 'flex-end',
+            alignItems: isDesktop ? 'center' : 'flex-end',
             justifyContent: 'center',
-            padding: 0,
+            padding: isDesktop ? 24 : 0,
+            pointerEvents: 'auto',
           }}
         >
+          {/* Crisp dark scrim backdrop - NO heavy blur */}
           <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.98 }}
-            transition={{ duration: 0.28, ease: [0.25, 1, 0.5, 1] }}
-            onClick={e => e.stopPropagation()}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={onClose}
             style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.48)',
+              touchAction: 'none',
+              zIndex: 1,
+            }}
+            onTouchMove={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+          />
+
+          <motion.div
+            initial={isDesktop ? { opacity: 0, scale: 0.95, y: 15 } : { y: '100%' }}
+            animate={isDesktop ? { opacity: 1, scale: 1, y: 0 } : { y: 0 }}
+            exit={isDesktop ? { opacity: 0, scale: 0.95, y: 15 } : { y: '100%' }}
+            transition={{ type: 'spring', damping: 28, stiffness: 320 }}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'relative',
               width: '100%',
-              maxWidth: 560,
-              maxHeight: '92vh',
-              background: 'var(--card)',
-              borderRadius: '24px 24px 0 0',
-              boxShadow: '0 -24px 60px rgba(0,0,0,0.25)',
+              maxWidth: 580,
+              maxHeight: isDesktop ? 'min(90dvh, 760px)' : '88dvh',
+              background: 'var(--surface-elevated, #FFF)',
+              borderRadius: isDesktop ? 24 : '24px 24px 0 0',
+              boxShadow: isDesktop
+                ? '0 24px 64px rgba(0, 0, 0, 0.22)'
+                : '0 -10px 40px rgba(0, 0, 0, 0.18)',
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              marginBottom: 0,
+              zIndex: 2,
             }}
             className="quick-profile-modal-sheet"
           >
             {/* Drag handle */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'center',
-                paddingTop: 10,
-                paddingBottom: 4,
-                flexShrink: 0,
-              }}
-            >
-              <div style={{ width: 38, height: 4, borderRadius: 2, background: 'var(--border-md)' }} />
-            </div>
+            {!isDesktop && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  paddingTop: 10,
+                  paddingBottom: 4,
+                  flexShrink: 0,
+                  touchAction: 'none',
+                }}
+              >
+                <div style={{ width: 38, height: 4.5, borderRadius: 3, background: 'var(--text-muted, #B0A8A0)', opacity: 0.5 }} />
+              </div>
+            )}
 
             {/* Header */}
             <div
@@ -389,17 +450,9 @@ export default function QuickProfileModal({ open, onClose, business, currentUser
               </button>
             </div>
           </motion.div>
-
-          <style>{`
-            @media (min-width: 700px) {
-              .quick-profile-modal-sheet {
-                margin-bottom: 5vh !important;
-                border-radius: 20px !important;
-              }
-            }
-          `}</style>
-        </motion.div>
+        </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

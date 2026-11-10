@@ -545,8 +545,7 @@ function GalleryHero({ data, onOrder, isDesktop }) {
               left: 18,
               right: 18,
               padding: '14px 18px',
-              background: 'rgba(250, 248, 244, 0.92)',
-              backdropFilter: 'blur(10px)',
+              background: '#faf8f4',
               border: `1px solid ${PALETTE.hairline}`,
               borderRadius: 2,
             }}

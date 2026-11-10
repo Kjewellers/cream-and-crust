@@ -478,11 +478,9 @@ export default function Products() {
                       position: 'relative',
                       borderRadius: 16,
                       overflow: 'hidden',
-                      background: 'var(--glass)',
-                      backdropFilter: 'blur(16px)',
-                      WebkitBackdropFilter: 'blur(16px)',
-                      boxShadow: 'var(--shadow-lg)',
-                      border: '1px solid rgba(255,255,255,0.2)',
+                      background: 'var(--surface-elevated, #FFF)',
+                      boxShadow: 'var(--shadow)',
+                      border: '1px solid var(--border)',
                     }}
                   >
                     <div
@@ -623,7 +621,6 @@ export default function Products() {
                       background: 'linear-gradient(135deg, var(--gold), #fcd34d)', 
                       color: '#451a03', 
                       boxShadow: '0 4px 12px rgba(212, 160, 80, 0.4)',
-                      backdropFilter: 'blur(4px)',
                       border: '1px solid rgba(255,255,255,0.4)',
                       padding: '4px 10px',
                     }}>
@@ -650,11 +647,10 @@ export default function Products() {
                       borderRadius: 99,
                       border: 'none',
                       cursor: 'pointer',
-                      background: p.menuHidden ? 'rgba(0,0,0,0.55)' : 'rgba(16,185,129,0.9)',
+                      background: p.menuHidden ? 'rgba(0,0,0,0.65)' : 'rgba(16,185,129,0.95)',
                       color: 'white',
                       fontWeight: 800,
                       fontSize: '0.62rem',
-                      backdropFilter: 'blur(4px)',
                       boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                       transition: 'background 0.2s',
                     }}

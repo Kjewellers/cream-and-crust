@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -360,10 +361,8 @@ function PhoneOtpFlow({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 2000,
-        background: 'rgba(28, 20, 16, 0.5)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
+        zIndex: 100000,
+        background: 'rgba(0, 0, 0, 0.48)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -753,6 +752,17 @@ function ForgotPasswordFlow({ onClose }) {
   const [otpCode, setOtpCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmationResult, setConfirmationResult] = useState(null);
+
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, []);
   // RecaptchaVerifier is managed by the singleton recaptchaManager module.
   // No useRef, no useEffect — avoids StrictMode double-mount and
   // destroy-on-close/create-on-open cycling bugs.
@@ -922,7 +932,7 @@ function ForgotPasswordFlow({ onClose }) {
     gap: 6,
   });
 
-  return (
+  const modalContent = (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -931,10 +941,8 @@ function ForgotPasswordFlow({ onClose }) {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 100,
-        background: 'rgba(28, 20, 16, 0.4)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
+        zIndex: 100000,
+        background: 'rgba(0, 0, 0, 0.48)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -1361,6 +1369,8 @@ function ForgotPasswordFlow({ onClose }) {
       </motion.div>
     </motion.div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null;
 }
 
 /* ─── Main Login component ───────────────────────────────────────── */
@@ -1385,6 +1395,18 @@ export default function Login() {
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [otpError, setOtpError] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  useEffect(() => {
+    if (!showForgotPassword && !showPhoneLogin) return;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, [showForgotPassword, showPhoneLogin]);
   // When user types a phone number in the email field, we look up their email
   // and store it here. A non-empty value means we're in "phone login" mode.
   const [resolvedEmail, setResolvedEmail] = useState(''); // email matched from phone

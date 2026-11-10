@@ -285,8 +285,8 @@ export default function WebsiteOrdersCard({ orders }) {
                 transition={{ duration: 0.25 }}
                 style={{
                   position: 'relative',
-                  background: 'rgba(255,255,255,0.78)',
-                  backdropFilter: 'blur(6px)',
+                  background: 'var(--card, #ffffff)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
                   borderRadius: 16,
                   padding: '14px 16px',
                   border: '1px solid rgba(181,96,106,0.18)',

@@ -11,6 +11,14 @@ import dns from 'dns/promises';
 import net from 'net';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Safely load .env file if present (local dev). On Render/cloud hosts, env vars are injected directly.
+if (fs.existsSync(path.join(__dirname, '.env')) && typeof process.loadEnvFile === 'function') {
+  try {
+    process.loadEnvFile(path.join(__dirname, '.env'));
+  } catch {}
+}
+
 const app = express();
 
 // Apply global rate limiting
@@ -1216,8 +1224,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, message: 'Internal Server Error' });
 });
 
-if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
-  app.listen(PORT, () => {
+if (!process.env.VERCEL) {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`🧁 Cream & Crust server running on port ${PORT}`);
     console.log(`Serving static files from ${path.join(__dirname, 'dist')}`);
   });

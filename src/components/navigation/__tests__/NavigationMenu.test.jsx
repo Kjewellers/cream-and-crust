@@ -80,3 +80,4 @@ describe('Sidebar / NavigationMenu Drawer Integration', () => {
     expect(screen.getByText('nav.orders')).toBeInTheDocument();
   });
 });
+

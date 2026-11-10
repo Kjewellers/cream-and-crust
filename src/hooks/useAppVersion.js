@@ -19,7 +19,9 @@ export function useAppVersion() {
     updateType: isAndroid ? 'play_store' : 'web_reload',
     maintenanceMode: false,
     maintenanceMessage: '',
-    loading: true,
+    // Web loads directly from Vercel so it never blocks UI boot with loading: true.
+    // Native Android checks Play Store version requirement on launch.
+    loading: isAndroid,
   });
 
   useEffect(() => {

@@ -7,7 +7,7 @@ import Platform from './platform/Platform';
 import SystemGuard from './components/SystemGuard';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { DataProvider, useData } from './context/DataContext';
-import { Loader2 } from './components/iOS';
+import { Loader2, ToastContainer } from './components/iOS';
 import { ErrorPresenter } from './components/system/ErrorPresenter';
 import { AmbientCanvas, MotionDebugger } from './motion';
 import { ConfettiCanvas, SuccessBurstOverlay, FloatingRewardLayer } from './components/DopamineKit';
@@ -357,6 +357,7 @@ export default function App() {
                   <DataProvider>
                     <AmbientCanvas />
                     <MainLayout />
+                    <ToastContainer />
                     <ErrorPresenter />
                     <OfflineBanner />
                     <CreamCrustLiveBanner />

@@ -75,19 +75,24 @@ export default class AppErrorBoundary extends React.Component {
       name === 'typeerror';
 
     const isChunkError =
-      msg.includes('failed to fetch') ||
-      msg.includes('load failed') ||
+      msg.includes('dynamically imported module') ||
       msg.includes('loading chunk') ||
       msg.includes('loading css chunk') ||
-      msg.includes('dynamically imported module') ||
+      (msg.includes('failed to fetch') && (msg.includes('module') || msg.includes('import') || msg.includes('.js'))) ||
       name === 'chunkerror';
 
     if (isChunkError) {
-      log.boundary('Chunk error detected, forcing hard reload to fetch new assets');
+      log.boundary('Chunk error detected, checking reload throttling');
       if (typeof window !== 'undefined') {
-        window.location.reload();
+        const lastReload = Number(sessionStorage.getItem('cc_last_chunk_reload') || 0);
+        const now = Date.now();
+        // Prevent infinite reload loops: throttle hard reload to at most once per 20 seconds
+        if (now - lastReload > 20000) {
+          sessionStorage.setItem('cc_last_chunk_reload', String(now));
+          window.location.reload();
+          return;
+        }
       }
-      return;
     }
 
     if (isTransient && this.state.autoRetries < 3) {

@@ -26,7 +26,7 @@ export default function SystemGuard({ children }) {
     return () => clearTimeout(timer);
   }, [loading]);
 
-  if (loading) {
+  if (loading && platform === 'android') {
     return (
       <div
         style={{

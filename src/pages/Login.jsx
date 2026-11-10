@@ -1485,7 +1485,10 @@ export default function Login() {
       nameClean
     );
 
-  const canSubmit = hasValidIdentifier && passwordOk && (mode === 'login' || nameValid);
+  const canSubmit =
+    mode === 'login'
+      ? hasValidIdentifier && password.length > 0
+      : hasValidIdentifier && passwordOk && nameValid;
 
   const detectCaps = (e) => {
     if (typeof e.getModifierState === 'function') {
@@ -1493,14 +1496,14 @@ export default function Login() {
     }
   };
 
-  const act = async (fn, operationName = 'Authentication') => {
+  const act = async (fn, operationName = 'Authentication', timeoutMs = 15000) => {
     if (loading) return;
     setLoading(true);
     try {
       triggerHaptic('light');
     } catch (_) {}
     try {
-      await withAuthTimeout(fn(), 12000, operationName);
+      await withAuthTimeout(fn(), timeoutMs, operationName);
       // Explicitly release loading state on success to prevent UI freezing 
       // if unmounting takes time or fails.
       setLoading(false);
@@ -1531,7 +1534,16 @@ export default function Login() {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!canSubmit) {
-      // Specific error messages for each validation rule
+      if (mode === 'login') {
+        if (!hasValidIdentifier) {
+          showToast('Please enter your email or phone number', 'error');
+        } else if (!password) {
+          showToast('Please enter your password', 'error');
+        }
+        return;
+      }
+
+      // Registration validation rules
       if (mode === 'register' && !nameClean) {
         showToast('Please enter your name', 'error');
       } else if (mode === 'register' && nameClean.length < 2) {
@@ -2132,7 +2144,7 @@ export default function Login() {
 
               <motion.button
                 type="submit"
-                disabled={loading || !canSubmit}
+                disabled={loading}
                 whileTap={{ scale: 0.98 }}
                 className="cc-submit"
               >
@@ -2162,7 +2174,7 @@ export default function Login() {
                 type="button"
                 whileTap={{ scale: 0.98 }}
                 className="cc-google"
-                onClick={() => act(() => signInWithGoogle(), 'Google login')}
+                onClick={() => act(() => signInWithGoogle(), 'Google login', 60000)}
                 disabled={loading}
               >
                 <GoogleIcon />

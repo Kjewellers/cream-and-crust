@@ -348,13 +348,13 @@ function PremiumOverlays() {
 export default function App() {
   return (
     <AppErrorBoundary>
-      <OverlayProvider>
-        <HashRouter>
-          <MotionProvider>
-            <PermissionProvider>
-              <AuthProvider>
-                <SubscriptionProvider>
-                  <DataProvider>
+      <HashRouter>
+        <MotionProvider>
+          <PermissionProvider>
+            <AuthProvider>
+              <SubscriptionProvider>
+                <DataProvider>
+                  <OverlayProvider>
                     <AmbientCanvas />
                     <MainLayout />
                     <ToastContainer />
@@ -368,13 +368,13 @@ export default function App() {
                     <MotionDebugPanel />
                     <MotionDebugger />
                     <PremiumOverlays />
-                  </DataProvider>
-                </SubscriptionProvider>
-              </AuthProvider>
-            </PermissionProvider>
-          </MotionProvider>
-        </HashRouter>
-      </OverlayProvider>
+                  </OverlayProvider>
+                </DataProvider>
+              </SubscriptionProvider>
+            </AuthProvider>
+          </PermissionProvider>
+        </MotionProvider>
+      </HashRouter>
     </AppErrorBoundary>
   );
 }

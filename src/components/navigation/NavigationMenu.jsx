@@ -27,7 +27,8 @@ import { useData } from '../../context/DataContext';
 
 import { usePendingOrders } from '../../hooks/usePendingOrders';
 export default function NavigationMenu({ onClose, theme, toggleTheme }) {
-  const { isAdmin, userRole, logout } = useAuth();
+  const auth = useAuth() || {};
+  const { isAdmin = false, userRole = 'admin', logout = () => {} } = auth;
   const { t } = useTranslation();
   const pendingCount = usePendingOrders();
 
@@ -234,7 +235,7 @@ export default function NavigationMenu({ onClose, theme, toggleTheme }) {
                 {item.label}
                 {item.badge != null && (
                   <motion.span
-                    key={item.badge}
+                    key={typeof item.badge === 'string' || typeof item.badge === 'number' ? item.badge : item.to}
                     initial={{ scale: 0.6, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     transition={{ type: 'spring', stiffness: 500, damping: 20 }}

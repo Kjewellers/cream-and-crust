@@ -100,19 +100,51 @@ export function OverlayProvider({ children }) {
 }
 
 // ── Renderer Switcher ──────────────────────────────────────
-function OverlayRenderer({ overlay, onClose, isTop }) {
-  const { type, content, title, subtitle, showClose = true, dismissible = true, customProps = {} } = overlay;
+class OverlayErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, info) {
+    console.error('[OverlayErrorBoundary] Failed rendering overlay:', error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto', background: 'rgba(0,0,0,0.5)' }}>
+          <div style={{ padding: 24, textAlign: 'center', background: 'var(--surface-elevated, #FFF)', borderRadius: 16, maxWidth: 320, boxShadow: '0 10px 25px rgba(0,0,0,0.2)' }}>
+            <p style={{ fontWeight: 700, margin: '0 0 12px', color: 'var(--text, #333)' }}>Unable to display content</p>
+            <button 
+              onClick={this.props.onClose} 
+              style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: 'var(--accent, #B5606A)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
+function OverlayRenderer({ overlay, onClose, isTop }) {
+  const { type } = overlay;
+
+  let component = null;
   if (type === 'sheet') {
-    return <GlobalSheet {...overlay} onClose={onClose} />;
+    component = <GlobalSheet {...overlay} onClose={onClose} />;
+  } else if (type === 'modal') {
+    component = <GlobalModal {...overlay} onClose={onClose} />;
+  } else if (type === 'drawer') {
+    component = <GlobalDrawer {...overlay} onClose={onClose} />;
   }
-  if (type === 'modal') {
-    return <GlobalModal {...overlay} onClose={onClose} />;
-  }
-  if (type === 'drawer') {
-    return <GlobalDrawer {...overlay} onClose={onClose} />;
-  }
-  return null;
+
+  if (!component) return null;
+  return <OverlayErrorBoundary onClose={onClose}>{component}</OverlayErrorBoundary>;
 }
 
 // ── Global Sheet Implementation ──────────────────────────────

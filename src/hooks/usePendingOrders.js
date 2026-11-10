@@ -2,11 +2,17 @@ import { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 
 export function usePendingOrders() {
-  const { orders } = useData();
+  let orders = [];
+  try {
+    const data = useData();
+    orders = data?.orders || [];
+  } catch {
+    orders = [];
+  }
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    if (!orders) {
+    if (!orders || !Array.isArray(orders)) {
       setPendingCount(0);
       return;
     }

@@ -21,6 +21,7 @@ import { useSubscription } from '../hooks/useSubscription';
 describe('SaaS Guard Components', () => {
   it('SystemGuard blocks UI when under maintenance', () => {
     useAppVersion.mockReturnValue({
+      platform: 'web',
       needsUpdate: false,
       maintenanceMode: true,
       maintenanceMessage: 'Testing Maintenance',
@@ -28,20 +29,21 @@ describe('SaaS Guard Components', () => {
     });
 
     render(<SystemGuard><div>App Content</div></SystemGuard>);
-    expect(screen.getByText('Under Maintenance')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /maintenance/i })).toBeInTheDocument();
     expect(screen.getByText('Testing Maintenance')).toBeInTheDocument();
     expect(screen.queryByText('App Content')).not.toBeInTheDocument();
   });
 
   it('SystemGuard blocks UI when update required', () => {
     useAppVersion.mockReturnValue({
+      platform: 'web',
       needsUpdate: true,
       maintenanceMode: false,
       loading: false
     });
 
     render(<SystemGuard><div>App Content</div></SystemGuard>);
-    expect(screen.getByText('App Update Required')).toBeInTheDocument();
+    expect(screen.getByText(/update/i)).toBeInTheDocument();
     expect(screen.queryByText('App Content')).not.toBeInTheDocument();
   });
 

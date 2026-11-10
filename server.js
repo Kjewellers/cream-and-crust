@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import admin from 'firebase-admin';
 import { URL } from 'url';
@@ -1187,9 +1188,26 @@ function buildFeatureMessage(feature, context) {
   return messages[feature] || 'Help me with my bakery.';
 }
 
+// ─── HEALTH CHECK ────────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'Cream & Crust Backend',
+    timestamp: new Date().toISOString(),
+    firebaseAdmin: !!admin.apps.length
+  });
+});
+
 // Catch-all route to serve the frontend (SPA support)
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Endpoint not found', path: req.path });
+  }
+  const indexPath = path.join(__dirname, 'dist', 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  res.status(200).send('<!doctype html><html><body><div id="root"></div></body></html>');
 });
 
 // Global Error Handler

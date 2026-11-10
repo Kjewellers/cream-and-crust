@@ -27,7 +27,7 @@ const PLANS_DISPLAY = [
     period: `/${PLAN.period}`,
     description: 'Pro access with monthly billing. Cancel through Google Play.',
     features: [
-      'AI Bakery Assistant',
+      'Advanced Recipe Studio & Costing',
       'Advanced analytics',
       'Shareable digital menu',
       'CSV exports for bakery records',
@@ -40,7 +40,7 @@ const PLANS_DISPLAY = [
     period: `/${ANNUAL_PLAN.period}`,
     description: 'The same Pro features with annual billing through Google Play.',
     features: [
-      'AI Bakery Assistant',
+      'Advanced Recipe Studio & Costing',
       'Advanced analytics',
       'Shareable digital menu',
       'CSV exports for bakery records',

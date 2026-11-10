@@ -58,7 +58,6 @@ export default function CommandPalette({ open, onClose }) {
       { id: 'cust', label: 'Customer Directory', category: 'Navigation', icon: Users, path: '/customers' },
       { id: 'exp', label: 'Expense Tracker', category: 'Navigation', icon: Receipt, path: '/expenses' },
       { id: 'ana', label: 'Sales Analytics', category: 'Navigation', icon: BarChart3, path: '/analytics' },
-      { id: 'ai', label: 'Cream AI Assistant', category: 'AI Tools', icon: Sparkles, path: '/ai-assistant' },
       { id: 'set', label: 'Bakery Settings', category: 'Account', icon: Settings, path: '/settings' },
     ],
     []

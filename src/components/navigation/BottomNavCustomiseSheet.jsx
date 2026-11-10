@@ -19,7 +19,6 @@ import {
 
 export const NAV_SHORTCUTS = [
   { id: 'home', to: '/', icon: LayoutDashboard, label: 'Home' },
-  { id: 'ai', to: '/ai-companion', icon: Sparkles, label: 'Cream AI' },
   { id: 'orders', to: '/orders', icon: ShoppingBag, label: 'Orders' },
   { id: 'products', to: '/products', icon: Package, label: 'Products' },
   { id: 'recipes', to: '/recipes', icon: BookOpen, label: 'Recipes' },

@@ -6,24 +6,24 @@ import { useNavigate } from 'react-router-dom';
 
 const STORIES = [
   {
-    id: 'ai-insights',
-    title: 'AI Co-Pilot',
+    id: 'smart-analytics',
+    title: 'Sales Insights',
     gradient: 'linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%)',
     icon: Sparkles,
     badge: 'NEW',
     unseen: true,
     slides: [
       {
-        heading: '🤖 Smart Sales Optimization',
-        subheading: 'AI analyzed your recent order patterns',
-        content: 'Custom cake orders generate 65% of your profit! Promote 2-tier celebration cakes this weekend for a 24% revenue surge.',
-        cta: 'Open AI Assistant',
-        link: '/ai-assistant',
+        heading: '📊 Sales & Margin Optimization',
+        subheading: 'Recent order pattern highlights',
+        content: 'Custom cake orders generate 65% of your profit! Promote 2-tier celebration cakes this weekend for higher margins.',
+        cta: 'View Sales Analytics',
+        link: '/analytics',
       },
       {
         heading: '💡 Recommended Pricing Adjustment',
-        subheading: 'Based on butter & flour price trends',
-        content: 'Your Chocolate Truffle Cake margin has improved by 8%. Consider offering a 10% combo discount on 1kg orders to boost volume.',
+        subheading: 'Based on ingredient cost trends',
+        content: 'Review your recipe margins regularly. Track cost per portion to maintain healthy profit margins on high-volume bakes.',
         cta: 'View Recipe Costs',
         link: '/recipes',
       },
@@ -74,7 +74,7 @@ const STORIES = [
       {
         heading: '👑 Cream & Crust Pro Active',
         subheading: 'Unlocked full suite of bakery tools',
-        content: 'You have unlimited AI recipe generation, automated WhatsApp receipts, exportable GST reports, and priority cloud sync.',
+        content: 'You have advanced recipe costing, automated WhatsApp receipts, exportable GST reports, and priority cloud sync.',
         cta: 'View Pro Benefits',
         link: '/subscribe',
       },

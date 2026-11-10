@@ -76,8 +76,9 @@ describe('Sidebar / NavigationMenu Drawer Integration', () => {
     // Verify brand and nav items are rendered
     expect(screen.getByText('Cream & Crust')).toBeInTheDocument();
     expect(screen.getByText('BAKERY MANAGER')).toBeInTheDocument();
-    expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+    expect(screen.queryByText('AI Assistant')).not.toBeInTheDocument();
     expect(screen.getByText('nav.orders')).toBeInTheDocument();
+    expect(screen.getByText('nav.calendar')).toBeInTheDocument();
   });
 });
 

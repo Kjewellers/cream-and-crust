@@ -319,10 +319,10 @@ export default function DashboardModern() {
           onClick={() => navigate('/recipes')}
         />
         <ActionButton
-          icon={Sparkles}
-          label="Cream AI"
-          caption="Ask, draft, summarize"
-          onClick={() => navigate('/ai-assistant')}
+          icon={TrendingUp}
+          label="Sales analytics"
+          caption="Revenue and growth trends"
+          onClick={() => navigate('/analytics')}
         />
       </section>
     </div>

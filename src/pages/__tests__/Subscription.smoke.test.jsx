@@ -67,3 +67,4 @@ describe('Subscription Page smoke test', () => {
     expect(screen.getByText('Pro Annual')).toBeInTheDocument();
   });
 });
+

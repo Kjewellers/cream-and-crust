@@ -44,28 +44,6 @@ export default function NavigationMenu({ onClose, theme: propTheme, toggleTheme:
       items: [
         { to: '/', icon: LayoutDashboard, label: t('nav.home') },
         {
-          to: '/ai-assistant',
-          icon: Sparkles,
-          label: 'AI Assistant',
-          badge: (
-            <span
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(212,160,80,0.15), rgba(212,160,80,0.08))',
-                color: '#B8860B',
-                padding: '2px 7px',
-                borderRadius: '4px',
-                fontSize: '0.6rem',
-                fontWeight: 'bold',
-                letterSpacing: '0.04em',
-              }}
-            >
-              PRO
-            </span>
-          ),
-          premium: true,
-        },
-        {
           to: '/orders',
           icon: ShoppingBag,
           label: t('nav.orders'),

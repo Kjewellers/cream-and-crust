@@ -92,7 +92,7 @@ export default function SubscriptionCard() {
 
   const handleSubscribe = () => {
     triggerHaptic('light');
-    openPaywall('AI_ASSISTANT', { planId: selectedPlan });
+    openPaywall('ADVANCED_ANALYTICS', { planId: selectedPlan });
   };
 
   const validExpiryDate = expiryDate && new Date(expiryDate).getTime() > Date.now() ? new Date(expiryDate) : null;

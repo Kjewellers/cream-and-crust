@@ -91,3 +91,4 @@ export async function activateWebSubscription({ planId = 'web_pro_monthly', isTr
 export function getWebPlans() {
   return WEB_PLANS;
 }
+

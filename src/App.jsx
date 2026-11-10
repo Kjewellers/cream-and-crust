@@ -50,7 +50,6 @@ import './index.css';
 const Login = lazy(() => import('./pages/Login'));
 const OnboardingModal = lazy(() => import('./components/OnboardingModal'));
 const RestoreWizard = lazy(() => import('./components/backup/RestoreWizard'));
-const AICompanion = lazy(() => import('./pages/AICompanion'));
 const PublishedMenu = lazy(() => import('./pages/menu/PublishedMenu'));
 const PublicOrderForm = lazy(() => import('./pages/PublicOrderForm'));
 const PrivacyPolicy = lazy(() => import('./pages/legal/PrivacyPolicy'));
@@ -285,11 +284,6 @@ function MainLayout() {
       </main>
       <BottomNav />
       <CommandPalette open={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
-      {currentUser && (
-        <Suspense fallback={null}>
-          <AICompanion />
-        </Suspense>
-      )}
       {currentUser && !localHasSeenTour && !hasSeenTourV1 && onboardingCompleted && !showRestoreWizard && (
         <PremiumAppTour onComplete={handleTourComplete} />
       )}

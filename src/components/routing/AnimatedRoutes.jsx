@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import RouteErrorBoundary from '../RouteErrorBoundary';
 import { PageWrapper, DelayedFallback } from './PageWrapper';
@@ -33,7 +33,6 @@ const TermsOfService = lazy(() => import('../../pages/legal/TermsOfService'));
 const SetupAdmin = lazy(() => import('../../pages/SetupAdmin'));
 const SuperAdmin = lazy(() => import('../../pages/SuperAdmin'));
 const Subscribe = lazy(() => import('../../pages/Subscription'));
-const AIAssistantHub = lazy(() => import('../../pages/AIAssistantHub'));
 const SubscriptionGate = lazy(() => import('../SubscriptionGate'));
 
 export default function AnimatedRoutes() {
@@ -74,7 +73,8 @@ export default function AnimatedRoutes() {
       <Routes location={location} key={location.pathname}>
         <>
             {renderRoute('/', <Dashboard />)}
-            {renderPremiumRoute('/ai-assistant', <AIAssistantHub />, 'AI_ASSISTANT')}
+            <Route path="/ai-assistant" element={<Navigate to="/" replace />} />
+            <Route path="/ai-companion" element={<Navigate to="/" replace />} />
             {renderRoute('/orders', <Orders />)}
             {renderRoute('/calendar', <Calendar />)}
             {renderRoute('/products', <Products />)}

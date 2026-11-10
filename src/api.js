@@ -98,109 +98,12 @@ export const api = {
   // Recipe scraper
   scrapeRecipe: (url) => req('POST', '/scrape-recipe', { url }),
 
-  // AI Chat Proxy - Robust Android implementation using Capacitor HTTP
-  chatAI: async (data) => {
-    const endpoint = '/ai/chat';
-    const url = `${BASE}${endpoint}`;
-    const token = await getAuthToken();
-    const startTime = Date.now();
-    
-    // Robust Logging (Req 11)
-    console.log(`[AI Request] ${Platform.isAndroid() ? 'Android' : 'Web'} | ${url}`);
-    
-    if (Platform.isAndroid()) {
-      try {
-        const { CapacitorHttp } = await import('@capacitor/core');
-        const response = await CapacitorHttp.post({
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          data
-        });
-        
-        const latencyMs = Date.now() - startTime;
-        console.log(`[AI Response] Status: ${response.status} | ${latencyMs}ms`);
-
-        if (response.status >= 400) {
-          if (response.status === 402 && response.data?.error === 'subscription_required') {
-            dispatchSubscriptionRequired(response.data.featureKey);
-          }
-          const error = new Error(response.data?.message || response.data?.error || 'Server unavailable');
-          captureAIError(error, { endpoint, status: response.status, latencyMs });
-          throw error;
-        }
-
-        logAISuccess({ endpoint, status: response.status, latencyMs, provider: 'openrouter' });
-        return response.data;
-      } catch (err) {
-        const latencyMs = Date.now() - startTime;
-        if (!err._monitored) {
-          captureAIError(err, { endpoint, status: 0, latencyMs });
-        }
-        console.error('[AI Error]', err);
-        throw new Error(err.message || 'Network Error');
-      }
-    }
-    
-    // Web path
-    try {
-      const result = await req('POST', endpoint, data);
-      const latencyMs = Date.now() - startTime;
-      logAISuccess({ endpoint, status: 200, latencyMs, provider: 'openrouter' });
-      return result;
-    } catch (err) {
-      const latencyMs = Date.now() - startTime;
-      captureAIError(err, { endpoint, status: 0, latencyMs });
-      throw err;
-    }
+  // AI endpoints (disabled)
+  chatAI: async () => {
+    throw new Error('AI features have been removed from this application.');
   },
   
-  describeProduct: async (data) => {
-    const endpoint = '/ai/describe';
-    const url = `${BASE}${endpoint}`;
-    const token = await getAuthToken();
-    const startTime = Date.now();
-    
-    if (Platform.isAndroid()) {
-      try {
-        const { CapacitorHttp } = await import('@capacitor/core');
-        const response = await CapacitorHttp.post({
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          data
-        });
-        const latencyMs = Date.now() - startTime;
-        if (response.status >= 400) {
-          if (response.status === 402 && response.data?.error === 'subscription_required') {
-            dispatchSubscriptionRequired(response.data.featureKey);
-          }
-          const error = new Error(response.data?.message || response.data?.error || 'Server unavailable');
-          captureAIError(error, { endpoint, status: response.status, latencyMs });
-          throw error;
-        }
-        logAISuccess({ endpoint, status: response.status, latencyMs, provider: 'openrouter' });
-        return response.data;
-      } catch (err) {
-        const latencyMs = Date.now() - startTime;
-        captureAIError(err, { endpoint, status: 0, latencyMs });
-        throw new Error(err.message || 'Network Error');
-      }
-    }
-    
-    try {
-      const result = await req('POST', endpoint, data);
-      const latencyMs = Date.now() - startTime;
-      logAISuccess({ endpoint, status: 200, latencyMs, provider: 'openrouter' });
-      return result;
-    } catch (err) {
-      const latencyMs = Date.now() - startTime;
-      captureAIError(err, { endpoint, status: 0, latencyMs });
-      throw err;
-    }
+  describeProduct: async () => {
+    throw new Error('AI features have been removed from this application.');
   },
 };

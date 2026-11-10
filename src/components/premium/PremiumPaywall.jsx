@@ -48,7 +48,7 @@ import { activateWebSubscription } from '../../services/webSubscriptionService';
 const COMPARISON = [
   { feature: 'Orders & Customers', free: true, pro: true },
   { feature: 'Invoices & inventory', free: true, pro: true },
-  { feature: 'AI Bakery Assistant', free: false, pro: true },
+  { feature: 'Advanced Recipe Costing', free: false, pro: true },
   { feature: 'Advanced analytics', free: false, pro: true },
   { feature: 'Digital menu builder', free: false, pro: true },
   { feature: 'CSV exports', free: false, pro: true },

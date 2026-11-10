@@ -9,7 +9,7 @@ export const PLAN = Object.freeze({
   name: 'Cream & Crust Pro',
   period: 'month',
   features: [
-    'AI Bakery Assistant',
+    'Advanced Recipe Studio & Costing',
     'Advanced analytics',
     'Shareable digital menu',
     'CSV exports for bakery records',
@@ -56,9 +56,9 @@ export const WEB_PLANS = Object.freeze({
     priceFormatted: '₹149',
     period: '/month',
     periodLabel: 'month',
-    description: 'Full-featured AI bakery manager for growing bakeries with 14-day trial.',
+    description: 'Full-featured bakery manager for growing bakeries with 14-day trial.',
     features: [
-      'AI Bakery Assistant (Recipes & Chat)',
+      'Advanced Recipe Studio & Ingredient Costing',
       'Advanced Business Analytics & Trends',
       'Live Digital Menu & Online Storefront',
       'Custom Invoices & Thermal Print PDFs',
@@ -82,7 +82,7 @@ export const WEB_PLANS = Object.freeze({
     features: [
       'Everything in Web Pro Monthly',
       '2 Months Free (Save ₹289/year)',
-      'Priority AI Assistant Tokens & Speed',
+      'Priority Cloud Sync & Instant Backups',
       'Multi-device Browser Access (Desktop & Mobile)',
       'Early Access to New Web Features',
       'Dedicated Priority Customer Support',

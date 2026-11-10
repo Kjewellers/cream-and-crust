@@ -27,17 +27,17 @@ const UI_CONTENT = {
   },
   [PERMISSION_TYPES.NOTIFICATIONS]: {
     title: '🔔 Enable Notifications',
-    message: 'Receive order updates, AI alerts, subscription expiry reminders and payment confirmations.',
+    message: 'Receive order updates, stock alerts, subscription reminders and payment confirmations.',
     icon: Bell,
     continueText: 'Enable Notifications',
     deniedMessage: 'Notifications are disabled. Enable them from Settings to stay updated.',
   },
   [PERMISSION_TYPES.MICROPHONE]: {
-    title: '🎤 AI Voice',
-    message: 'Use your voice to control Cream AI — create orders, check stock and get bakery insights hands-free.',
+    title: '🎤 Voice Input',
+    message: 'Record voice notes and instructions hands-free in your kitchen.',
     icon: Mic,
     continueText: 'Allow Microphone',
-    deniedMessage: 'Microphone permission is disabled. Enable it from Settings to use voice commands.',
+    deniedMessage: 'Microphone permission is disabled. Enable it from Settings to use voice input.',
   },
   [PERMISSION_TYPES.LOCATION]: {
     title: '📍 Your Location',

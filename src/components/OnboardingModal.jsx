@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -19,6 +19,12 @@ import { updateBusinessInDB } from '../services/db';
 import { doc, setDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { showToast } from './iOS';
+
+const triggerHaptic = (type = 'light') => {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('trigger-haptic', { detail: type }));
+  }
+};
 
 const businessTypes = ['Cakes', 'Brownies', 'Desserts', 'Breads', 'All bakery items'];
 const goals = [
@@ -45,6 +51,7 @@ const Field = ({ icon: Icon, label, children }) => (
 
 export default function OnboardingModal({ user, business, onComplete }) {
   const [step, setStep] = useState(0);
+  const [direction, setDirection] = useState(1);
   const [loading, setLoading] = useState(false);
 
   const [formData, setFormData] = useState(() => {
@@ -190,8 +197,48 @@ export default function OnboardingModal({ user, business, onComplete }) {
       showToast('Please complete the required details first.', 'error');
       return;
     }
+    triggerHaptic('light');
+    setDirection(1);
     if (isLast) return saveSetup();
     setStep(prev => prev + 1);
+  };
+
+  const back = () => {
+    if (isFirst) return;
+    triggerHaptic('light');
+    setDirection(-1);
+    setStep(prev => prev - 1);
+  };
+
+  const touchStartX = useRef(null);
+
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches?.[0]?.clientX ?? null;
+  };
+
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const endX = e.changedTouches?.[0]?.clientX ?? touchStartX.current;
+    const diff = endX - touchStartX.current;
+    touchStartX.current = null;
+
+    const activeEl = document.activeElement;
+    if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+      return;
+    }
+    if (diff < -50) {
+      if (canContinue() && !isLast) {
+        triggerHaptic('medium');
+        setDirection(1);
+        setStep(prev => prev + 1);
+      }
+    } else if (diff > 50) {
+      if (!isFirst) {
+        triggerHaptic('medium');
+        setDirection(-1);
+        setStep(prev => prev - 1);
+      }
+    }
   };
 
   const renderStep = () => {
@@ -202,6 +249,9 @@ export default function OnboardingModal({ user, business, onComplete }) {
           <p style={{ color: 'var(--text2)', lineHeight: 1.65, margin: '0 auto', maxWidth: 360 }}>
             We will collect your bakery profile, personalize your dashboard, then start a skippable guided app tour.
           </p>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 18, padding: '6px 14px', borderRadius: 999, background: 'var(--cream)', color: 'var(--accent2)', fontSize: '0.78rem', fontWeight: 700 }}>
+            <span>👈</span> Swipe left or tap Continue to begin <span>👉</span>
+          </div>
         </div>
       );
     }
@@ -332,7 +382,9 @@ export default function OnboardingModal({ user, business, onComplete }) {
       <motion.div
         initial={{ scale: 0.94, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
-        style={{ background: 'var(--bg)', borderRadius: 28, width: '100%', maxWidth: 520, maxHeight: '92vh', overflow: 'hidden', boxShadow: '0 24px 70px rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.35)' }}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        style={{ background: 'var(--bg)', borderRadius: 28, width: '100%', maxWidth: 520, maxHeight: '92vh', overflow: 'hidden', boxShadow: '0 24px 70px rgba(0,0,0,0.28)', border: '1px solid rgba(255,255,255,0.35)', touchAction: 'pan-y' }}
       >
         <div style={{ height: 7, background: 'var(--bg2)' }}>
           <motion.div animate={{ width: `${((step + 1) / steps.length) * 100}%` }} style={{ height: '100%', background: 'linear-gradient(90deg, var(--accent), #D9A06F)' }} />
@@ -350,14 +402,14 @@ export default function OnboardingModal({ user, business, onComplete }) {
           </div>
 
           <AnimatePresence mode="wait">
-            <motion.div key={step} initial={{ x: 18, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -18, opacity: 0 }} transition={{ duration: 0.22 }}>
+            <motion.div key={step} initial={{ x: direction > 0 ? 20 : -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: direction > 0 ? -20 : 20, opacity: 0 }} transition={{ duration: 0.22 }}>
               {renderStep()}
             </motion.div>
           </AnimatePresence>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
             {!isFirst && (
-              <button type="button" className="btn btn-outline" onClick={() => setStep(step - 1)} disabled={loading} style={{ minWidth: 96 }}>
+              <button type="button" className="btn btn-outline" onClick={back} disabled={loading} style={{ minWidth: 96 }}>
                 <ArrowLeft size={16} /> Back
               </button>
             )}

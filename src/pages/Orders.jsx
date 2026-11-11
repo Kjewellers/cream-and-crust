@@ -23,6 +23,9 @@ import {
   Bike,
   Truck,
   ChefHat,
+  Layers,
+  Tag,
+  MessageSquareQuote,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -56,6 +59,9 @@ import CalendarView from '../components/orders/CalendarView';
 import CustomerProfileSheet from '../components/orders/CustomerProfileSheet';
 import InvoicePreviewModal from '../components/orders/InvoicePreviewModal';
 import DailyBakeSheetModal from '../components/orders/DailyBakeSheetModal';
+import TierCakeCalculatorModal from '../components/tools/TierCakeCalculatorModal';
+import AllergenLabelModal from '../components/tools/AllergenLabelModal';
+import InstantQuoteModal from '../components/tools/InstantQuoteModal';
 import OrderForm from '../components/orders/OrderForm';
 import PaymentToggle from '../components/orders/PaymentToggle';
 import AnimatedNumber from '../components/AnimatedNumber';
@@ -1011,6 +1017,9 @@ export default function Orders() {
   const [previewOrder, setPreviewOrder] = useState(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [showBakeSheet, setShowBakeSheet] = useState(false);
+  const [showCakeCalculator, setShowCakeCalculator] = useState(false);
+  const [showAllergenLabel, setShowAllergenLabel] = useState(false);
+  const [showInstantQuote, setShowInstantQuote] = useState(false);
   // Payment filter: 'all' | 'pending' | 'paid'
   const [paymentFilter, setPaymentFilter] = useState('all');
   // Saved categories (persisted per user)
@@ -3033,6 +3042,90 @@ export default function Orders() {
             <ChefHat size={16} strokeWidth={2.4} /> <span>Bake Sheet</span>
           </button>
 
+          {/* Tiered Cake Calculator */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('light');
+              setShowCakeCalculator(true);
+            }}
+            style={{
+              height: 36,
+              padding: '0 12px',
+              borderRadius: 18,
+              background: '#FFF9F5',
+              color: '#B5606A',
+              border: '1.5px solid rgba(181, 96, 106, 0.28)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: 12.5,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 6px rgba(181, 96, 106, 0.08)',
+            }}
+            title="Multi-Tier Structural & Servings Calculator"
+          >
+            <Layers size={16} strokeWidth={2.4} /> <span>Cake Calc</span>
+          </button>
+
+          {/* FSSAI Allergen & Thermal Label Generator */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('light');
+              setShowAllergenLabel(true);
+            }}
+            style={{
+              height: 36,
+              padding: '0 12px',
+              borderRadius: 18,
+              background: '#FFF9F5',
+              color: '#B5606A',
+              border: '1.5px solid rgba(181, 96, 106, 0.28)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: 12.5,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 6px rgba(181, 96, 106, 0.08)',
+            }}
+            title="FSSAI Allergen & Thermal Label Generator"
+          >
+            <Tag size={16} strokeWidth={2.4} /> <span>Food Label</span>
+          </button>
+
+          {/* WhatsApp Instant Quote Builder */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('light');
+              setShowInstantQuote(true);
+            }}
+            style={{
+              height: 36,
+              padding: '0 12px',
+              borderRadius: 18,
+              background: '#FFF9F5',
+              color: '#B5606A',
+              border: '1.5px solid rgba(181, 96, 106, 0.28)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              fontWeight: 800,
+              fontSize: 12.5,
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 6px rgba(181, 96, 106, 0.08)',
+            }}
+            title="WhatsApp Instant Custom Cake Quotation Builder"
+          >
+            <MessageSquareQuote size={16} strokeWidth={2.4} /> <span>Quick Quote</span>
+          </button>
+
           {/* New Order — primary CTA on mobile (always visible) */}
           <button
             className="mobile-only"
@@ -3913,6 +4006,19 @@ export default function Orders() {
         open={showBakeSheet}
         onClose={() => setShowBakeSheet(false)}
         orders={orders}
+      />
+      <TierCakeCalculatorModal
+        open={showCakeCalculator}
+        onClose={() => setShowCakeCalculator(false)}
+      />
+      <AllergenLabelModal
+        open={showAllergenLabel}
+        onClose={() => setShowAllergenLabel(false)}
+      />
+      <InstantQuoteModal
+        open={showInstantQuote}
+        onClose={() => setShowInstantQuote(false)}
+        bakery={business}
       />
       <AnimatedDemo moduleId="orders" title="How to Create an Order" scenes={ordersDemoScenes} />
     </motion.div>

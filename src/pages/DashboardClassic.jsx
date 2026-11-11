@@ -68,6 +68,9 @@ import { buildReport, weekKey, monthKey, previousPeriodRange } from '../utils/bu
 import NativeBottomSheet from '../components/ui/NativeBottomSheet';
 import { useAchievements } from '../utils/achievements';
 import DailyBakeSheetModal from '../components/orders/DailyBakeSheetModal';
+import TierCakeCalculatorModal from '../components/tools/TierCakeCalculatorModal';
+import AllergenLabelModal from '../components/tools/AllergenLabelModal';
+import InstantQuoteModal from '../components/tools/InstantQuoteModal';
 
 export default function DashboardClassic() {
   const navigate = useNavigate();
@@ -84,6 +87,9 @@ export default function DashboardClassic() {
   // Auto business report (weekly + monthly-on-the-1st)
   const [activeReport, setActiveReport] = useState(null);
   const [showBakeSheet, setShowBakeSheet] = useState(false);
+  const [showCakeCalculator, setShowCakeCalculator] = useState(false);
+  const [showAllergenLabel, setShowAllergenLabel] = useState(false);
+  const [showInstantQuote, setShowInstantQuote] = useState(false);
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState({ orders: [], customers: [] });
   const [isListening, setIsListening] = useState(false);
@@ -2875,6 +2881,22 @@ export default function DashboardClassic() {
         open={showBakeSheet}
         onClose={() => setShowBakeSheet(false)}
         orders={orders}
+      />
+
+      <TierCakeCalculatorModal
+        open={showCakeCalculator}
+        onClose={() => setShowCakeCalculator(false)}
+      />
+
+      <AllergenLabelModal
+        open={showAllergenLabel}
+        onClose={() => setShowAllergenLabel(false)}
+      />
+
+      <InstantQuoteModal
+        open={showInstantQuote}
+        onClose={() => setShowInstantQuote(false)}
+        bakery={business}
       />
 
       <AnimatedDemo

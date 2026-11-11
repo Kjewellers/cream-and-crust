@@ -33,6 +33,8 @@ const TermsOfService = lazy(() => import('../../pages/legal/TermsOfService'));
 const SetupAdmin = lazy(() => import('../../pages/SetupAdmin'));
 const SuperAdmin = lazy(() => import('../../pages/SuperAdmin'));
 const Subscribe = lazy(() => import('../../pages/Subscription'));
+const Notifications = lazy(() => import('../../pages/Notifications'));
+const Payments = lazy(() => import('../../pages/Payments'));
 const SubscriptionGate = lazy(() => import('../SubscriptionGate'));
 
 export default function AnimatedRoutes() {
@@ -85,6 +87,8 @@ export default function AnimatedRoutes() {
             {renderRoute('/expenses', <Expenses />)}
             {renderRoute('/shopping-list', <ShoppingList />)}
             {renderRoute('/recycle-bin', <RecycleBin />)}
+            {renderRoute('/notifications', <Notifications />)}
+            {renderRoute('/payments', <Payments />)}
             {renderRoute('/profile', <Profile />)}
             {renderRoute('/settings', <SettingsPage />)}
             {renderPremiumRoute('/menu-builder', <MenuDashboard />, 'MENU_TEMPLATES')}

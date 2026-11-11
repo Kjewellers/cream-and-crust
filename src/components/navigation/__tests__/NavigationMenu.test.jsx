@@ -79,6 +79,7 @@ describe('Sidebar / NavigationMenu Drawer Integration', () => {
     expect(screen.queryByText('AI Assistant')).not.toBeInTheDocument();
     expect(screen.getByText('nav.orders')).toBeInTheDocument();
     expect(screen.getByText('nav.calendar')).toBeInTheDocument();
+    expect(screen.getByText('FSSAI Label Studio')).toBeInTheDocument();
   });
 });
 

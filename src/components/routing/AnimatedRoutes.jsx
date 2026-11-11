@@ -12,6 +12,7 @@ const Products = lazy(() => import('../../pages/Products'));
 const Customers = lazy(() => import('../../pages/Customers'));
 const Inventory = lazy(() => import('../../pages/Inventory'));
 const Recipes = lazy(() => import('../../pages/Recipes'));
+const LabelStudio = lazy(() => import('../../pages/LabelStudio'));
 const Analytics = lazy(() => import('../../pages/Analytics'));
 const Expenses = lazy(() => import('../../pages/Expenses'));
 const ShoppingList = lazy(() => import('../../pages/ShoppingList'));
@@ -83,6 +84,7 @@ export default function AnimatedRoutes() {
             {renderRoute('/customers', <Customers />)}
             {renderRoute('/inventory', <Inventory />)}
             {renderRoute('/recipes', <Recipes />)}
+            {renderRoute('/label-studio', <LabelStudio />)}
             {renderPremiumRoute('/analytics', <Analytics />, 'ADVANCED_ANALYTICS')}
             {renderRoute('/expenses', <Expenses />)}
             {renderRoute('/shopping-list', <ShoppingList />)}

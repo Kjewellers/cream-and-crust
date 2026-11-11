@@ -63,6 +63,7 @@ import { listContainer, listItem, statCard } from '../utils/animations';
 import ProfitCalculator from '../components/ProfitCalculator';
 import QuickProfileModal from '../components/QuickProfileModal';
 import WebsiteOrdersCard from '../components/dashboard/WebsiteOrdersCard';
+import FssaiLabelShortcutCard from '../components/dashboard/FssaiLabelShortcutCard';
 import { triggerConfetti, triggerSuccessBurst } from '../components/DopamineKit';
 import BusinessReportModal from '../components/reports/BusinessReportModal';
 import { buildReport, weekKey, monthKey, previousPeriodRange } from '../utils/businessReport';
@@ -776,6 +777,9 @@ export default function DashboardClassic() {
 
         {/* ── Instagram / X Style Stories Highlights Bar ── */}
         <BakeryStoriesBar onOpenToolModal={handleOpenToolModal} />
+
+        {/* ── FSSAI Regulatory 3-Step Guided Studio Showcase Shortcut ── */}
+        <FssaiLabelShortcutCard onOpenQuickModal={handleOpenToolModal} />
 
         {/* ── Gradient Hero Card ─────────── */}
         <AnimatePresence mode="wait">
@@ -1965,7 +1969,7 @@ export default function DashboardClassic() {
                 whileTap={{ scale: 0.94 }}
                 onClick={() => {
                   triggerHaptic('light');
-                  setShowAllergenLabel(true);
+                  navigate('/label-studio');
                 }}
                 style={{
                   background: 'white',

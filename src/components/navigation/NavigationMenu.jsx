@@ -15,6 +15,7 @@ import {
   Receipt,
   ShoppingCart,
   Trash2,
+  Tag,
   User as UserIcon,
   Settings,
   Sun,
@@ -108,6 +109,26 @@ export default function NavigationMenu({ onClose, theme: propTheme, toggleTheme:
       items: [
         { to: '/inventory', icon: Package, label: t('nav.inventory') },
         { to: '/recipes', icon: BookOpen, label: t('nav.recipes') },
+        {
+          to: '/label-studio',
+          icon: Tag,
+          label: 'FSSAI Label Studio',
+          badge: (
+            <span
+              style={{
+                background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(5,150,105,0.08))',
+                color: '#059669',
+                padding: '2px 7px',
+                borderRadius: '4px',
+                fontSize: '0.62rem',
+                fontWeight: 800,
+                letterSpacing: '0.04em',
+              }}
+            >
+              FSSAI
+            </span>
+          ),
+        },
         { to: '/expenses', icon: Receipt, label: t('nav.expenses') },
         { to: '/shopping-list', icon: ShoppingCart, label: t('nav.shoppingList') },
         { to: '/recycle-bin', icon: Trash2, label: 'Recycle Bin' },

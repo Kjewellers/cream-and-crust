@@ -13,6 +13,7 @@ import {
   Plus,
   Sparkles,
   ShoppingBag,
+  Tag,
   TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -323,6 +324,12 @@ export default function DashboardModern() {
           label="Sales analytics"
           caption="Revenue and growth trends"
           onClick={() => navigate('/analytics')}
+        />
+        <ActionButton
+          icon={Tag}
+          label="FSSAI Label Studio"
+          caption="3-step compliant food stickers"
+          onClick={() => navigate('/label-studio')}
         />
       </section>
     </div>

@@ -27,12 +27,15 @@ export default function MobileHeader({ onMenuClick, onNotificationClick }) {
       style={{
         boxShadow: '0 1px 4px rgba(74, 59, 50, 0.03)',
         borderBottom: '1px solid rgba(74, 59, 50, 0.05)',
-        background: 'rgba(255, 255, 255, 0.90)',
+        background: 'rgba(255, 255, 255, 0.95)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
-        position: 'sticky',
+        position: 'fixed',
         top: 0,
-        zIndex: 50,
+        left: 0,
+        right: 0,
+        width: '100%',
+        zIndex: 99,
       }}
     >
       <div

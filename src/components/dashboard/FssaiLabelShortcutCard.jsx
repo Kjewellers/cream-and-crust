@@ -1,22 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   Tag,
   ShieldCheck,
   Printer,
   Sparkles,
   ArrowRight,
-  Sliders,
-  CheckCircle2,
   X,
-  Layers,
   ChevronRight,
+  Eye,
 } from 'lucide-react';
 import { triggerHaptic } from '../iOS';
 
 export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
   const navigate = useNavigate();
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem('hideFssaiShortcutCard') === 'true';
@@ -76,13 +86,13 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.28, ease: 'easeOut' }}
-      whileHover={{ y: -2 }}
+      whileHover={isMobile ? {} : { y: -2 }}
       style={{
-        marginBottom: 24,
+        marginBottom: isMobile ? 18 : 24,
         background: 'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 50%, #FFFFFF 100%)',
         border: '1.5px solid rgba(16, 185, 129, 0.25)',
-        borderRadius: 24,
-        padding: '20px 22px',
+        borderRadius: isMobile ? 20 : 24,
+        padding: isMobile ? '16px' : '20px 22px',
         boxShadow: '0 8px 24px rgba(16, 185, 129, 0.07)',
         position: 'relative',
         overflow: 'hidden',
@@ -110,13 +120,13 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
         aria-label="Dismiss FSSAI shortcut"
         style={{
           position: 'absolute',
-          top: 14,
-          right: 14,
-          background: 'rgba(255, 255, 255, 0.8)',
+          top: isMobile ? 12 : 14,
+          right: isMobile ? 12 : 14,
+          background: 'rgba(255, 255, 255, 0.85)',
           border: '1px solid rgba(0, 0, 0, 0.06)',
           borderRadius: '50%',
-          width: 24,
-          height: 24,
+          width: 26,
+          height: 26,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -126,31 +136,32 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
           transition: 'all 0.18s ease',
         }}
       >
-        <X size={13} strokeWidth={2.5} />
+        <X size={14} strokeWidth={2.5} />
       </button>
 
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(280px, 1.35fr) minmax(220px, 0.9fr)',
-          gap: 20,
-          alignItems: 'center',
+          display: isMobile ? 'flex' : 'grid',
+          flexDirection: 'column',
+          gridTemplateColumns: isMobile ? '1fr' : 'minmax(280px, 1.35fr) minmax(220px, 0.9fr)',
+          gap: isMobile ? 14 : 20,
+          alignItems: isMobile ? 'stretch' : 'center',
         }}
       >
-        {/* Left Side: Editorial & 3-Step Guided Roadmap */}
+        {/* Left Side / Top: Editorial & 3-Step Guided Roadmap */}
         <div>
           {/* Eyebrow & Live compliance pulse */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
             <span
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: 4,
                 background: '#10B981',
                 color: '#ffffff',
-                padding: '3px 9px',
+                padding: '2.5px 8px',
                 borderRadius: 20,
-                fontSize: '0.64rem',
+                fontSize: '0.62rem',
                 fontWeight: 900,
                 letterSpacing: '0.04em',
                 boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
@@ -164,8 +175,8 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
-                fontSize: '0.72rem',
+                gap: 4,
+                fontSize: '0.68rem',
                 color: '#047857',
                 fontWeight: 700,
               }}
@@ -180,13 +191,13 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
                   display: 'inline-block',
                 }}
               />
-              India Food Safety Standards (2026)
+              India Standards (2026)
             </span>
           </div>
 
           <h3
             style={{
-              fontSize: '1.25rem',
+              fontSize: isMobile ? '1.15rem' : '1.25rem',
               fontWeight: 900,
               color: '#064E3B',
               letterSpacing: '-0.02em',
@@ -199,50 +210,55 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
 
           <p
             style={{
-              fontSize: '0.82rem',
+              fontSize: isMobile ? '0.78rem' : '0.82rem',
               color: '#4B5563',
-              margin: '0 0 14px 0',
+              margin: '0 0 12px 0',
               lineHeight: 1.45,
             }}
           >
             Auto-generate compliant product stickers in 3 guided steps with real-time allergen detection, 5 designer templates & auto-adjusting 58mm/80mm thermal profiles.
           </p>
 
-          {/* 3-Step Guided Beads */}
+          {/* 3-Step Guided Beads (Mobile Horizontal Scrollable or Flex Wrap) */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
-              marginBottom: 16,
+              gap: 6,
+              marginBottom: 14,
               flexWrap: 'wrap',
+              overflowX: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              paddingBottom: 2,
             }}
           >
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: 4,
                 background: '#ffffff',
                 border: '1px solid rgba(16, 185, 129, 0.25)',
-                padding: '4px 9px',
+                padding: '3px 8px',
                 borderRadius: 8,
-                fontSize: '0.72rem',
+                fontSize: '0.68rem',
                 fontWeight: 800,
                 color: '#065F46',
+                whiteSpace: 'nowrap',
               }}
             >
               <span
                 style={{
-                  width: 16,
-                  height: 16,
+                  width: 15,
+                  height: 15,
                   borderRadius: '50%',
                   background: '#10B981',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '0.62rem',
+                  fontSize: '0.58rem',
                   fontWeight: 900,
                 }}
               >
@@ -251,33 +267,34 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
               Formula & Allergens
             </div>
 
-            <ChevronRight size={12} color="#9CA3AF" />
+            <ChevronRight size={11} color="#9CA3AF" />
 
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: 4,
                 background: '#ffffff',
                 border: '1px solid rgba(16, 185, 129, 0.25)',
-                padding: '4px 9px',
+                padding: '3px 8px',
                 borderRadius: 8,
-                fontSize: '0.72rem',
+                fontSize: '0.68rem',
                 fontWeight: 800,
                 color: '#065F46',
+                whiteSpace: 'nowrap',
               }}
             >
               <span
                 style={{
-                  width: 16,
-                  height: 16,
+                  width: 15,
+                  height: 15,
                   borderRadius: '50%',
                   background: '#10B981',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '0.62rem',
+                  fontSize: '0.58rem',
                   fontWeight: 900,
                 }}
               >
@@ -286,33 +303,34 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
               Design & Typography
             </div>
 
-            <ChevronRight size={12} color="#9CA3AF" />
+            <ChevronRight size={11} color="#9CA3AF" />
 
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: 4,
                 background: '#ffffff',
                 border: '1px solid rgba(16, 185, 129, 0.25)',
-                padding: '4px 9px',
+                padding: '3px 8px',
                 borderRadius: 8,
-                fontSize: '0.72rem',
+                fontSize: '0.68rem',
                 fontWeight: 800,
                 color: '#065F46',
+                whiteSpace: 'nowrap',
               }}
             >
               <span
                 style={{
-                  width: 16,
-                  height: 16,
+                  width: 15,
+                  height: 15,
                   borderRadius: '50%',
                   background: '#10B981',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '0.62rem',
+                  fontSize: '0.58rem',
                   fontWeight: 900,
                 }}
               >
@@ -322,23 +340,33 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
             </div>
           </div>
 
-          {/* Action CTAs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {/* Action CTAs: Full touch targets on mobile */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+              width: '100%',
+            }}
+          >
             <motion.button
               type="button"
               whileTap={{ scale: 0.96 }}
-              whileHover={{ scale: 1.02 }}
               onClick={handleOpenStudio}
               style={{
+                flex: isMobile ? 1 : 'none',
+                minHeight: 44,
                 background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
                 color: '#ffffff',
                 border: 'none',
                 borderRadius: 14,
-                padding: '10px 18px',
+                padding: isMobile ? '10px 16px' : '10px 18px',
                 fontSize: '0.84rem',
                 fontWeight: 800,
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
                 gap: 7,
                 cursor: 'pointer',
                 boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
@@ -357,15 +385,17 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
                   onOpenQuickModal('allergen-label');
                 }}
                 style={{
+                  minHeight: 44,
                   background: '#ffffff',
                   color: '#065F46',
                   border: '1px solid rgba(16, 185, 129, 0.3)',
                   borderRadius: 14,
-                  padding: '9px 15px',
+                  padding: isMobile ? '10px 14px' : '9px 15px',
                   fontSize: '0.82rem',
                   fontWeight: 700,
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                   gap: 6,
                   cursor: 'pointer',
                 }}
@@ -377,9 +407,9 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
           </div>
         </div>
 
-        {/* Right Side: Interactive Animated Sticker Card Preview */}
+        {/* Right Side / Mobile Card: Interactive Animated Sticker Card Preview */}
         <motion.div
-          whileHover={{ y: -4, rotate: 1 }}
+          whileHover={isMobile ? {} : { y: -4, rotate: 1 }}
           transition={{ type: 'spring', stiffness: 300, damping: 20 }}
           onClick={handleOpenStudio}
           style={{
@@ -387,12 +417,15 @@ export default function FssaiLabelShortcutCard({ onOpenQuickModal }) {
             background: '#ffffff',
             borderRadius: 18,
             border: '2px dashed rgba(16, 185, 129, 0.4)',
-            padding: '14px 16px',
+            padding: isMobile ? '12px 14px' : '14px 16px',
             boxShadow: '0 6px 20px rgba(0, 0, 0, 0.04)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 6,
+            gap: 5,
             position: 'relative',
+            width: '100%',
+            maxWidth: isMobile ? '100%' : 340,
+            margin: isMobile ? '6px 0 0' : '0 auto',
           }}
         >
           {/* Top Label Header */}

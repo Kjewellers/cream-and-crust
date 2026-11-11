@@ -76,3 +76,4 @@ describe('FssaiLabelShortcutCard', () => {
     expect(screen.getByText(/Launch 3-Step Studio/i)).toBeInTheDocument();
   });
 });
+

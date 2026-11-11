@@ -38,10 +38,30 @@ describe('AllergenLabelModal', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('renders FSSAI allergen label controls when open', () => {
+  it('renders FSSAI allergen label studio with design templates and printer auto-adjust profiles when open', () => {
     render(<AllergenLabelModal open={true} onClose={vi.fn()} />);
-    expect(screen.getByText(/FSSAI Food & Allergen Label Printer/i)).toBeInTheDocument();
-    expect(screen.getByText(/Compliant regulatory stickers & thermal printing/i)).toBeInTheDocument();
+    expect(screen.getByText(/FSSAI Food & Regulatory Label Studio/i)).toBeInTheDocument();
+    expect(screen.getByText(/AUTO-ADJUST/i)).toBeInTheDocument();
+    expect(screen.getByText(/Templates & Fonts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Printer & Size Profiles/i)).toBeInTheDocument();
+  });
+
+  it('allows switching printer profiles and templates', () => {
+    render(<AllergenLabelModal open={true} onClose={vi.fn()} />);
+
+    // Click Printer & Size tab
+    const printerTab = screen.getByRole('button', { name: /Printer & Size Profiles/i });
+    fireEvent.click(printerTab);
+
+    // Should list printer formats
+    expect(screen.getByText(/58mm Thermal Roll/i)).toBeInTheDocument();
+    expect(screen.getByText(/80mm Thermal Roll/i)).toBeInTheDocument();
+    expect(screen.getByText(/3" × 2" Rectangular/i)).toBeInTheDocument();
+
+    // Select 80mm format
+    const formatCard = screen.getByText(/80mm Thermal Roll/i);
+    fireEvent.click(formatCard);
+    expect(screen.getByText(/80mm Kitchen Roll/i)).toBeInTheDocument();
   });
 
   it('triggers onClose when close button clicked', () => {

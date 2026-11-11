@@ -143,3 +143,46 @@ export function suggestTierConfigurations(guestCount = 50, servingStyle = 'desse
     .sort((a, b) => a.difference - b.difference)
     .slice(0, 5);
 }
+
+/**
+ * Format a clean, professional WhatsApp tier cake specification sheet
+ * @param {Object} options
+ */
+export function formatTierStackWhatsAppMessage({
+  tiers = [],
+  servingStyle = 'dessert',
+  eventTitle = 'Celebration Cake',
+  bakeryName = 'Cream & Crust Bakery',
+}) {
+  const calc = calculateTierStack(tiers, servingStyle);
+  let text = `🎂 *TIERED CAKE STRUCTURAL PLAN — ${bakeryName.toUpperCase()}*\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `Occasion / Project: *${eventTitle}*\n`;
+  text += `Serving Style: *${servingStyle === 'dessert' ? 'Dessert Portion (1" × 2" × 4")' : 'Coffee Portion (1" × 1" × 4")'}*\n\n`;
+
+  text += `📐 *TIER ARCHITECTURE (${calc.tiersCount} Tiers):*\n`;
+  tiers.forEach((t, i) => {
+    const tierName = i === 0 ? 'Top Tier' : i === tiers.length - 1 ? 'Base Tier' : `Tier ${i + 1}`;
+    const info = calc.tierBreakdown[i];
+    text += `• ${tierName}: *${t.size}" Round* (${info?.servings || 0} portions | ~${info?.weightKg || 0} kg)\n`;
+  });
+
+  text += `\n📊 *SPECIFICATION SUMMARY:*\n`;
+  text += `• Total Servings: *${calc.totalServings} guests*\n`;
+  text += `• Estimated Finished Weight: *~${calc.totalWeightKg} kg*\n`;
+  text += `• Recommended Base Board: *${calc.baseBoardSize}" Masonite / MDF (12mm)*\n`;
+  text += `• Internal Support Dowels: *${calc.dowelsRequired} dowels*\n`;
+
+  if (calc.structuralGuide.length > 0) {
+    text += `\n🛡️ *ASSEMBLY & STABILITY NOTES:*\n`;
+    calc.structuralGuide.forEach((g) => {
+      text += `• ${g}\n`;
+    });
+  }
+
+  text += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `_Crafted with Cream & Crust Structural Cake Architect_ ✨`;
+
+  return text;
+}
+

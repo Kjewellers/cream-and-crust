@@ -35,6 +35,7 @@ import {
   Bike,
   Edit2,
   Sliders,
+  Tag,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { updateOrderStatusInDB, saveFCMToken } from '../services/db';
@@ -137,6 +138,26 @@ export default function DashboardClassic() {
       return next;
     });
   }, []);
+
+  const handleOpenToolModal = useCallback((tool) => {
+    if (tool === 'cake-calculator' || tool === 'tier-calculator') {
+      setShowCakeCalculator(true);
+    } else if (tool === 'allergen-label' || tool === 'allergen-labels') {
+      setShowAllergenLabel(true);
+    } else if (tool === 'instant-quote' || tool === 'quote') {
+      setShowInstantQuote(true);
+    }
+  }, []);
+
+  // Listen for global tool opening events from Story cards or navigation
+  useEffect(() => {
+    const handleToolEvent = (e) => {
+      const tool = e.detail?.tool;
+      if (tool) handleOpenToolModal(tool);
+    };
+    window.addEventListener('open-tool-modal', handleToolEvent);
+    return () => window.removeEventListener('open-tool-modal', handleToolEvent);
+  }, [handleOpenToolModal]);
 
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
@@ -754,7 +775,7 @@ export default function DashboardClassic() {
         />
 
         {/* ── Instagram / X Style Stories Highlights Bar ── */}
-        <BakeryStoriesBar />
+        <BakeryStoriesBar onOpenToolModal={handleOpenToolModal} />
 
         {/* ── Gradient Hero Card ─────────── */}
         <AnimatePresence mode="wait">
@@ -1886,6 +1907,159 @@ export default function DashboardClassic() {
                 </span>
               </motion.div>
             )}
+
+            {/* Tier Stack Calculator */}
+            {visibleActions.includes('tiercalculator') && (
+              <motion.div
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  setShowCakeCalculator(true);
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(236, 72, 153, 0.18)',
+                  boxShadow: '0 4px 12px rgba(236, 72, 153, 0.04)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    background: '#FDF2F8',
+                    color: '#DB2777',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <Layers size={16} strokeWidth={2.6} />
+                </div>
+                <span
+                  style={{
+                    fontSize: '0.58rem',
+                    fontWeight: 800,
+                    color: 'var(--text)',
+                    whiteSpace: 'nowrap',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  Tier Stack
+                </span>
+              </motion.div>
+            )}
+
+            {/* FSSAI Food Allergen Label */}
+            {visibleActions.includes('fssailabel') && (
+              <motion.div
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  setShowAllergenLabel(true);
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(16, 185, 129, 0.18)',
+                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.04)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    background: '#ECFDF5',
+                    color: '#059669',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <Tag size={16} strokeWidth={2.6} />
+                </div>
+                <span
+                  style={{
+                    fontSize: '0.58rem',
+                    fontWeight: 800,
+                    color: 'var(--text)',
+                    whiteSpace: 'nowrap',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  FSSAI Label
+                </span>
+              </motion.div>
+            )}
+
+            {/* Instant WhatsApp Quote */}
+            {visibleActions.includes('instantquote') && (
+              <motion.div
+                whileTap={{ scale: 0.94 }}
+                onClick={() => {
+                  triggerHaptic('light');
+                  setShowInstantQuote(true);
+                }}
+                style={{
+                  background: 'white',
+                  borderRadius: 18,
+                  padding: '12px 2px 10px 2px',
+                  textAlign: 'center',
+                  border: '1px solid rgba(37, 211, 102, 0.18)',
+                  boxShadow: '0 4px 12px rgba(37, 211, 102, 0.04)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    background: '#F0FDF4',
+                    color: '#15803D',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 6,
+                  }}
+                >
+                  <MessageCircle size={16} strokeWidth={2.6} />
+                </div>
+                <span
+                  style={{
+                    fontSize: '0.58rem',
+                    fontWeight: 800,
+                    color: 'var(--text)',
+                    whiteSpace: 'nowrap',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  Quick Quote
+                </span>
+              </motion.div>
+            )}
           </div>
         </motion.div>
 
@@ -2807,6 +2981,9 @@ export default function DashboardClassic() {
             { id: 'menu', label: 'View Menu', icon: LayoutGrid, color: '#0284C7' },
             { id: 'expenses', label: 'Expenses', icon: Receipt, color: '#16A34A' },
             { id: 'recipes', label: 'Recipes', icon: ChefHat, color: '#DB2777' },
+            { id: 'tiercalculator', label: 'Tier Stack Calculator', icon: Layers, color: '#EC4899' },
+            { id: 'fssailabel', label: 'FSSAI Food Label Printer', icon: Tag, color: '#10B981' },
+            { id: 'instantquote', label: 'WhatsApp Instant Quote', icon: MessageCircle, color: '#25D366' },
           ].map((action) => {
             const Icon = action.icon;
             return (
@@ -2886,6 +3063,7 @@ export default function DashboardClassic() {
       <TierCakeCalculatorModal
         open={showCakeCalculator}
         onClose={() => setShowCakeCalculator(false)}
+        bakeryName={business?.name || 'Cream & Crust Bakery'}
       />
 
       <AllergenLabelModal

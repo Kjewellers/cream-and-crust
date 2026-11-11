@@ -172,6 +172,14 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
   const navigate = useNavigate();
   const [activeStory, setActiveStory] = useState(null);
   const [slideIndex, setSlideIndex] = useState(0);
+  const [seenStories, setSeenStories] = useState(() => {
+    try {
+      const raw = localStorage.getItem('cc_seen_stories');
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
 
   // Complete background scroll locking (Instagram / Airbnb standard)
   useEffect(() => {
@@ -193,6 +201,10 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setActiveStory(null);
+      } else if (e.key === 'ArrowRight') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlide();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -208,12 +220,20 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
         window.scrollTo(0, scrollY);
       } catch (_) {}
     };
-  }, [activeStory]);
+  }, [activeStory, slideIndex]);
 
   const openStory = (story) => {
     triggerHaptic('light');
     setActiveStory(story);
     setSlideIndex(0);
+    setSeenStories((prev) => {
+      const next = new Set(prev);
+      next.add(story.id);
+      try {
+        localStorage.setItem('cc_seen_stories', JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
   };
 
   const closeStory = () => {
@@ -222,6 +242,7 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
 
   const nextSlide = () => {
     if (!activeStory) return;
+    triggerHaptic('light');
     if (slideIndex < activeStory.slides.length - 1) {
       setSlideIndex((prev) => prev + 1);
     } else {
@@ -231,6 +252,7 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
 
   const prevSlide = () => {
     if (!activeStory) return;
+    triggerHaptic('light');
     if (slideIndex > 0) {
       setSlideIndex((prev) => prev - 1);
     } else {
@@ -272,6 +294,7 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
       >
         {STORIES.map((story) => {
           const Icon = story.icon;
+          const isSeen = seenStories.has(story.id);
           return (
             <motion.button
               key={story.id}
@@ -300,8 +323,9 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
                   height: 64,
                   borderRadius: '50%',
                   padding: 3,
-                  background: story.gradient,
-                  boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+                  background: isSeen ? 'rgba(74, 59, 50, 0.16)' : story.gradient,
+                  boxShadow: isSeen ? 'none' : '0 4px 14px rgba(0,0,0,0.12)',
+                  transition: 'all 0.25s ease',
                 }}
               >
                 <div
@@ -316,7 +340,13 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
                     color: 'var(--text, #1C1917)',
                   }}
                 >
-                  <Icon size={24} style={{ color: 'var(--accent, #B5606A)' }} />
+                  <Icon
+                    size={24}
+                    style={{
+                      color: isSeen ? 'var(--text3, #8C7A6B)' : 'var(--accent, #B5606A)',
+                      transition: 'color 0.2s ease',
+                    }}
+                  />
                 </div>
                 {story.badge && (
                   <span
@@ -327,12 +357,13 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
                       transform: 'translateX(-50%)',
                       fontSize: 8.5,
                       fontWeight: 900,
-                      color: '#fff',
-                      background: story.gradient,
+                      color: isSeen ? '#4B5563' : '#fff',
+                      background: isSeen ? '#E5E7EB' : story.gradient,
                       padding: '1px 6px',
                       borderRadius: 99,
                       letterSpacing: '0.04em',
-                      boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                      boxShadow: isSeen ? 'none' : '0 2px 6px rgba(0,0,0,0.2)',
+                      transition: 'all 0.25s ease',
                     }}
                   >
                     {story.badge}
@@ -342,9 +373,10 @@ export default function BakeryStoriesBar({ onOpenToolModal }) {
               <span
                 style={{
                   fontSize: 11.5,
-                  fontWeight: 700,
-                  color: 'var(--text, #2D1B14)',
+                  fontWeight: isSeen ? 600 : 800,
+                  color: isSeen ? 'var(--text3, #6B7280)' : 'var(--text, #2D1B14)',
                   letterSpacing: '-0.01em',
+                  transition: 'all 0.2s ease',
                 }}
               >
                 {story.title}

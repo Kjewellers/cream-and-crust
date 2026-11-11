@@ -194,8 +194,23 @@
 }
 @media (max-width: 640px) {
   .recipes-metrics-strip {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 10px;
+    padding-bottom: 4px;
+    margin-bottom: 12px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .recipes-metrics-strip::-webkit-scrollbar {
+    display: none;
+  }
+  .recipes-metric-card {
+    min-width: 200px;
+    flex-shrink: 0;
+    scroll-snap-align: start;
+    padding: 10px 12px;
   }
 }
 .recipes-metric-card {

@@ -117,6 +117,51 @@ export default function DashboardClassic() {
   const [cardStyle, setCardStyle] = useState(
     () => localStorage.getItem('dashCardStyle') || 'showcase'
   );
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth < 768 : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const actionCardStyle = {
+    background: 'white',
+    borderRadius: isMobile ? 16 : 18,
+    padding: isMobile ? '12px 4px 10px 4px' : '12px 2px 10px 2px',
+    minHeight: isMobile ? 74 : 'auto',
+    textAlign: 'center',
+    border: '1px solid rgba(74, 59, 50, 0.04)',
+    boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
+    cursor: 'pointer',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
+  const actionIconBoxStyle = (bg, color) => ({
+    width: isMobile ? 38 : 34,
+    height: isMobile ? 38 : 34,
+    borderRadius: isMobile ? 12 : '50%',
+    background: bg,
+    color: color,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  });
+
+  const actionLabelStyle = {
+    fontSize: isMobile ? '0.72rem' : '0.58rem',
+    fontWeight: 800,
+    color: 'var(--text)',
+    whiteSpace: 'nowrap',
+    letterSpacing: '-0.01em',
+  };
+
   const [visibleActions, setVisibleActions] = useState(() => {
     const saved = localStorage.getItem('dashVisibleActions');
     return saved
@@ -645,16 +690,70 @@ export default function DashboardClassic() {
         {!updateBannerDismissed && (
           <motion.div
             variants={listItem}
-            className="card"
             style={{
-              marginBottom: 22,
-              padding: 20,
-              border: '1px solid rgba(16, 185, 129, 0.25)',
+              marginBottom: isMobile ? 14 : 20,
+              padding: isMobile ? '12px 14px' : '14px 18px',
+              borderRadius: isMobile ? 18 : 22,
+              border: '1.5px solid rgba(16, 185, 129, 0.25)',
               background: 'linear-gradient(135deg, #F0FDF4 0%, #FFFFFF 100%)',
               position: 'relative',
-              boxShadow: '0 8px 24px rgba(16, 185, 129, 0.08)'
+              boxShadow: '0 4px 16px rgba(16, 185, 129, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
             }}
           >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  background: '#10B981',
+                  color: 'white',
+                  width: 34,
+                  height: 34,
+                  borderRadius: 12,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
+                }}
+              >
+                <Sparkles size={18} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.86rem', fontWeight: 800, color: 'var(--text)' }}>
+                    Update v1.1 is Live! 🎉
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '0.62rem',
+                      fontWeight: 900,
+                      background: 'rgba(16,185,129,0.12)',
+                      color: '#047857',
+                      padding: '1px 6px',
+                      borderRadius: 99,
+                    }}
+                  >
+                    NEW
+                  </span>
+                </div>
+                <p
+                  style={{
+                    margin: '2px 0 0 0',
+                    fontSize: '0.74rem',
+                    color: 'var(--text2)',
+                    lineHeight: 1.35,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: isMobile ? 'nowrap' : 'normal',
+                  }}
+                >
+                  Hardware acceleration, faster startups, and 3-step FSSAI Label Studio.
+                </p>
+              </div>
+            </div>
             <button
               onClick={() => {
                 triggerHaptic('light');
@@ -662,37 +761,22 @@ export default function DashboardClassic() {
                 setUpdateBannerDismissed(true);
               }}
               style={{
-                position: 'absolute',
-                top: 16,
-                right: 16,
-                color: 'var(--text3)',
-                background: 'rgba(0,0,0,0.03)',
+                background: 'rgba(0,0,0,0.04)',
+                border: 'none',
                 borderRadius: '50%',
-                padding: 4,
+                width: 28,
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text3)',
+                cursor: 'pointer',
+                flexShrink: 0,
               }}
+              aria-label="Dismiss banner"
             >
-              <X size={16} />
+              <X size={15} />
             </button>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-              <div style={{ background: '#10B981', color: 'white', padding: 10, borderRadius: 14, boxShadow: '0 4px 12px rgba(16,185,129,0.3)' }}>
-                <Sparkles size={22} />
-              </div>
-              <div style={{ flex: 1, paddingRight: 10 }}>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--text)', marginBottom: 6, letterSpacing: '-0.02em' }}>
-                  Update v1.1 is Live! 🎉
-                </h3>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text2)', lineHeight: 1.55 }}>
-                  We've made massive improvements under the hood:
-                  <ul style={{ paddingLeft: 18, marginTop: 8, marginBottom: 8, color: 'var(--text)' }}>
-                    <li style={{ marginBottom: 4 }}><strong>Butter Smooth:</strong> Hardware acceleration for a premium, native-app feel.</li>
-                    <li style={{ marginBottom: 4 }}><strong>Instant Startups:</strong> Parallel data loading drastically cuts splash screen wait times.</li>
-                    <li style={{ marginBottom: 4 }}><strong>Menu Magic:</strong> Shared menu links now update instantly when you change your template.</li>
-                    <li><strong>Flawless Gestures:</strong> Perfected the "pull to refresh" logic and removed annoying popups.</li>
-                  </ul>
-                  Everything feels faster, cleaner, and more reliable. Enjoy!
-                </div>
-              </div>
-            </div>
           </motion.div>
         )}
 
@@ -793,8 +877,8 @@ export default function DashboardClassic() {
               transition={{ duration: 0.28 }}
               style={{
                 background: 'linear-gradient(135deg, #FFF5EC 0%, #FFDFD0 100%)',
-                borderRadius: 28,
-                padding: '24px',
+                borderRadius: isMobile ? 22 : 28,
+                padding: isMobile ? '16px 14px' : '24px',
                 position: 'relative',
                 boxShadow: '0 8px 32px rgba(234, 130, 60, 0.12)',
               }}
@@ -805,7 +889,7 @@ export default function DashboardClassic() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'flex-start',
-                  marginBottom: 20,
+                  marginBottom: isMobile ? 14 : 20,
                   position: 'relative',
                   zIndex: 2,
                 }}
@@ -813,7 +897,7 @@ export default function DashboardClassic() {
                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                   <span
                     style={{
-                      fontSize: '0.8rem',
+                      fontSize: isMobile ? '0.74rem' : '0.8rem',
                       fontWeight: 600,
                       color: '#8C7A6B',
                       letterSpacing: '-0.01em',
@@ -823,12 +907,12 @@ export default function DashboardClassic() {
                   </span>
                   <h2
                     style={{
-                      fontSize: '1.9rem',
+                      fontSize: isMobile ? '1.5rem' : '1.9rem',
                       fontWeight: 900,
                       color: '#4A3B32',
                       letterSpacing: '-0.04em',
                       marginTop: 2,
-                      lineHeight: 1,
+                      lineHeight: 1.1,
                     }}
                   >
                     {firstName}{' '}
@@ -837,8 +921,8 @@ export default function DashboardClassic() {
                   <p
                     style={{
                       color: '#8C7A6B',
-                      fontSize: '0.72rem',
-                      marginTop: 6,
+                      fontSize: isMobile ? '0.7rem' : '0.72rem',
+                      marginTop: 4,
                       fontWeight: 700,
                       letterSpacing: '-0.01em',
                       opacity: 0.9,
@@ -852,10 +936,12 @@ export default function DashboardClassic() {
                 <div
                   style={{
                     position: 'absolute',
-                    right: -6,
-                    top: -22,
-                    transform: 'scale(1.15)',
+                    right: isMobile ? 0 : -6,
+                    top: isMobile ? -14 : -22,
+                    transform: isMobile ? 'scale(0.85)' : 'scale(1.15)',
+                    transformOrigin: 'top right',
                     pointerEvents: 'none',
+                    opacity: isMobile ? 0.9 : 1,
                   }}
                 >
                   {/* Small decorative bubbles/circles matching reference */}
@@ -874,7 +960,7 @@ export default function DashboardClassic() {
                     className="floating"
                     style={{
                       display: 'inline-block',
-                      fontSize: '4.8rem',
+                      fontSize: isMobile ? '3.8rem' : '4.8rem',
                       filter: 'drop-shadow(0px 8px 16px rgba(74,59,50,0.12))',
                     }}
                   >
@@ -905,8 +991,8 @@ export default function DashboardClassic() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: 10,
+                  gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
+                  gap: isMobile ? 8 : 10,
                   position: 'relative',
                   zIndex: 2,
                 }}
@@ -932,8 +1018,8 @@ export default function DashboardClassic() {
                 <div
                   style={{
                     background: 'white',
-                    borderRadius: 18,
-                    padding: '14px 10px',
+                    borderRadius: isMobile ? 16 : 18,
+                    padding: isMobile ? '12px 10px' : '14px 10px',
                     boxShadow: '0 4px 16px rgba(74, 59, 50, 0.03)',
                     border: '1px solid rgba(74,59,50,0.02)',
                     display: 'flex',
@@ -942,7 +1028,7 @@ export default function DashboardClassic() {
                 >
                   <div
                     style={{
-                      fontSize: '1rem',
+                      fontSize: isMobile ? '1.15rem' : '1rem',
                       fontWeight: 900,
                       color: '#4A3B32',
                       letterSpacing: '-0.03em',
@@ -953,18 +1039,18 @@ export default function DashboardClassic() {
                   </div>
                   <div
                     style={{
-                      fontSize: '0.62rem',
+                      fontSize: isMobile ? '0.7rem' : '0.62rem',
                       color: '#8C7A6B',
                       fontWeight: 700,
                       marginTop: 4,
-                      marginBottom: 8,
+                      marginBottom: isMobile ? 6 : 8,
                     }}
                   >
                     Revenue
                   </div>
                   <div
                     style={{
-                      fontSize: '0.6rem',
+                      fontSize: isMobile ? '0.66rem' : '0.6rem',
                       fontWeight: 800,
                       color: '#10B981',
                       display: 'flex',
@@ -980,8 +1066,8 @@ export default function DashboardClassic() {
                 <div
                   style={{
                     background: 'white',
-                    borderRadius: 18,
-                    padding: '14px 10px',
+                    borderRadius: isMobile ? 16 : 18,
+                    padding: isMobile ? '12px 10px' : '14px 10px',
                     boxShadow: '0 4px 16px rgba(74, 59, 50, 0.03)',
                     border: '1px solid rgba(74,59,50,0.02)',
                     display: 'flex',
@@ -990,7 +1076,7 @@ export default function DashboardClassic() {
                 >
                   <div
                     style={{
-                      fontSize: '1rem',
+                      fontSize: isMobile ? '1.15rem' : '1rem',
                       fontWeight: 900,
                       color: '#4A3B32',
                       letterSpacing: '-0.03em',
@@ -1001,16 +1087,16 @@ export default function DashboardClassic() {
                   </div>
                   <div
                     style={{
-                      fontSize: '0.62rem',
+                      fontSize: isMobile ? '0.7rem' : '0.62rem',
                       color: '#8C7A6B',
                       fontWeight: 700,
                       marginTop: 4,
-                      marginBottom: 8,
+                      marginBottom: isMobile ? 6 : 8,
                     }}
                   >
                     Pending
                   </div>
-                  <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#E15A3E' }}>
+                  <div style={{ fontSize: isMobile ? '0.66rem' : '0.6rem', fontWeight: 800, color: '#E15A3E' }}>
                     {orders.filter((o) => o && o.paymentStatus === 'pending').length} Orders
                   </div>
                 </div>
@@ -1019,8 +1105,8 @@ export default function DashboardClassic() {
                 <div
                   style={{
                     background: 'white',
-                    borderRadius: 18,
-                    padding: '14px 10px',
+                    borderRadius: isMobile ? 16 : 18,
+                    padding: isMobile ? '12px 10px' : '14px 10px',
                     boxShadow: '0 4px 16px rgba(74, 59, 50, 0.03)',
                     border: '1px solid rgba(74,59,50,0.02)',
                     display: 'flex',
@@ -1029,7 +1115,7 @@ export default function DashboardClassic() {
                 >
                   <div
                     style={{
-                      fontSize: '1.05rem',
+                      fontSize: isMobile ? '1.15rem' : '1.05rem',
                       fontWeight: 900,
                       color: '#4A3B32',
                       letterSpacing: '-0.03em',
@@ -1040,24 +1126,24 @@ export default function DashboardClassic() {
                   </div>
                   <div
                     style={{
-                      fontSize: '0.62rem',
+                      fontSize: isMobile ? '0.7rem' : '0.62rem',
                       color: '#8C7A6B',
                       fontWeight: 700,
                       marginTop: 4,
-                      marginBottom: 8,
+                      marginBottom: isMobile ? 6 : 8,
                     }}
                   >
                     Deliveries
                   </div>
-                  <div style={{ fontSize: '0.6rem', color: '#8C7A6B', fontWeight: 800 }}>Today</div>
+                  <div style={{ fontSize: isMobile ? '0.66rem' : '0.6rem', color: '#8C7A6B', fontWeight: 800 }}>Today</div>
                 </div>
 
                 {/* In Progress Card */}
                 <div
                   style={{
                     background: 'white',
-                    borderRadius: 18,
-                    padding: '14px 10px',
+                    borderRadius: isMobile ? 16 : 18,
+                    padding: isMobile ? '12px 10px' : '14px 10px',
                     boxShadow: '0 4px 16px rgba(74, 59, 50, 0.03)',
                     border: '1px solid rgba(74,59,50,0.02)',
                     display: 'flex',
@@ -1066,7 +1152,7 @@ export default function DashboardClassic() {
                 >
                   <div
                     style={{
-                      fontSize: '1.05rem',
+                      fontSize: isMobile ? '1.15rem' : '1.05rem',
                       fontWeight: 900,
                       color: '#4A3B32',
                       letterSpacing: '-0.03em',
@@ -1077,16 +1163,16 @@ export default function DashboardClassic() {
                   </div>
                   <div
                     style={{
-                      fontSize: '0.62rem',
+                      fontSize: isMobile ? '0.7rem' : '0.62rem',
                       color: '#8C7A6B',
                       fontWeight: 700,
                       marginTop: 4,
-                      marginBottom: 8,
+                      marginBottom: isMobile ? 6 : 8,
                     }}
                   >
                     In Progress
                   </div>
-                  <div style={{ fontSize: '0.6rem', color: '#8C7A6B', fontWeight: 800 }}>
+                  <div style={{ fontSize: isMobile ? '0.66rem' : '0.6rem', color: '#8C7A6B', fontWeight: 800 }}>
                     Orders
                   </div>
                 </div>
@@ -1295,7 +1381,13 @@ export default function DashboardClassic() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.28 }}
             >
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)',
+                  gap: isMobile ? 8 : 10,
+                }}
+              >
                 {stats.map((s, i) => {
                   const Icon = s.icon;
                   const c = colorMap[s.color] || colorMap.pink;
@@ -1543,7 +1635,13 @@ export default function DashboardClassic() {
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 8 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)',
+              gap: isMobile ? 10 : 8,
+            }}
+          >
             {/* New Order */}
             {visibleActions.includes('orders') && (
               <motion.div
@@ -1552,46 +1650,12 @@ export default function DashboardClassic() {
                   triggerHaptic('light');
                   navigate('/orders?new=true');
                 }}
-                style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
-                  border: '1px solid rgba(74, 59, 50, 0.04)',
-                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                style={actionCardStyle}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#FFF5EC',
-                    color: '#E15A3E',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <Plus size={16} strokeWidth={3} />
+                <div style={actionIconBoxStyle('#FFF5EC', '#E15A3E')}>
+                  <Plus size={isMobile ? 18 : 16} strokeWidth={3} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  New Order
-                </span>
+                <span style={actionLabelStyle}>New Order</span>
               </motion.div>
             )}
 
@@ -1604,45 +1668,14 @@ export default function DashboardClassic() {
                   setShowBakeSheet(true);
                 }}
                 style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
+                  ...actionCardStyle,
                   border: '1px solid rgba(181, 96, 106, 0.18)',
-                  boxShadow: '0 4px 12px rgba(181, 96, 106, 0.04)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                 }}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#FFF0EE',
-                    color: '#B5606A',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <ChefHat size={16} strokeWidth={2.6} />
+                <div style={actionIconBoxStyle('#FFF0EE', '#B5606A')}>
+                  <ChefHat size={isMobile ? 18 : 16} strokeWidth={2.6} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  Bake Sheet
-                </span>
+                <span style={actionLabelStyle}>Bake Sheet</span>
               </motion.div>
             )}
 
@@ -1654,46 +1687,12 @@ export default function DashboardClassic() {
                   triggerHaptic('light');
                   navigate('/customers');
                 }}
-                style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
-                  border: '1px solid rgba(74, 59, 50, 0.04)',
-                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                style={actionCardStyle}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#FAF5FF',
-                    color: '#9333EA',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <Users size={16} strokeWidth={2.5} />
+                <div style={actionIconBoxStyle('#FAF5FF', '#9333EA')}>
+                  <Users size={isMobile ? 18 : 16} strokeWidth={2.5} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  Customers
-                </span>
+                <span style={actionLabelStyle}>Customers</span>
               </motion.div>
             )}
 
@@ -1705,46 +1704,12 @@ export default function DashboardClassic() {
                   triggerHaptic('light');
                   navigate('/products');
                 }}
-                style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
-                  border: '1px solid rgba(74, 59, 50, 0.04)',
-                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                style={actionCardStyle}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#FEFCE8',
-                    color: '#CA8A04',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <Package size={16} strokeWidth={2.5} />
+                <div style={actionIconBoxStyle('#FEFCE8', '#CA8A04')}>
+                  <Package size={isMobile ? 18 : 16} strokeWidth={2.5} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  Products
-                </span>
+                <span style={actionLabelStyle}>Products</span>
               </motion.div>
             )}
 
@@ -1767,46 +1732,12 @@ export default function DashboardClassic() {
                     showToast('Set a username in Settings to get your public menu link', 'info');
                   }
                 }}
-                style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
-                  border: '1px solid rgba(74, 59, 50, 0.04)',
-                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                style={actionCardStyle}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#F0F9FF',
-                    color: '#0284C7',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <span style={{ fontSize: '16px' }}>🍽️</span>
+                <div style={actionIconBoxStyle('#F0F9FF', '#0284C7')}>
+                  <span style={{ fontSize: isMobile ? '18px' : '16px' }}>🍽️</span>
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  View Menu
-                </span>
+                <span style={actionLabelStyle}>View Menu</span>
               </motion.div>
             )}
 
@@ -1818,46 +1749,12 @@ export default function DashboardClassic() {
                   triggerHaptic('light');
                   navigate('/expenses');
                 }}
-                style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
-                  border: '1px solid rgba(74, 59, 50, 0.04)',
-                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                style={actionCardStyle}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#F0FDF4',
-                    color: '#16A34A',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <Receipt size={16} strokeWidth={2.5} />
+                <div style={actionIconBoxStyle('#F0FDF4', '#16A34A')}>
+                  <Receipt size={isMobile ? 18 : 16} strokeWidth={2.5} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  Expenses
-                </span>
+                <span style={actionLabelStyle}>Expenses</span>
               </motion.div>
             )}
 
@@ -1869,46 +1766,12 @@ export default function DashboardClassic() {
                   triggerHaptic('light');
                   navigate('/recipes');
                 }}
-                style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
-                  border: '1px solid rgba(74, 59, 50, 0.04)',
-                  boxShadow: '0 4px 12px rgba(74,59,50,0.015)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
+                style={actionCardStyle}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#FFF1F2',
-                    color: '#DB2777',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <ChefHat size={16} strokeWidth={2.5} />
+                <div style={actionIconBoxStyle('#FFF1F2', '#DB2777')}>
+                  <ChefHat size={isMobile ? 18 : 16} strokeWidth={2.5} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  Recipes
-                </span>
+                <span style={actionLabelStyle}>Recipes</span>
               </motion.div>
             )}
 
@@ -1921,45 +1784,14 @@ export default function DashboardClassic() {
                   setShowCakeCalculator(true);
                 }}
                 style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
+                  ...actionCardStyle,
                   border: '1px solid rgba(236, 72, 153, 0.18)',
-                  boxShadow: '0 4px 12px rgba(236, 72, 153, 0.04)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                 }}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#FDF2F8',
-                    color: '#DB2777',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <Layers size={16} strokeWidth={2.6} />
+                <div style={actionIconBoxStyle('#FDF2F8', '#DB2777')}>
+                  <Layers size={isMobile ? 18 : 16} strokeWidth={2.6} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  Tier Stack
-                </span>
+                <span style={actionLabelStyle}>Tier Stack</span>
               </motion.div>
             )}
 
@@ -1972,45 +1804,14 @@ export default function DashboardClassic() {
                   navigate('/label-studio');
                 }}
                 style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
+                  ...actionCardStyle,
                   border: '1px solid rgba(16, 185, 129, 0.18)',
-                  boxShadow: '0 4px 12px rgba(16, 185, 129, 0.04)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                 }}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#ECFDF5',
-                    color: '#059669',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <Tag size={16} strokeWidth={2.6} />
+                <div style={actionIconBoxStyle('#ECFDF5', '#059669')}>
+                  <Tag size={isMobile ? 18 : 16} strokeWidth={2.6} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  FSSAI Label
-                </span>
+                <span style={actionLabelStyle}>FSSAI Label</span>
               </motion.div>
             )}
 
@@ -2023,45 +1824,14 @@ export default function DashboardClassic() {
                   setShowInstantQuote(true);
                 }}
                 style={{
-                  background: 'white',
-                  borderRadius: 18,
-                  padding: '12px 2px 10px 2px',
-                  textAlign: 'center',
+                  ...actionCardStyle,
                   border: '1px solid rgba(37, 211, 102, 0.18)',
-                  boxShadow: '0 4px 12px rgba(37, 211, 102, 0.04)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
                 }}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    background: '#F0FDF4',
-                    color: '#15803D',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 6,
-                  }}
-                >
-                  <MessageCircle size={16} strokeWidth={2.6} />
+                <div style={actionIconBoxStyle('#F0FDF4', '#15803D')}>
+                  <MessageCircle size={isMobile ? 18 : 16} strokeWidth={2.6} />
                 </div>
-                <span
-                  style={{
-                    fontSize: '0.58rem',
-                    fontWeight: 800,
-                    color: 'var(--text)',
-                    whiteSpace: 'nowrap',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  Quick Quote
-                </span>
+                <span style={actionLabelStyle}>Quick Quote</span>
               </motion.div>
             )}
           </div>
@@ -2373,10 +2143,10 @@ export default function DashboardClassic() {
                         whileTap={{ scale: 0.98 }}
                         style={{
                           background: 'white',
-                          borderRadius: 24,
-                          padding: '16px',
-                          minWidth: 260,
-                          width: 260,
+                          borderRadius: isMobile ? 20 : 24,
+                          padding: isMobile ? '14px' : '16px',
+                          minWidth: isMobile ? 240 : 260,
+                          width: isMobile ? 240 : 260,
                           border: '1px solid rgba(74, 59, 50, 0.04)',
                           boxShadow: '0 4px 16px rgba(74,59,50,0.015)',
                           display: 'flex',

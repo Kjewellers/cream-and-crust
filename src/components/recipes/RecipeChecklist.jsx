@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, CheckSquare, Square } from 'lucide-react';
+import { ArrowLeft, CheckSquare, Square, X } from 'lucide-react';
 
 const DEFAULT_CHECKLIST = [
   'Preheat oven to 180°C',
@@ -17,25 +17,49 @@ export default function RecipeChecklist({ recipe, onClose }) {
   const items = recipe?.steps?.map((s) => s.title || s.desc) || DEFAULT_CHECKLIST;
   const [checked, setChecked] = useState({});
 
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && onClose) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const toggle = (i) => setChecked((prev) => ({ ...prev, [i]: !prev[i] }));
   const done = Object.values(checked).filter(Boolean).length;
 
   return (
     <motion.div
-      initial={{ y: '100%' }}
-      animate={{ y: 0 }}
-      exit={{ y: '100%' }}
-      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 16 }}
+      transition={{ duration: 0.2 }}
       className="rv-details"
-      style={{ zIndex: 230 }}
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="rv-wizard-header">
-        <button className="rv-circle-btn" onClick={onClose}>
-          <ArrowLeft size={20} />
+        <button className="rv-circle-btn" onClick={onClose} aria-label="Back" type="button">
+          <ArrowLeft size={18} />
         </button>
-        <div style={{ fontWeight: 800, fontSize: 16 }}>Preparation Checklist</div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--rv-pink)' }}>
-          {done}/{items.length}
+        <div style={{ fontWeight: 800, fontSize: 16, flex: 1, margin: '0 12px' }}>
+          Preparation Checklist
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--rv-pink)' }}>
+            {done}/{items.length}
+          </div>
+          <button
+            className="rv-circle-btn"
+            onClick={onClose}
+            aria-label="Close"
+            title="Close"
+            type="button"
+            style={{ background: 'rgba(0, 0, 0, 0.05)', color: 'var(--rv-dark)' }}
+          >
+            <X size={18} />
+          </button>
         </div>
       </div>
 

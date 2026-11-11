@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Trash2, Camera, Plus, Loader2 } from 'lucide-react';
+import { ArrowLeft, Trash2, Camera, Plus, Loader2, X } from 'lucide-react';
 import { addRecipeToDB, updateRecipeInDB } from '../../services/db';
 import { uploadToCloudinary } from '../../services/cloudinary';
 import { pickPhoto } from '../../utils/photoPicker';
@@ -60,7 +60,8 @@ const YIELD_OPTIONS = [
 
 export default function CreateRecipe({ onClose, existingRecipe }) {
   const isEditing = !!existingRecipe;
-  const { requirePermission } = usePermissions();
+  const permissions = usePermissions();
+  const requirePermission = permissions?.requirePermission || ((_, cb) => (cb ? cb() : true));
   const [step, setStep] = useState(1);
   const [scaleTo, setScaleTo] = useState('3 kg cake');
   const [data, setData] = useState({
@@ -205,6 +206,17 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
     }
   };
 
+  // Escape key closes modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (onClose) onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   const s = {
     fontSize: 13,
     fontWeight: 600,
@@ -227,23 +239,29 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
 
   return (
     <motion.div
-      initial={{ y: '100%' }}
-      animate={{ y: 0 }}
-      exit={{ y: '100%' }}
-      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 16 }}
+      transition={{ duration: 0.2 }}
       className="rv-details"
-      style={{ zIndex: 220 }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="create-recipe-title"
+      onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}
       <div className="rv-wizard-header">
         <button
           className="rv-circle-btn"
           onClick={() => (step > 1 ? setStep((s) => s - 1) : onClose())}
+          aria-label={step > 1 ? 'Previous Step' : 'Back'}
+          title={step > 1 ? 'Previous Step' : 'Back'}
+          type="button"
         >
-          <ArrowLeft size={20} />
+          <ArrowLeft size={18} />
         </button>
-        <div style={{ flex: 1, marginLeft: 12 }}>
-          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 8 }}>
+        <div style={{ flex: 1, margin: '0 12px' }}>
+          <div id="create-recipe-title" style={{ fontWeight: 800, fontSize: 16, marginBottom: 8 }}>
             {isEditing ? 'Edit Recipe' : 'Add New Recipe'}
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
@@ -272,6 +290,16 @@ export default function CreateRecipe({ onClose, existingRecipe }) {
             ))}
           </div>
         </div>
+        <button
+          className="rv-circle-btn"
+          onClick={() => onClose()}
+          aria-label="Close"
+          title="Close"
+          type="button"
+          style={{ background: 'rgba(0, 0, 0, 0.05)', color: 'var(--rv-dark)' }}
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <div className="rv-wizard-content">

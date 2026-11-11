@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, X } from 'lucide-react';
 
 const FLOW_STEPS = [
   { icon: '✅', text: 'Recipe is scaled automatically' },
@@ -10,21 +10,42 @@ const FLOW_STEPS = [
 ];
 
 export default function RecipeOrderIntegration({ onClose }) {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && onClose) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
   return (
     <motion.div
-      initial={{ y: '100%' }}
-      animate={{ y: 0 }}
-      exit={{ y: '100%' }}
-      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 16 }}
+      transition={{ duration: 0.2 }}
       className="rv-details"
-      style={{ zIndex: 230 }}
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => e.stopPropagation()}
     >
       <div className="rv-wizard-header">
-        <button className="rv-circle-btn" onClick={onClose}>
-          <ArrowLeft size={20} />
+        <button className="rv-circle-btn" onClick={onClose} aria-label="Back" type="button">
+          <ArrowLeft size={18} />
         </button>
-        <div style={{ fontWeight: 800, fontSize: 18 }}>Order Integration</div>
-        <div style={{ width: 40 }} />
+        <div style={{ fontWeight: 800, fontSize: 18, flex: 1, margin: '0 12px' }}>
+          Order Integration
+        </div>
+        <button
+          className="rv-circle-btn"
+          onClick={onClose}
+          aria-label="Close"
+          title="Close"
+          type="button"
+          style={{ background: 'rgba(0, 0, 0, 0.05)', color: 'var(--rv-dark)' }}
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <div className="rv-wizard-content">

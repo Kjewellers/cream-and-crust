@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -14,6 +14,7 @@ import {
   StickyNote,
   ClipboardList,
   ShoppingBag,
+  X,
 } from 'lucide-react';
 import CookingMode from './CookingMode';
 import BatchScaler from './BatchScaler';
@@ -44,7 +45,20 @@ export default function RecipeDetail({
   const [menuOpen, setMenuOpen] = useState(false);
   const [simPrice, setSimPrice] = useState(Number(recipe?.sellPrice || 0));
   const [exporting, setExporting] = useState(false);
-  const pdfRef = React.useRef();
+  const pdfRef = useRef();
+
+  // Escape key closes modal or inner overlays
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (menuOpen) setMenuOpen(false);
+        else if (showScaler) setShowScaler(false);
+        else if (onClose) onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, menuOpen, showScaler]);
 
   // Guard against null/undefined recipe (can happen during AnimatePresence exit)
   if (!recipe) return null;
@@ -100,58 +114,97 @@ export default function RecipeDetail({
 
   return (
     <motion.div
-      initial={{ y: '100%' }}
-      animate={{ y: 0 }}
-      exit={{ y: '100%' }}
-      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 16 }}
+      transition={{ duration: 0.2 }}
       className="rv-details"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="recipe-detail-title"
+      onClick={(e) => e.stopPropagation()}
     >
-      {/* Hero */}
-      <div className="rv-details-hero">
-        <img
-          src={
-            recipe.imageUrl || 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=800'
-          }
-          className="rv-details-img"
-          alt=""
-          onError={(e) => (e.target.style.display = 'none')}
-        />
-        <div className="rv-details-overlay" />
-        <div className="rv-details-topbar">
-          <button className="rv-circle-btn" onClick={onClose}>
-            <ArrowLeft size={20} />
+      {/* Sticky Header — Always accessible at top of modal */}
+      <div className="rv-details-sticky-header">
+        <button
+          className="rv-circle-btn"
+          onClick={onClose}
+          aria-label="Back"
+          title="Back"
+          type="button"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div id="recipe-detail-title" className="rv-details-sticky-title">
+          {recipe.name}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            className="rv-circle-btn"
+            onClick={() => onEdit && onEdit(recipe)}
+            aria-label="Edit Recipe"
+            title="Edit"
+            type="button"
+          >
+            <Edit2 size={16} />
           </button>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="rv-circle-btn" onClick={() => onEdit && onEdit(recipe)}>
-              <Edit2 size={18} />
+          <div style={{ position: 'relative' }}>
+            <button
+              className="rv-circle-btn"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="More Options"
+              title="More"
+              type="button"
+            >
+              <MoreVertical size={18} />
             </button>
-            <div style={{ position: 'relative' }}>
-              <button className="rv-circle-btn" onClick={() => setMenuOpen((v) => !v)}>
-                <MoreVertical size={20} />
-              </button>
-              <AnimatePresence>
-                {menuOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9, y: -8 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
+            <AnimatePresence>
+              {menuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, y: -8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: 48,
+                    background: 'white',
+                    borderRadius: 12,
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.14)',
+                    border: '1px solid var(--rv-border)',
+                    padding: 8,
+                    zIndex: 50,
+                    width: 180,
+                  }}
+                >
+                  <button
+                    onClick={() => {
+                      triggerHaptic('light');
+                      onDuplicate && onDuplicate(recipe);
+                      setMenuOpen(false);
+                    }}
                     style={{
-                      position: 'absolute',
-                      right: 0,
-                      top: 48,
-                      background: 'white',
-                      borderRadius: 12,
-                      boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-                      border: '1px solid var(--rv-border)',
-                      padding: 8,
-                      zIndex: 50,
-                      width: 170,
+                      width: '100%',
+                      padding: '11px 12px',
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: 'var(--rv-dark)',
+                      borderRadius: 8,
                     }}
                   >
+                    <Copy size={16} color="var(--rv-muted)" /> Duplicate
+                  </button>
+                  {onShowInventory && (
                     <button
                       onClick={() => {
-                        triggerHaptic('light');
-                        onDuplicate && onDuplicate(recipe);
+                        onShowInventory();
                         setMenuOpen(false);
                       }}
                       style={{
@@ -170,78 +223,80 @@ export default function RecipeDetail({
                         borderRadius: 8,
                       }}
                     >
-                      <Copy size={16} color="var(--rv-muted)" /> Duplicate
+                      <Layers size={16} color="var(--rv-muted)" /> Inventory
                     </button>
-                    {onShowInventory && (
-                      <button
-                        onClick={() => {
-                          onShowInventory();
-                          setMenuOpen(false);
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '11px 12px',
-                          textAlign: 'left',
-                          background: 'none',
-                          border: 'none',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 10,
-                          cursor: 'pointer',
-                          fontSize: 14,
-                          fontWeight: 600,
-                          color: 'var(--rv-dark)',
-                          borderRadius: 8,
-                        }}
-                      >
-                        <Layers size={16} color="var(--rv-muted)" /> Inventory
-                      </button>
-                    )}
-                    <div style={{ height: 1, background: 'var(--rv-border)', margin: '4px 0' }} />
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        triggerHaptic('medium');
-                        setMenuOpen(false);
-                        onClose();
-                        onDelete && onDelete(recipe.id);
-                      }}
-                      onTouchStart={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        triggerHaptic('medium');
-                        setMenuOpen(false);
-                        onClose();
-                        onDelete && onDelete(recipe.id);
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '11px 12px',
-                        textAlign: 'left',
-                        background: 'none',
-                        border: 'none',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 10,
-                        cursor: 'pointer',
-                        fontSize: 14,
-                        fontWeight: 600,
-                        color: '#EF4444',
-                        borderRadius: 8,
-                      }}
-                    >
-                      <Trash2 size={16} /> Delete
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                  )}
+                  <div style={{ height: 1, background: 'var(--rv-border)', margin: '4px 0' }} />
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      triggerHaptic('medium');
+                      setMenuOpen(false);
+                      onClose();
+                      onDelete && onDelete(recipe.id);
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      triggerHaptic('medium');
+                      setMenuOpen(false);
+                      onClose();
+                      onDelete && onDelete(recipe.id);
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '11px 12px',
+                      textAlign: 'left',
+                      background: 'none',
+                      border: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      cursor: 'pointer',
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: '#EF4444',
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Trash2 size={16} /> Delete
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+          <button
+            className="rv-circle-btn"
+            onClick={onClose}
+            aria-label="Close"
+            title="Close"
+            type="button"
+            style={{ background: 'rgba(0, 0, 0, 0.05)', color: 'var(--rv-dark)' }}
+          >
+            <X size={18} />
+          </button>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="rv-details-content">
+      {/* Scrollable Body */}
+      <div className="rv-details-scroll-body">
+        {/* Hero image (optional) */}
+        {recipe.imageUrl && (
+          <div className="rv-details-hero">
+            <img
+              src={recipe.imageUrl}
+              className="rv-details-img"
+              alt={recipe.name}
+              onError={(e) => {
+                e.target.parentElement.style.display = 'none';
+              }}
+            />
+            <div className="rv-details-overlay" />
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="rv-details-content">
         <div
           style={{
             display: 'flex',
@@ -793,6 +848,7 @@ export default function RecipeDetail({
             </div>
           </motion.div>
         )}
+      </div>
       </div>
 
       {/* Bottom actions */}
